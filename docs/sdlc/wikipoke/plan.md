@@ -29,7 +29,7 @@ skill remain tooling for this cycle, not product runtime dependencies.
 | --- | --- |
 | Decided | The design is accepted; every query is retained; implementation choices are captured; history uses Git; the build gate remains human. |
 | Open, O-002 | Daniel must select the first execution integration. Until then, the execution contract can be planned but concrete provider wiring cannot be finalized. |
-| Proposed, O-001 | Ordinary installation does not silently start wiki writes. Explicit configuration of unattended maintenance, allowed scope, and executor enables automatic application. |
+| Decided, O-001 | Daniel selected automatic activation. Completing executor, allowed scope, limits, and execution-environment configuration activates maintenance without an additional opt-in. Missing prerequisites remain visible. |
 | Proposed | One package, local files as canonical knowledge, rebuildable indexes, and one writer per target wiki. |
 | Investigation required | Verify the selected executor's supported invocation, output, cancellation, and lifecycle hooks before fixing its concrete integration plan. No installed CLI or credentials have been assumed. |
 
@@ -170,7 +170,10 @@ Hooks persist/queue quickly without LLM calls. A worker invoked by a scheduler
 performs discovery and maintenance; document and verify at least one working
 scheduled invocation. Session-only operation is reported separately. Test
 reinstallation and uninstall against pre-existing hooks and manual edits to
-managed entries. Apply O-001 only after its resolution is recorded.
+managed entries. Apply the resolved O-001 default: activate maintenance when
+required configuration is complete, without a separate enable command. Verify
+that incomplete setup reports the missing capability and does not claim active
+maintenance. This product default does not self-approve development-cycle gates.
 (FR-002, FR-007, FR-010, FR-013, FR-015)
 
 ### 8. Capture history and import the two wikis
@@ -209,7 +212,7 @@ do not claim release readiness from unit tests alone.
 | Decisions | Recorded, explicitly empty and missing closure; missing rationale; proposed vs implemented vs diverged; conflict preservation/resolution | S6-S9 |
 | History | Separate code/wiki commits, moving tags, retained refs, unavailable external versions, immutable snapshot queries | S10 |
 | Importers | Original/output source, moment and relationship accounting; malformed input remains reported; originals unchanged | S14 |
-| Consumer install | Existing hooks/managers, twice-install/uninstall, manual managed-entry edits, absent executor, invocation outside an agent session | S15, S16 |
+| Consumer install | Automatic activation on completed setup without another opt-in; incomplete setup reports missing prerequisites; existing hooks/managers, twice-install/uninstall, manual managed-entry edits, absent executor, invocation outside an agent session | S1, S15, S16 |
 | Real executor | Empty repo wiki -> bootstrap -> code change -> reconciliation -> cited recorded query -> captured decision -> release snapshot | S1, S2, S4, S6, S10 |
 
 During scaffolding provide `npm run typecheck`, `npm test`, and `npm run build`.

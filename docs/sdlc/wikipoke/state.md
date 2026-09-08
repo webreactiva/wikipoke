@@ -40,15 +40,19 @@ This acceptance covers the specification as presented, including its marked
 assumptions. It does not answer the open integration concerns or accept a plan
 that had not yet been written.
 
+## Subsequent product decisions
+
+- 2026-09-08, Daniel: automatic activation selected (O-001). Completing executor,
+  scope, limits, and execution-environment configuration activates unattended
+  maintenance without a separate opt-in. Missing prerequisites remain visible.
+  This product setting does not change the human gates of this development cycle
+  or select an executor for O-002.
+
 ## Open
 
 - Waiting on: integration choices and the human build gate for [plan.md](./plan.md).
-- Owner Daniel: settle the installation default for automatic application
-  before the implementation plan fixes that behavior (O-001).
 - Owner Daniel with agent recommendation: select the first executor and its
   supported lifecycle integrations before planning integration work (O-002).
-- O-001 proposed resolution in the plan: enable automatic application only when
-  unattended maintenance and its scope are explicitly configured. Pending review.
 - O-002 question sent to Daniel: configurable external command, Claude Code
   first, or Codex first. Pending answer; provider-specific integration remains
   conditional and no command flags or lifecycle events are assumed available.

@@ -27,6 +27,7 @@ English descriptions below preserve meaning rather than quote the Spanish text.
 | U4 | Use releases or Git-backed historical capture rather than implementing a complex history system now. | Daniel supplied |
 | U5 | Corrections can be made through an AI agent editing the generated wiki. | Daniel supplied |
 | U6 | Continue with the proposed Standard cycle, versioned artifacts, no tracker, and human gates; initialize Git and commit setup; Spanish conversation, English documentation. | Setup accepted as a block; language and Git actions supplied |
+| U7 | Activate maintenance automatically once its required execution configuration is complete. | Daniel supplied after design acceptance, resolving O-001 |
 | P1 | Proposal sections 4-8 and 10 contain suggested lifecycle details, integration policies, architecture, and delivery sequencing. | Agent proposals; not individually approved |
 | E1 | Widgetron conventions and health/query tooling; Web Reactiva card parser and graph validator, linked from proposal section 2. | Local implementation precedent |
 
@@ -47,7 +48,9 @@ the meaning of existing knowledge. (U1)
 environment are configured, the system MUST bootstrap an absent wiki, discover
 source changes, and reconcile affected knowledge without a fresh user prompt
 for each pass. It MUST expose incomplete work and missing execution capabilities
-instead of declaring success. (U1)
+instead of declaring success. Completing the executor, scope, limits, and
+execution-environment configuration MUST activate unattended maintenance without
+a separate activation step. (U1, U7)
 
 **FR-003 — Evidence and health.** The system MUST link knowledge to the sources
 and revisions supporting it and report integrity, drift, and uncovered source
@@ -183,9 +186,14 @@ for this design gate. Their absence must not prevent the behaviors above. (P1)
 
 | ID | Concern | Owner | Impact and current handling |
 | --- | --- | --- | --- |
-| O-001 | Automatic application is required as a capability, but the installation default is not explicitly selected. Options: apply after configured checks, or prepare changes until auto mode is enabled. | Daniel | Must be settled before planning installation behavior under FR-002/FR-015. Recommendation: enable automatic application when the user explicitly configures unattended maintenance and its scope; ordinary installation should report capability separately. No default is approved here. |
 | O-002 | Which executor and agent integration should be supported first? | Daniel, with agent feasibility assessment | Blocks concrete integration planning for FR-007/FR-013, not the behavioral specification. The proposal's generic adapter is not a promise that every agent exposes every hook. |
 | O-003 | What source restrictions and numeric budgets apply to a particular installation? | Installing project owner | Needed when configuring an installation under FR-015. The library must expose configuration; this specification does not invent token limits or declare all source content public. |
+
+## Resolved concerns
+
+- O-001: Daniel selected automatic activation after design acceptance on
+  2026-09-08. FR-002 now records the default. Required configuration and checks
+  still apply; there is no additional activation gate for product maintenance.
 
 ## Policy and coverage
 
@@ -196,7 +204,8 @@ file-level implementation and verification steps belong in the later plan.
 
 Coverage read: problem and behavior are covered by user requests and precedents;
 scenarios make their edge cases observable; non-goals reflect explicit exclusions
-or labeled proposals. Three assumptions and three concerns are visible above.
+or labeled proposals. Three provenance-marked assumptions, two open concerns,
+and one resolved concern are visible above.
 This specification contains 15 requirements, three retaining assumption
 provenance. Daniel accepted the design; the listed open concerns remain explicit
 and must be settled where they block planning. Implementation still requires
