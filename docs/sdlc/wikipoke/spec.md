@@ -1,6 +1,6 @@
 # Spec: Wikipoke maintained knowledge
 
-Status: draft; awaiting the human design gate.
+Status: accepted by Daniel on 2026-09-08 (design gate).
 Date: 2026-09-08. Owner: Daniel.
 Context: [proposal](../../PROPUESTA.md). Cycle: [state](./state.md).
 
@@ -30,8 +30,9 @@ English descriptions below preserve meaning rather than quote the Spanish text.
 | P1 | Proposal sections 4-8 and 10 contain suggested lifecycle details, integration policies, architecture, and delivery sequencing. | Agent proposals; not individually approved |
 | E1 | Widgetron conventions and health/query tooling; Web Reactiva card parser and graph validator, linked from proposal section 2. | Local implementation precedent |
 
-`⚠` marks a requirement containing a standing agent assumption beyond the
-explicit user decisions. Approval should address those details deliberately.
+`⚠` marks a requirement originally proposed by the agent beyond the explicit
+user decisions. Daniel accepted this specification as a whole on 2026-09-08;
+the marks retain provenance rather than indicating an unaccepted requirement.
 The proposal remains context; this specification defines reviewable behavior.
 
 ## Behavior
@@ -196,5 +197,7 @@ file-level implementation and verification steps belong in the later plan.
 Coverage read: problem and behavior are covered by user requests and precedents;
 scenarios make their edge cases observable; non-goals reflect explicit exclusions
 or labeled proposals. Three assumptions and three concerns are visible above.
-This draft contains 15 requirements, three carrying assumptions. The design
-gate remains open; no implementation is authorized by this document alone.
+This specification contains 15 requirements, three retaining assumption
+provenance. Daniel accepted the design; the listed open concerns remain explicit
+and must be settled where they block planning. Implementation still requires
+acceptance of the implementation plan at the human build gate.

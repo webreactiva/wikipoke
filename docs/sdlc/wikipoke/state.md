@@ -1,7 +1,7 @@
 ---
 slug: wikipoke
 size: standard
-phase: design
+phase: build
 tracker: null
 branch: main
 opened: 2026-09-08
@@ -13,7 +13,9 @@ opened: 2026-09-08
 
 The Standard cycle begins with design. Intent is folded into the Problem
 section of [spec.md](./spec.md); no separate Plan-phase artifact or approval
-is claimed. The design gate is open and awaits Daniel's review.
+is claimed. Daniel accepted the design on 2026-09-08. The cycle is now preparing
+the implementation plan; the human build gate remains open. No code may be
+implemented on the strength of design acceptance alone.
 
 The [proposal](../../PROPUESTA.md) predates this cycle. It records product
 discussion and suggested architecture, not an approved implementation plan.
@@ -30,19 +32,28 @@ project documentation is English.
 
 ## Gate decisions
 
-No artifact gate has been accepted, rejected, or self-approved.
-Record future decisions here with date, phase, verdict, actor, and rationale.
+| When | Phase | Verdict | By | Note |
+| --- | --- | --- | --- | --- |
+| 2026-09-08 | design | ACCEPT | Daniel | Explicit response: "ok, apruebo" to the request to approve the specification as the basis for implementation planning. |
+
+This acceptance covers the specification as presented, including its marked
+assumptions. It does not answer the open integration concerns or accept a plan
+that had not yet been written.
 
 ## Open
 
-- Waiting on: human design gate for [spec.md](./spec.md).
-- Review first: FR-004, FR-009, and FR-015 carry agent-proposed details.
+- Waiting on: integration choices and the human build gate for [plan.md](./plan.md).
 - Owner Daniel: settle the installation default for automatic application
   before the implementation plan fixes that behavior (O-001).
 - Owner Daniel with agent recommendation: select the first executor and its
   supported lifecycle integrations before planning integration work (O-002).
-- Next after design acceptance: write the implementation plan, then present
-  it at the human build gate before implementing.
+- O-001 proposed resolution in the plan: enable automatic application only when
+  unattended maintenance and its scope are explicitly configured. Pending review.
+- O-002 question sent to Daniel: configurable external command, Claude Code
+  first, or Codex first. Pending answer; provider-specific integration remains
+  conditional and no command flags or lifecycle events are assumed available.
+- Next: complete the executor-specific plan after the answer, then obtain human
+  build-gate acceptance before creating the build journal and application code.
 
 ## Record limitations
 
