@@ -1,6 +1,6 @@
 # Tracker sync
 
-Optional. Only relevant when `.claude/gate-driven.json` has a `tracker`.
+Optional. Only relevant when `.agents/gate-driven.json` has a `tracker`.
 
 **If the project has its own workflow skill for its tracker, use that instead of anything here.** It knows the project's labels, milestones, iteration fields and MR conventions; these recipes are the fallback for projects that have none.
 

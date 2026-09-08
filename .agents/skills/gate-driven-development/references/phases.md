@@ -35,7 +35,7 @@ The value of this phase is that the person who wants the thing describes it befo
 
 Requirements and design collapse into one pass here. The reason to keep the phase at all is not the document, it is the **flagged concerns**: the points where policy, security, existing architecture or contradictory requirements do not let you proceed cleanly. Those are exactly what a human analyst would have escalated, and the whole gain of doing this in one session is that they surface in an afternoon instead of in a review three weeks later.
 
-**How to run it.** Read `intent.md`, then read what the project already says: `CLAUDE.md`, `.claude/rules/`, any skill that encodes a policy (security, API conventions, design system, accessibility). Write the spec against those constraints, and while writing, keep a running list of everything you could not satisfy.
+**How to run it.** Read `intent.md`, then read what the project already says: `AGENTS.md`, applicable agent-specific instructions such as `CLAUDE.md` and `.claude/rules/`, and any skill that encodes a policy (security, API conventions, design system, accessibility). Write the spec against those constraints, and while writing, keep a running list of everything you could not satisfy.
 
 For each concern, name three things: what the conflict is, who owns the decision, and what you did in the meantime (chose a side and why, or stopped). A concern without an owner is a wish.
 

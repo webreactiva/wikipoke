@@ -61,7 +61,7 @@ An escalation is written in `state.md` as its own line: `ESCALATED`, what trigge
 
 The setting is not overridden. The silence is. When the cycle is High and any gate is `ai`, say it in the first message and write it in `state.md`:
 
-> `build` and `test` run at `ai` on a payments change. Nobody will read the plan or the evidence. Configured in `.claude/gate-driven.json`.
+> `build` and `test` run at `ai` on a payments change. Nobody will read the plan or the evidence. Configured in `.agents/gate-driven.json`.
 
 The user is allowed to run fast on a high-risk change. They are not allowed to do it without noticing.
 

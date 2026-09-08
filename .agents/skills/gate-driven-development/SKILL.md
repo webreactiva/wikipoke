@@ -1,6 +1,12 @@
 ---
 name: gate-driven-development
-description: Drive a unit of work through the SDLC one gate at a time — plan, design, build, test, deploy — where each phase ends in a written artifact and a recorded human decision, work never moves past an open gate, and the state survives across sessions and can sync with a GitHub or GitLab issue. Use this whenever work should be governed rather than merely done: the user says "gate-driven", "/gate-driven-development", "gates", "approval gate", "gobernanza", "ciclo de gobernanza", "governance", "run the cycle", "corre el ciclo", "intent.md", "spec.md", "plan.md", "audit trail", "quién aprobó esto", "who signed off", "en qué fase estamos"; when starting a feature or issue that will outlive one session; when picking work back up after days away; or when someone must show later what was decided, by whom, and when. Reach for it before implementing anything whose blast radius is payments, auth, migrations, personal data or production config, where the real risk is an unrecorded decision rather than a bad line of code. It is not for one-line fixes — it sizes its own ceremony to the change and says out loud when the answer is "no cycle needed".
+description: >-
+  Drive work through plan, design, build, test, and deploy gates with written
+  artifacts, recorded human or AI decisions, and state that survives sessions.
+  Use for gate-driven development, governance, approval gates, implementation
+  decision journals, or resuming an existing cycle. Supports optional GitHub
+  or GitLab status sync. Scale the ceremony to the change; ordinary one-line
+  fixes do not need a cycle.
 ---
 
 # Gate-driven development
@@ -31,7 +37,7 @@ Deploy adds no file of its own: its record is the merge request and the gate lin
 
 ## First run in a project
 
-Look before asking. Check for `.claude/gate-driven.json`; if it exists, read it and move on. If it does not, look for an existing convention — a `docs/plans/`, `docs/specs/` or `docs/sdlc/` directory, and any rule in `CLAUDE.md` about committing planning documents. Then ask **once**, proposing what you found:
+Look before asking. Check for `.agents/gate-driven.json`; if it exists, read it and move on. This is project configuration shared by agents, not configuration owned by Claude. If only the legacy `.claude/gate-driven.json` exists, move it to `.agents/gate-driven.json` without changing its values or asking the setup questions again. If both exist and differ, report the conflict rather than silently choosing or merging approval settings. If neither exists, look for an existing convention — a `docs/plans/`, `docs/specs/` or `docs/sdlc/` directory, and any rule in `AGENTS.md` or agent-specific instructions such as `CLAUDE.md` about committing planning documents. Then ask **once**, proposing what you found:
 
 1. **Where do cycles live?** (default proposal: `docs/sdlc/`)
 2. **Are artifacts committed?** Committed artifacts make git the audit trail and are the stronger governance position. Uncommitted keeps the repo clean and pushes the trail onto the tracker and the code commits. Respect an existing project rule over your own preference — and if the project says "don't commit planning docs" while the work is high blast radius, say plainly that the trail then depends on the tracker.
@@ -39,7 +45,7 @@ Look before asking. Check for `.claude/gate-driven.json`; if it exists, read it 
 
 Do **not** ask about approvals on the first run. Every gate starts `human`, which is the setting that teaches the method. Offer to change it later, once they have seen the phases — see [Who opens each gate](#who-opens-each-gate).
 
-Save the answers so no future session asks again:
+Save the answers in `.agents/gate-driven.json` so no future session asks again:
 
 ```json
 {
