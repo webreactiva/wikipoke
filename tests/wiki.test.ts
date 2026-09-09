@@ -684,3 +684,30 @@ test('a plan says when it describes code the working tree has already moved past
   writeFileSync(join(wiki.root, 'README.md'), '# Notes\n');
   assert.deepEqual((await wiki.ingest() as any).uncommitted, ['src/main.ts']);
 });
+
+test('a wiki shaped like the file tree is reported, and a wiki of knowledge is not', async () => {
+  const wiki = await setup();
+  for (let n = 0; n < 40; n++) writeFileSync(join(wiki.root, `src/m${n}.ts`), `export const v${n} = ${n};\n`);
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'many');
+  const plan: any = await wiki.ingest();
+  const page = (path: string, cited: any[], body: string) => ({ path, meta: { type: 'entity',
+    title: path, description: path, sources: cited, wikipoke: { uid: path, relations: [] } }, body });
+
+  // One page per file, named after the path: every source claimed, every other check green.
+  const sources = plan.sources.map(({ content, ...source }: any) => source);
+  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: sources.map((source: any) =>
+    page(`${source.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`, [source],
+      'This module exports a constant used elsewhere in the project.')) });
+  let more: any = await wiki.ingest();
+  while (more.sources.length) {
+    await wiki.publishPatch({ revision: more.revision, findings: [], pages: more.sources.map((source: any) => {
+      const { content, ...rest } = source;
+      return page(`${source.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`, [rest],
+        'This module exports a constant used elsewhere in the project.');
+    }) });
+    more = await wiki.ingest();
+  }
+  const mirrored: any = await wiki.status();
+  assert.deepEqual(mirrored.uncovered, []);
+  assert.equal(mirrored.findings.some((f: any) => f.code === 'mirrors-the-tree'), true);
+});

@@ -200,7 +200,12 @@ export class Wiki {
     return this.store.locked(() => graph(this.pages()));
   }
   async lint() {
-    return this.store.locked(() => { const { pages, unreadable } = this.library(); return lint(pages, unreadable); });
+    // The source count is part of the input: two of the checks are about the shape of the wiki
+    // relative to the code, and without it they silently never fire.
+    return this.store.locked(() => {
+      const { pages, unreadable } = this.library();
+      return lint(pages, unreadable, inventory(this.root, this.config).sources.length);
+    });
   }
   async attention() {
     return this.store.locked(() => {
@@ -246,7 +251,7 @@ export class Wiki {
     const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
       '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
     const reachable = this.reachable(checkpoint.lastIndexedCommit);
-    const findings = lint(pages, unreadable);
+    const findings = lint(pages, unreadable, inv.sources.length);
     if (!reachable) findings.push({ code: 'lost-checkpoint', severity: 'error',
       message: `The sealed checkpoint ${checkpoint.lastIndexedCommit} is not in this repository, so changes since it cannot be compared; seal again once the wiki is level with the code` });
     return { revision: inv.revision, checkpoint, pages: pages.length,
@@ -590,8 +595,9 @@ export class Wiki {
       // missing flow leaves no source uncovered and would otherwise be certified as complete.
       const flowless = health.findings.some(f => f.code === 'no-flows');
       const thin = health.findings.filter(f => f.code === 'thin-coverage');
-      if (health.drift.length || health.uncovered.length || errors || flowless || thin.length)
-        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)${flowless ? ', and no page describes a flow through the code' : ''}${thin.length ? `, and ${thin.length} page(s) claim more sources than they describe: ${thin.slice(0, 3).map(f => f.page).join(', ')}` : ''}`);
+      const mirrored = health.findings.some(f => f.code === 'mirrors-the-tree');
+      if (health.drift.length || health.uncovered.length || errors || flowless || thin.length || mirrored)
+        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)${flowless ? ', and no page describes a flow through the code' : ''}${thin.length ? `, and ${thin.length} page(s) claim more sources than they describe: ${thin.slice(0, 3).map(f => f.page).join(', ')}` : ''}${mirrored ? ', and the wiki is shaped like the file tree rather than written as knowledge' : ''}`);
       const state = { version: 1, lastIndexedCommit: commit, sealedAt: stamp() };
       const path = '.wikipoke/state.json';
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(state) }]);

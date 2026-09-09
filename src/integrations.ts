@@ -75,6 +75,15 @@ a path through it, and \`thin-flow\` for a flow resting on a single source.
 Do not wait for \`ingest\` to ask. It plans from what changed, and a flow that was never written
 went missing without any file going uncovered.
 
+## One page per file is not a wiki
+
+Coverage can be reached two ways, and only one of them is worth doing. A page per source file, named
+after its path, claims every source and passes every mechanical check while restating what the code
+already says - and it rots on the next refactor. Group by what a reader is trying to understand: a
+module, a convention, a decision, a path through the code. \`lint\` reports \`mirrors-the-tree\` when
+the wiki has about as many pages as there are sources and most of them cite a single file, and
+\`seal\` refuses while it does.
+
 ## Repeat
 
 One pass documents one batch. Loop — \`ingest\`, publish, \`ingest\` again — until \`complete\` is true,

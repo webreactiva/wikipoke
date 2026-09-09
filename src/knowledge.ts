@@ -99,7 +99,7 @@ export function graph(pages: Page[]) {
   return { nodes: pages.map(p => ({ id: p.path, uid: p.meta.wikipoke.uid, type: p.meta.type, title: p.meta.title })),
     edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()], symmetric };
 }
-export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
+export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount = 0): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
   for (const u of unreadable) findings.push({ code: u.code, severity: 'error', page: u.path, message: u.reason });
   for (const p of pages) {
@@ -132,6 +132,17 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
     if (spent < 25) findings.push({ code: 'thin-coverage', severity: 'warning', page: p.path,
       message: `Claims ${p.meta.sources.length} sources in ${p.body.trim().length} characters; a citation is not a description` });
   }
+  // The other way to reach full coverage without writing a wiki: one page per file, named after the
+  // path, mirroring the tree. Every source is claimed, every check is green, and the result restates
+  // what the code already says instead of carrying what it cannot. Measured on two real wikis: the
+  // one written as knowledge has 13% single-source pages at 0.36 pages per source, the one written
+  // as a mirror has 98% at 1.01. This only speaks for a wiki large enough for the shape to mean
+  // something.
+  const described_ = pages.filter(p => !['query', 'decision'].includes(p.meta.type));
+  const single = described_.filter(p => p.meta.sources.length === 1).length;
+  if (sourceCount >= 30 && described_.length >= sourceCount * 0.8 && single >= described_.length * 0.7)
+    findings.push({ code: 'mirrors-the-tree', severity: 'warning',
+      message: `${described_.length} pages for ${sourceCount} sources, ${single} of them citing a single file: a wiki shaped like the file tree restates the code instead of carrying what the code cannot say` });
   const { edges } = graph(pages);
   for (const e of edges.filter(e => e.type !== 'source')) {
     if (!paths.has(e.to)) findings.push({ code: 'broken-link', severity: 'warning', page: e.from, message: e.to });
