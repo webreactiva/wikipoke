@@ -10,7 +10,10 @@ import { files, read } from './runtime/store.js';
 const parser = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']);
 // Wikipoke generates these at the wiki root; anywhere deeper they are ordinary pages.
 export const reserved = ['index.md', 'log.md'];
-export interface Unreadable { path: string; reason: string }
+export interface Unreadable { path: string; reason: string; code: string }
+// Git writes these, not a person. A page carrying them is not an edit anybody made and nobody wants
+// it kept, which is why it is worth telling apart from a page a human is halfway through writing.
+const conflicted = /^(<{7}|={7}|>{7})/m;
 export interface Library { pages: Page[]; unreadable: Unreadable[] }
 export function parsePage(raw: string, path: string): Page {
   const tree = parser.parse(raw), first = tree.children[0];
@@ -30,10 +33,14 @@ export function loadPages(root: string): Library {
   for (const file of files(root).filter(p => p.endsWith('.md'))) {
     const path = relative(root, file).split('\\').join('/');
     if (reserved.includes(path)) continue;
-    try { pages.push(parsePage(read(file)!, path)); }
+    const raw = read(file)!;
+    try { pages.push(parsePage(raw, path)); }
     catch (error) {
       const reason = (error as Error).message;
-      unreadable.push({ path, reason: reason.startsWith(`${path}: `) ? reason.slice(path.length + 2) : reason });
+      unreadable.push({ path, code: conflicted.test(raw) ? 'conflict-markers' : 'invalid-page',
+        reason: conflicted.test(raw)
+          ? 'Unresolved merge conflict markers; publish may overwrite this page, or resolve it by hand'
+          : reason.startsWith(`${path}: `) ? reason.slice(path.length + 2) : reason });
     }
   }
   return { pages, unreadable };
@@ -94,7 +101,7 @@ export function graph(pages: Page[]) {
 }
 export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
-  for (const u of unreadable) findings.push({ code: 'invalid-page', severity: 'error', page: u.path, message: u.reason });
+  for (const u of unreadable) findings.push({ code: u.code, severity: 'error', page: u.path, message: u.reason });
   for (const p of pages) {
     if (ids.has(p.meta.wikipoke.uid)) findings.push({ code: 'duplicate-id', severity: 'error', page: p.path, message: p.meta.wikipoke.uid });
     ids.add(p.meta.wikipoke.uid);

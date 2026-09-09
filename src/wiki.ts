@@ -148,7 +148,8 @@ export class Wiki {
   }
   private publish(pages: Page[], extra: { path: string; before: string | null; after: string }[] = []) {
     const { pages: existing, unreadable } = this.library(), byPath = new Map(existing.map(p => [p.path, p]));
-    const broken = new Map(unreadable.map(p => [p.path, p.reason]));
+    // Conflict markers are excluded here too: git wrote them and nobody is midway through editing.
+    const broken = new Map(unreadable.filter(p => p.code !== 'conflict-markers').map(p => [p.path, p.reason]));
     for (const p of pages) {
       this.pagePath(p.path);
       if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
@@ -226,8 +227,13 @@ export class Wiki {
     // would let a wiki with no knowledge in it report every source as documented.
     const covered = new Set(pages.filter(p => !['query', 'decision'].includes(p.meta.type))
       .flatMap(p => p.meta.sources.filter(s => sameDigest(s.hash, current.get(s.id)?.hash)).map(s => s.id)));
+    // Naming the remedy, not only the symptom: a source that is gone reads as a dead end, and the
+    // way out - republish the page without it, or repoint it if the file was renamed - is not
+    // something an agent finds on its own. Nothing else in the tool ever says it.
     const drift = pages.flatMap(p => p.meta.sources.filter(s => s.hash && !sameDigest(s.hash, current.get(s.id)?.hash))
-      .map(s => ({ page: p.path, source: s.id, reason: current.has(s.id) ? 'changed' : 'missing' })));
+      .map(s => ({ page: p.path, source: s.id, reason: current.has(s.id) ? 'changed' : 'missing',
+        remedy: current.has(s.id) ? 'Re-plan with ingest and republish the page against the current content'
+          : `${s.id} no longer exists: republish ${p.path} without that source, or repoint it at the path the file was renamed to` })));
     const events = this.events();
     const tasks = [...new Set(events.map(e => e.task))].map(task => {
       const list = events.filter(e => e.task === task), closed = [...list].reverse().find(e => e.kind === 'close');
@@ -287,7 +293,11 @@ export class Wiki {
     const output = patchSchema.parse(input);
     return this.store.locked(() => {
       const inv = inventory(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
-      const base = new Map(existing.map(p => [p.path, p.raw])), broken = new Map(unreadable.map(p => [p.path, p.reason]));
+      const base = new Map(existing.map(p => [p.path, p.raw]));
+      // A page a human is midway through writing must never be overwritten. A page full of conflict
+      // markers is not that: git wrote them, nobody wants them kept, and refusing to publish over it
+      // leaves the one repair the agent could make to a human editing YAML by hand.
+      const broken = new Map(unreadable.filter(p => p.code !== 'conflict-markers').map(p => [p.path, p.reason]));
       // The patch's revision is recorded, not enforced: what matters is that every source it cites
       // still has the content it was written against, and each source carries its own hash for that.
       if (output.revision && output.revision !== inv.revision && output.pages.every(p => !p.meta.sources.length))
@@ -297,7 +307,9 @@ export class Wiki {
         this.pagePath(p.path);
         if (p.meta.type === 'query') throw new Error('Publish cannot replace captured history');
         if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
-        if (read(this.store.path(this.pagePath(p.path))) !== (base.get(p.path) ?? null)) throw new Error(`Concurrent edit: ${p.path}`);
+        const onDisk = read(this.store.path(this.pagePath(p.path)));
+        if (onDisk !== (base.get(p.path) ?? null) && !unreadable.some(u => u.path === p.path && u.code === 'conflict-markers'))
+          throw new Error(`Concurrent edit: ${p.path}`);
         const old = existing.find(e => e.path === p.path);
         if (old && old.meta.wikipoke.uid !== p.meta.wikipoke.uid) throw new Error('Cannot replace page identity');
         for (const source of p.meta.sources) {

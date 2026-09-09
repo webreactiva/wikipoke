@@ -72,6 +72,14 @@ One pass documents one batch. Loop — \`ingest\`, publish, \`ingest\` again —
 re-planning each time so the batch reflects what you just published. Prefer a page that carries a
 decision and its consequence over one that restates what the code already says.
 
+When a source in \`drift\` no longer exists, the page is not stuck: republish it without that source
+and say in the body that the module was removed, or repoint it at the path the file was renamed to.
+The page stays as the record that the thing existed, which is exactly what a diff cannot tell anyone
+six months later. Each drift entry carries a \`remedy\` saying which of the two applies.
+
+A page reported as \`conflict-markers\` was written by a merge, not by a person. Read both sides,
+merge them yourself and publish over it - \`publish\` allows that, and only for this case.
+
 Read \`.wikipoke/attention.json\` for the bounded health signal; it is refreshed on every commit.
 Use \`${cli} status\` only when you need the full uncovered list, which is unbounded.
 `,

@@ -107,7 +107,11 @@ It rejects duplicate UIDs, evidence IDs that do not belong to the page's sources
 and replacement cycles. A page that cannot be parsed at all — malformed
 frontmatter, or none — is reported as an `invalid-page` error rather than
 failing the whole run, and publication refuses to overwrite it, naming the file
-and the reason it could not be read. An error finding does not stop other pages
+and the reason it could not be read. One case is separated out: a page carrying
+unresolved merge conflict markers is a `conflict-markers` error, and publication
+*is* allowed to overwrite it. Git wrote those markers, nobody is midway through
+editing that file, and refusing to publish leaves the only repair to a human
+editing YAML by hand. An error finding does not stop other pages
 from being published, but it does hold back `seal`. Symlinks inside
 the wiki are not read as pages and cannot be published over. Broken cross-page
 links are warnings because imports can legitimately refer to knowledge not yet

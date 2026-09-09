@@ -625,3 +625,31 @@ test('what the wiki writes is readable by anyone who can read the repository', a
     assert.equal((mode & 0o044) !== 0, true, `${file} is ${mode.toString(8)}`);
   }
 });
+
+test('a page git filled with conflict markers is repairable by the agent that can read both sides', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  const page = join(wiki.root, 'wiki/concepts/retries.md');
+  writeFileSync(page, '<<<<<<< HEAD\n---\ntype: concept\n=======\n---\ntype: concept\n>>>>>>> other\n');
+  const findings = await wiki.lint();
+  // Not "Implicit keys need to be on a single line at line 2", which tells nobody anything.
+  assert.equal(findings.some(f => f.code === 'conflict-markers'), true);
+  assert.match(findings.find(f => f.code === 'conflict-markers')!.message, /merge conflict/);
+  // And the agent can fix it, instead of a human editing YAML by hand.
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  assert.deepEqual(await wiki.lint(), []);
+});
+
+test('drift names the way out, including when the file is simply gone', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  git(wiki.root, 'rm', '-q', 'src/main.ts'); git(wiki.root, 'commit', '-qm', 'remove');
+  const [gone]: any = (await wiki.status()).drift;
+  assert.equal(gone.reason, 'missing');
+  assert.match(gone.remedy, /republish concepts\/retries\.md without that source/);
+  // Which is a real way out: the page stays as the record that this module existed.
+  await wiki.publishPatch({ pages: [{ path: 'concepts/retries.md', meta: { type: 'concept',
+    title: 'Retries', description: 'Retry policy', sources: [], wikipoke: { uid: 'retries', relations: [] } },
+    body: 'The retry module was removed.' }], findings: [] });
+  assert.deepEqual((await wiki.status()).drift, []);
+});
