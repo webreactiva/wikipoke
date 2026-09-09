@@ -16,6 +16,11 @@
 }
 ```
 
+`evidence` here is what the actor declared; the decision page renders it as
+declared and unverified, unlike a page source, which is checked against the Git
+inventory. Re-capturing the same `id` with identical content is a no-op;
+re-capturing it with different content is rejected.
+
 Task closure is a separate event. `recorded` means a record was submitted;
 `none_declared` means the agent explicitly found no relevant decision and must
 include its explanation; `incomplete` represents missing or failed capture.
@@ -27,4 +32,10 @@ of complete decision capture.
 Commit the wiki first, then use `wikipoke snapshot <label>`. The command retains
 Git refs for the selected code commit and current wiki commit and writes a
 manifest under `.wikipoke/releases/`. Commit that manifest in the next commit.
+
+Nothing reads a snapshot back: there is no command to list, open, or query one.
+Record the code commit the manifest names, and ask historical questions with
+`wikipoke ask "..." --ref <commit>`. A release label is not accepted anywhere
+except by `snapshot` itself, and a label can only be captured once.
+
 Historical external sources remain subject to their own retention/access rules.

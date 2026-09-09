@@ -7,26 +7,44 @@ for interpretation and use the CLI only for deterministic plans and writes.
 
 ## Install and initialize
 
-Use Node 22 or later. Build the package, then initialize a project with an
-explicit source scope. Do not use a broad glob until excluded/generated paths
-are understood.
+Use Node 22 or later, with Git on `PATH`. Wikipoke is not published to a
+registry yet: install the local checkout into the project that will own the
+wiki. Installing runs `prepare`, which builds `dist/`.
+
+```sh
+npm install --save-dev /path/to/wikipoke
+npx --no-install wikipoke init --include 'src/**'
+npx --no-install wikipoke install
+```
+
+When developing Wikipoke itself, build it in place and call the CLI directly:
 
 ```sh
 npm install
 npm run build
-node dist/cli.js --root /path/to/project init --include 'src/**'
-node dist/cli.js --root /path/to/project install
+node dist/cli.js --root /path/to/project doctor
 ```
 
-Scheduled `wikipoke maintain --once` refreshes the deterministic attention
-signal; it does not replace existing Git hooks.
+`build` clears `dist` and marks `dist/cli.js` executable, which every
+path-installed project depends on: its `node_modules/.bin/wikipoke` is a symlink
+to that exact file.
+
+`init` refuses to run unless the root is a Git repository with at least one
+commit. Do not use a broad glob until excluded/generated paths are understood.
+
 `install` writes agent-neutral skills under `.agents/skills/` and a hook at
-`.wikipoke/hooks/post-commit`. Compose that hook with the project's existing
-hook manager. It only notifies and never invokes a model or blocks a commit.
+`.wikipoke/hooks/post-commit`, then activates it through a delegating
+`post-commit` hook when the repository has none. The hook runs
+`maintain --once`, which refreshes `.wikipoke/attention.json`. It resolves the
+CLI from `node_modules/.bin/wikipoke`, then `npx --no-install wikipoke`, and
+exits silently when neither is present. It never invokes a model and never
+blocks a commit. Schedule the same `maintain --once` command if commits are not
+the trigger you want.
 
 ## Operations
 
 ```sh
+wikipoke doctor
 wikipoke status
 wikipoke ingest
 wikipoke ask "How are payments validated?" --request-id payment-validation
@@ -34,18 +52,23 @@ wikipoke answer --request-id payment-validation --response answer.json
 wikipoke publish --patch patch.json
 wikipoke capture --event decision.json
 wikipoke snapshot v1.0.0
+wikipoke seal
 wikipoke lint
 wikipoke graph
+wikipoke recover --unlock
+wikipoke uninstall
 ```
 
 Read the full [installation and operation guide](docs/installation.md) for
 configuration, scheduling, hooks, queries, task events, and release captures.
-Use the [user guide](docs/user-guide.md) for everyday workflows and the
+Use the [user guide](docs/user-guide.md) for everyday workflows, the
+[knowledge format](docs/format.md) for page structure, and the
 [architecture guide](docs/architecture.md) for skills, hooks, CLI boundaries,
 state, and integration behavior.
 
 `ask` creates a durable query page before the agent researches it; `answer`
-validates citations before closing it. `capture` accepts a task event with an ID, task, actor, ISO
+validates citations before closing it, and will not overwrite an answer already
+closed — revise one by asking again under a new `--request-id`. `capture` accepts a task event with an ID, task, actor, ISO
 timestamp, and `open`, `decision`, or `close` kind. A decision requires `choice`;
 a `none_declared` closure requires a rationale. See [operations](docs/operations.md).
 
@@ -55,10 +78,37 @@ a `none_declared` closure requires a rationale. See [operations](docs/operations
 agent skill reads that material, reasons in its own native flow, and sends a
 structured patch to `publish`. No provider-specific CLI is part of Wikipoke.
 
-## Safety and limits
+## Safety
 
 The library rejects out-of-scope paths, symlink traversal in the wiki, unpinned
 source evidence, unknown citations, duplicate event identities, and concurrent
-edits. File publication uses a recovery journal. A snapshot requires committed
-wiki content and retains exact Git refs for code and wiki. It does not archive
-external source revisions automatically.
+edits. A patch may declare the `revision` it was planned against and is refused
+when the sources have moved since. An unreadable page is reported as an
+`invalid-page` finding instead of failing every command, and `publish` will not
+overwrite it. File publication uses a recovery journal. A snapshot requires
+committed wiki content and retains exact Git refs for code and wiki. It does not
+archive external source revisions automatically.
+
+## Known limits
+
+These are absent from the product today, not merely undocumented.
+
+- **No divergence detection and no conflict record.** Nothing compares a
+  recorded decision against later implemented behavior, and competing claims
+  about the same scope are not tracked or resolved. Specification requirements
+  FR-008 and FR-009 are unimplemented.
+- **No importers for the existing wikis.** There is no migration path for the
+  Widgetron or Web Reactiva wikis (FR-014 unimplemented).
+- **Snapshots are write-only.** `snapshot` stores Git refs and a manifest under
+  `.wikipoke/releases/`, but no command lists, reads, or queries one. Historical
+  questions are asked by passing a commit to `ask --ref`, never a release label.
+- **No deletion or deprecation.** `publish` can only create or replace pages.
+  Removing or marking a page obsolete is a manual Git edit.
+- **`seal` demands total coverage.** It refuses while any included source is
+  undocumented, any cited hash has drifted, or any error finding stands. With a
+  broad `include` that bar is impractical; choose a deliberately narrow scope.
+- **Reads take the writer lock.** `status`, `lint`, and `graph` serialize behind
+  the same lock as writes, so two concurrent commands fail with a lock error.
+
+The requirement IDs above refer to `docs/sdlc/wikipoke/spec.md` in the
+repository, which is not part of the published package.

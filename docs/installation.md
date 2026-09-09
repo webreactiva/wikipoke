@@ -8,14 +8,20 @@ control or review.
 
 Wikipoke requires Node 22 or later and Git for its code-source adapter. Until a
 registry release exists, add the local checkout to each maintained project so
-agent skills and hooks can find the CLI without downloading anything at runtime:
+agent skills and hooks can find the CLI without downloading anything at runtime.
+Installing runs `prepare`, which builds `dist/` in the checkout:
 
 ```sh
 npm install --save-dev /path/to/wikipoke
 npx --no-install wikipoke --help
 ```
 
-When developing Wikipoke itself, build the CLI directly:
+When developing Wikipoke itself, build the CLI directly. `build` clears `dist`
+before compiling, so a removed or renamed module leaves no stale output, and
+marks `dist/cli.js` executable. That last step matters: a project installed by
+path symlinks that exact file, so a rebuild that left it non-executable would
+silently demote every consumer's `node_modules/.bin/wikipoke` to the `npx`
+fallback, and the notifier would stop refreshing the signal.
 
 ```sh
 npm install
@@ -26,19 +32,32 @@ node /path/to/wikipoke/dist/cli.js --help
 Only the maintenance process needs Node and Git. Repositories may keep the
 wiki as Markdown without installing it for ordinary readers.
 
+Check the environment at any point, with or without a wiki. `doctor` reports
+Node, Git, whether the root is a usable repository, the configuration and wiki
+paths, whether a `post-commit` hook composes the notifier, pending work, and a
+`problems` list:
+
+```sh
+npx --no-install wikipoke --root /work/acme doctor
+```
+
 ## Initialize a project
 
-Choose meaningful source paths. Do not include secrets, lockfiles, generated
-output, or the wiki itself. Start narrow:
+`init` requires the root to be a Git repository with at least one commit, and
+writes nothing otherwise. Choose meaningful source paths. Do not include
+secrets, lockfiles, generated output, or the wiki itself. Start narrow:
 
 ```sh
 npx --no-install wikipoke --root /work/acme init \
   --include 'src/**' 'packages/*/src/**' \
   --exclude '**/*.test.ts' 'dist/**' \
+  --batch-files 10 \
   --language en
 ```
 
-This writes `wikipoke.config.yaml` and `wiki/index.md`. When a root-level
+This writes `wikipoke.config.yaml`, `wiki/index.md`, and `.wikipoke/state.json`.
+`--batch-files` sets `limits.batchFiles`, the number of undocumented sources a
+single `ingest` plan may return; it defaults to 10. When a root-level
 `.wikipokeignore` exists, initialization imports its non-comment glob patterns
 into `exclude`. Review `include`, `exclude`, and limits before ingestion. The
 CLI is deterministic: it plans work, validates evidence and commits safe wiki
@@ -54,7 +73,16 @@ npx --no-install wikipoke --root /work/acme lint
 
 `status` lists uncovered sources, changed evidence, incomplete task capture, and
 pending work. `lint` validates page structure and graph integrity without an
-LLM.
+LLM. Both take the writer lock, as does `graph`, so run one Wikipoke command at
+a time against a repository; a second concurrent command fails with a lock
+error. If a process dies while holding the lock, inspect the repository, then:
+
+```sh
+npx --no-install wikipoke --root /work/acme recover --unlock
+```
+
+It reports the recorded owner — the PID and timestamp of the process that took
+the lock — and whether a lock was actually released.
 
 ## Install agent entry points
 
@@ -64,12 +92,25 @@ npx --no-install wikipoke --root /work/acme install
 
 The installer writes agent-neutral skills under `.agents/skills/` and a no-LLM
 notifier at `.wikipoke/hooks/post-commit`. When no `post-commit` hook exists,
-it installs a small delegating hook in Git's configured hook directory. It
-never replaces an existing hook or hook manager; in that case it reports the
-composition step instead. `doctor` reports whether the notifier is active.
+it installs a small delegating hook in Git's configured hook directory; that
+delegator resolves the repository root at run time rather than embedding an
+absolute path. It never replaces an existing hook or hook manager; in that case
+it reports the composition step instead. `doctor` reports whether the notifier
+is active.
 
 Re-run `install` after an upgrade. It updates only files bearing its managed
 marker and reports foreign files it leaves unchanged.
+
+To remove the integration without losing knowledge:
+
+```sh
+npx --no-install wikipoke --root /work/acme uninstall
+```
+
+`uninstall` deletes only what `install` created, and reports what it removed,
+what it preserved, and what needs a manual step. It keeps the wiki directory,
+`wikipoke.config.yaml`, `.wikipoke/state.json`, events, releases, the attention
+signal, and any hook or skill file it did not write.
 
 ## Bootstrap and maintain
 
@@ -79,19 +120,27 @@ Run the initial deterministic work plan:
 npx --no-install wikipoke --root /work/acme ingest
 ```
 
-It returns configured sources in bounded batches and related wiki context. The
-agent researches that material and publishes a validated patch. Source or wiki
-changes before publication produce a conflict rather than overwriting work.
+It returns undocumented sources in bounded batches — at most `limits.batchFiles`
+per pass — plus related wiki context and a catalog of existing pages. The agent
+researches that material and publishes a validated patch. Source or wiki changes
+before publication produce a conflict rather than overwriting work; a patch that
+declares the `revision` it was planned against is refused outright once the
+sources have moved.
 
-Automatic maintenance is a deterministic attention signal. It still needs a
-scheduler to invoke it:
+Automatic maintenance is a deterministic attention signal:
 
 ```sh
 npx --no-install wikipoke --root /work/acme maintain --once
 ```
 
-Use the project's scheduler for that command. Wikipoke does not install a
-scheduler or deploy a service. `doctor` reports configured capabilities.
+`maintain --once` recomputes health and writes `.wikipoke/attention.json`
+itself. The signal is compact by design: revision, checkpoint, page count,
+finding counts by severity, and a count plus a bounded sample for drift,
+uncovered sources, and incomplete tasks. Use `status` when the full report is
+needed. The installed `post-commit` notifier runs exactly this command, so
+commits refresh the signal; use the project's scheduler for the same command
+when commits are not the trigger you want. Wikipoke does not install a scheduler
+or deploy a service.
 
 When `status` has no uncovered sources, drift, or errors, seal the repository
 checkpoint. The durable state is `.wikipoke/state.json`, outside editable wiki
@@ -100,6 +149,11 @@ pages, and records the last fully reconciled Git commit:
 ```sh
 npx --no-install wikipoke --root /work/acme seal
 ```
+
+`seal` refuses while any of the three remain and names the counts. It demands
+total coverage of the configured scope, which is a high bar under a broad
+`include`; keep the scope deliberately narrow if the checkpoint is meant to
+advance regularly.
 
 ## Ask and retain questions
 
@@ -114,6 +168,19 @@ question. The skill researches and writes the cited response through `wikipoke a
 Use `wikipoke schema answer` or `wikipoke schema patch` to obtain the exact
 JSON contract before writing either payload; agents never need to inspect the
 Wikipoke implementation to discover it.
+
+`answer` requires cited evidence, or, when none exists, explicitly declared
+`gaps`. An answer carried by gaps alone closes the query as `unsupported`, not
+`answered`. Every attempt — pending, failed, answered, unsupported — is recorded
+in `wikipoke.query.attempts` and rendered in the page body, so a rejected answer
+leaves a trace instead of disappearing.
+
+`answered` is terminal. A second `answer` on an answered query fails rather than
+overwriting the recorded response; to revise it, open a new query with a
+different `--request-id`, which produces a separate page. A `pending` or
+`unsupported` query still accepts answers, so an unsupported one can be promoted
+to `answered` once evidence exists, and a failed attempt in either state is
+appended to `attempts` without erasing what is already written.
 
 ## Capture implementation decisions
 
@@ -140,5 +207,8 @@ git add .wikipoke/releases
 git commit -m "docs: record wiki snapshot v1.0.0"
 ```
 
-Snapshots retain code/wiki refs and health. They cannot make external sources
-historically available when those source versions were not retained.
+Snapshots retain code/wiki refs and the health report at capture time. No
+command reads a snapshot back: to ask a historical question, pass the recorded
+code commit to `ask --ref`, not the release label. Snapshots cannot make
+external sources historically available when those source versions were not
+retained.
