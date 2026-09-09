@@ -138,9 +138,11 @@ Open one when you expect to record a decision under it.
   and appears in no decision's evidence is reported as changed with no reason on record. Capture the
   decision when you make the change, not in a later documentation pass — a backdated tape explains nothing.
 - Record \`alternatives\` when they were stated.
-- Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`
-  and explain in \`rationale\` why no reason is on record. Wikipoke keeps absent rationale as unknown
-  rather than guessing, and that is the point.
+- Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`,
+  name in that closure's \`evidence\` the source files it covers, and explain in \`rationale\` why no
+  reason is on record. That is a real answer and it settles those files: Wikipoke keeps absent
+  rationale as unknown rather than guessing, and that is the point. Never invent a decision to get
+  past a blocked stop — a fabricated reason is worse than a recorded absence.
 - A task that records no decision publishes no page: the events are kept, and \`capture\` answers
   \`materialized: false\`. Do not open and close empty tasks to look thorough — it writes nothing
   and only shows up as incomplete capture.
@@ -267,7 +269,8 @@ process.stdin.on("end", () => {
     const reason = "Wikipoke: this session changed " + pending.length +
       " source file(s) with no decision recorded: " + pending.slice(0, 10).join(", ") +
       ". Capture the choice with the wikipoke-decision skill, naming those files as evidence." +
-      " If the change carries no decision worth keeping, close the task with none_declared and say why.";
+      " If nobody stated a reason, close the task with none_declared, name those same files in the" +
+      " evidence of that closure, and say why no reason is on record. Do not invent one.";
     if (report.mode === "block") process.stdout.write(JSON.stringify({ decision: "block", reason }) + "\\n");
     else process.stdout.write(JSON.stringify({ systemMessage: reason }) + "\\n");
   } catch { /* a missing journal is not a reason to trap an agent in its turn */ }

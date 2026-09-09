@@ -295,3 +295,14 @@ test('the OpenCode briefing refreshes from the signal instead of freezing at sta
     uncovered: { count: 0 }, flows: { count: 0, missing: true }, findings: { error: 0 } }));
   assert.match(await say(), /no flow page/);
 });
+
+test('every generated hook is a syntactically valid shell script', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  // These scripts embed a node program inside single quotes, so one apostrophe in a message ends the
+  // quoting and the hook dies at run time with a syntax error nobody would see until it mattered.
+  for (const hook of ['post-commit', 'session-start', 'tool-journal', 'session-stop']) {
+    const checked = spawnSync('sh', ['-n', join(wiki.root, '.wikipoke/hooks', hook)], { encoding: 'utf8' });
+    assert.equal(checked.status, 0, `${hook}: ${checked.stderr}`);
+  }
+});

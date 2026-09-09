@@ -322,7 +322,7 @@ test('a task that records no decision leaves a tape but no wiki page', async () 
   const opened: any = await wiki.capture({ ...base, id: 'e1', kind: 'open' });
   assert.equal(opened.materialized, false);
   const closed: any = await wiki.capture({ ...base, id: 'e2', kind: 'close', closure: 'none_declared',
-    rationale: 'Documentation-only task; nobody stated a choice.' });
+    rationale: 'Documentation-only task; nobody stated a choice.', evidence: ['src/main.ts'] });
   assert.equal(closed.materialized, false);
   assert.equal(wiki.pages().length, 0);
   // The tape is durable even though nothing was published.
@@ -545,4 +545,37 @@ test('a wikilink in the body is an edge, and brackets in code are not', async ()
   // The bracket pair inside inline code is code, not a link to a page called "0".
   assert.equal(edges.some(e => /0/.test(e.to)), false);
   assert.deepEqual((await wiki.lint()).filter(f => f.code === 'broken-link'), []);
+});
+
+test('closing with no decision declared settles the debt it names', async () => {
+  const wiki = await setup();
+  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 's1' });
+  assert.deepEqual((await wiki.touched('s1')).unexplained, ['src/main.ts']);
+  await wiki.capture({ id: 'o1', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:00:00Z', kind: 'open' });
+  // A closure has to name what it covers: a blank one would settle the whole session by saying nothing.
+  await assert.rejects(wiki.capture({ id: 'c0', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:04:00Z',
+    kind: 'close', closure: 'none_declared', rationale: 'Nobody said why.' }), /name in evidence/);
+  await wiki.capture({ id: 'c1', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
+    kind: 'close', closure: 'none_declared', rationale: 'Rename only; nobody stated a choice.',
+    evidence: ['src/main.ts'] });
+  const after = await wiki.touched('s1');
+  // The honest answer clears the block, and stays visible as what it is rather than disappearing.
+  assert.deepEqual(after.unexplained, []);
+  assert.deepEqual(after.undeclared, ['src/main.ts']);
+});
+
+test('a wiki with no flow through it cannot be sealed as complete', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/other.ts'), 'export const backoff = 250;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'second source');
+  const sources = (await wiki.ingest() as any).sources.map(({ content, ...source }: any) => source);
+  const page = (path: string, type: string, cited: any[]) => ({ path, meta: { type, title: path,
+    description: path, sources: cited, wikipoke: { uid: path, relations: [] } }, body: 'Body.' });
+  await wiki.publishPatch({ pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
+    page('c.md', 'entity', [])], findings: [] });
+  // Coverage is clean and every finding is a warning, which used to be enough to certify the wiki.
+  assert.deepEqual((await wiki.status()).uncovered, []);
+  await assert.rejects(wiki.seal(), /no page describes a flow/);
+  await wiki.publishPatch({ pages: [page('flows/one.md', 'flow', sources)], findings: [] });
+  assert.ok((await wiki.seal() as any).lastIndexedCommit);
 });

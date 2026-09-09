@@ -439,11 +439,18 @@ export class Wiki {
   // whose work is being described. Both inputs are append-only files, so the worst a concurrent
   // write can cost is one line that the next call will see.
   async touched(session?: string) {
-    const entries = this.journal(session);
-    const explained = new Set(this.events().filter(e => e.kind === 'decision').flatMap(e => e.evidence));
+    const entries = this.journal(session), events = this.events();
+    const decided = new Set(events.filter(e => e.kind === 'decision').flatMap(e => e.evidence));
+    // Saying "this code changed and nobody stated a reason" is an answer, and the product's whole
+    // position is that it is a better answer than an invented one. So a close that declares none
+    // settles its files too - otherwise the only way past a blocked stop is to make a decision up,
+    // which is the exact fiction the block exists to prevent.
+    const undeclared = new Set(events.filter(e => e.kind === 'close' && e.closure === 'none_declared')
+      .flatMap(e => e.evidence).filter(file => !decided.has(file)));
     const files = [...new Set(entries.map(e => e.file))].sort();
-    return { session: session ?? null, mode: this.config.capture, entries: entries.length,
-      files, unexplained: files.filter(file => !explained.has(file)),
+    return { session: session ?? null, mode: this.config.capture, entries: entries.length, files,
+      unexplained: files.filter(file => !decided.has(file) && !undeclared.has(file)),
+      undeclared: files.filter(file => undeclared.has(file)),
       since: entries[0]?.at ?? null, until: entries[entries.length - 1]?.at ?? null };
   }
   events(): Event[] {
@@ -452,6 +459,10 @@ export class Wiki {
   }
   async capture(input: unknown) {
     const event = eventSchema.parse(input), eventPath = `.wikipoke/events/${hash(event.id)}.json`;
+    // Checked here and not in the schema: the schema also re-reads every event ever written, and a
+    // rule added today must not make yesterday's tape unreadable.
+    if (event.kind === 'close' && event.closure === 'none_declared' && !event.evidence.length)
+      throw new Error('Closing with none_declared must name in evidence the source files it covers, so the absence of a reason is recorded against something rather than everything');
     return this.store.locked(() => {
       const old = read(this.store.path(eventPath));
       if (old && old !== json(event)) throw new Error('Event ID already exists with different content');
@@ -535,8 +546,13 @@ export class Wiki {
     return this.store.locked(() => {
       const health = this.health(), commit = revision(this.root, ref);
       const errors = health.findings.filter(f => f.severity === 'error').length;
-      if (health.drift.length || health.uncovered.length || errors)
-        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)`);
+      // A checkpoint says this wiki is level with the code. A wiki with no flow page is not: it has
+      // one page per file and nothing describing how they run together, which is the knowledge the
+      // whole exercise exists to capture. It is the one warning that holds the seal, because a
+      // missing flow leaves no source uncovered and would otherwise be certified as complete.
+      const flowless = health.findings.some(f => f.code === 'no-flows');
+      if (health.drift.length || health.uncovered.length || errors || flowless)
+        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)${flowless ? ', and no page describes a flow through the code' : ''}`);
       const state = { version: 1, lastIndexedCommit: commit, sealedAt: stamp() };
       const path = '.wikipoke/state.json';
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(state) }]);
