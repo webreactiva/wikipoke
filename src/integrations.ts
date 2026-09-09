@@ -9,6 +9,8 @@ const marker = 'managed by Wikipoke';
 const notifier = '.wikipoke/hooks/post-commit';
 const briefing = '.wikipoke/hooks/session-start';
 const settings = '.claude/settings.json';
+const opencodePlugin = '.opencode/plugin/wikipoke.js';
+const cursorRule = '.cursor/rules/wikipoke.mdc';
 const cli = 'wikipoke';
 const resolve_ = `Resolve the CLI once and reuse it: \\\`node_modules/.bin/${cli}\\\` when it exists,
 otherwise \\\`npx --no-install ${cli}\\\`. Every command below assumes that prefix, written here as \\\`${cli}\\\`.`;
@@ -143,16 +145,54 @@ try {
 exit 0
 `;
 const briefingCommand = `sh ${briefing}`;
+// OpenCode auto-discovers any .js in .opencode/plugin/ with no config entry, so the briefing rides a
+// real lifecycle hook there instead of an instruction a human has to remember to paste. The plugin
+// runs the same no-LLM script, once per session: refreshing on every turn would take the writer lock
+// out from under the agent's own Wikipoke commands.
+const pluginScript = `// ${marker}; briefs the agent from the deterministic attention signal.
+import { execFileSync } from "node:child_process";
+
+const briefed = new Map();
+function brief(key, directory) {
+  if (briefed.has(key)) return briefed.get(key);
+  let signal = "";
+  try {
+    signal = execFileSync("sh", ["${briefing}"], {
+      cwd: directory, encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch { signal = ""; }
+  briefed.set(key, signal);
+  return signal;
+}
+
+export const wikipoke = async ({ directory }) => ({
+  "experimental.chat.system.transform": async (input, output) => {
+    const signal = brief(input?.sessionID ?? directory, directory);
+    if (signal) output.system.push(signal);
+  },
+});
+export default wikipoke;
+`;
+const cursorScript = `---
+description: Wikipoke knowledge wiki
+alwaysApply: true
+---
+
+${header}
+
+At the start of a session, run \`${briefingCommand}\` and act on what it prints. It is deterministic,
+never runs a model, and stays silent when the wiki owes no work.
+`;
 const settingsScript = (command: string) => `${JSON.stringify({
   hooks: { SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command, timeout: 20 }] }] },
 }, null, 2)}\n`;
 // Only Claude Code has a session hook Wikipoke can compose without owning the file. The rest are
 // told, not configured: a harness config carries permissions and plugins that are not ours to edit,
 // and an instruction line an agent reads is a working adapter where no lifecycle hook exists.
+// Codex is the one harness left without a file Wikipoke can own: it reads AGENTS.md, which the
+// project writes, so it gets a named step instead of an edited config.
 const harnesses: [string, string][] = [
   ['Codex', `add a line to AGENTS.md telling the agent to run \`${briefingCommand}\` before it starts work.`],
-  ['OpenCode', `no session hook exists; add the same line to AGENTS.md, or run \`${briefingCommand}\` from an opencode.json plugin.`],
-  ['Cursor', `no session hook exists; put the same line in a .cursor/rules/ rule file.`],
 ];
 const delegatorScript = `#!/bin/sh
 # ${marker}; delegates to the project-local notifier, resolved at run time.
@@ -206,6 +246,15 @@ export function install(root: string): InstallReport {
   } else if (!activeBriefing) {
     manual.push(`Claude Code: add a SessionStart hook running \`${briefingCommand}\` to ${settings}; it already exists and was left unchanged.`);
   }
+  // These two harnesses auto-discover a file of their own, so the briefing pushes itself rather than
+  // waiting for a human to paste an instruction that, unpasted, means nothing happens at all.
+  for (const [path, content] of [[opencodePlugin, pluginScript], [cursorRule, cursorScript]] as const) {
+    const target = store.path(path), old = read(target);
+    if (old !== null && !old.includes(marker) && !old.includes(header)) {
+      manual.push(`Skipped ${path}: not managed by Wikipoke.`); continue;
+    }
+    atomic(target, content); installed.push(path);
+  }
   for (const [harness, step] of harnesses) manual.push(`${harness}: ${step}`);
   manual.push('See "Brief the agent at session start" in the Wikipoke README for the exact snippets.');
   manual.push('Schedule `npx --no-install wikipoke maintain --once` to refresh the deterministic attention signal.');
@@ -232,6 +281,12 @@ export function uninstall(root: string): UninstallReport {
   if (read(hook) !== null) { rmSync(hook); removed.push(relative(root, hook)); prune(dirname(hook)); }
   const brief = store.path(briefing);
   if (read(brief) !== null) { rmSync(brief); removed.push(relative(root, brief)); prune(dirname(brief)); }
+  for (const path of [opencodePlugin, cursorRule]) {
+    const target = store.path(path), old = read(target);
+    if (old === null) continue;
+    if (!old.includes(marker) && !old.includes(header)) { preserved.push(path); manual.push(`Kept ${path}: not managed by Wikipoke.`); continue; }
+    rmSync(target); removed.push(path); prune(dirname(target)); prune(dirname(dirname(target)));
+  }
   const configured = store.path(settings);
   const old_ = read(configured);
   if (old_ !== null && old_ === settingsScript(briefingCommand)) { rmSync(configured); removed.push(settings); prune(dirname(configured)); }

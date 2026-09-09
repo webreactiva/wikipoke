@@ -188,12 +188,35 @@ test('the session briefing reports what the wiki owes and stays silent when clea
   assert.equal(clean.status, 0);
 });
 
-test('install names a briefing step for every harness it cannot compose itself', async () => {
+test('the briefing pushes itself into every harness that auto-discovers a file', async () => {
   const wiki = await setup();
   const report = install(wiki.root);
-  for (const harness of ['Codex', 'OpenCode', 'Cursor']) {
-    assert.ok(report.manual.some(step => step.startsWith(`${harness}:`)), `no step for ${harness}`);
+  // OpenCode auto-loads .opencode/plugin/*.js and Cursor auto-loads .cursor/rules/*.mdc, so neither
+  // needs a human to paste anything, and neither appears as a manual step.
+  assert.ok(report.skills.includes('.opencode/plugin/wikipoke.js'));
+  assert.ok(report.skills.includes('.cursor/rules/wikipoke.mdc'));
+  assert.match(readFileSync(join(wiki.root, '.opencode/plugin/wikipoke.js'), 'utf8'), /experimental\.chat\.system\.transform/);
+  assert.match(readFileSync(join(wiki.root, '.cursor/rules/wikipoke.mdc'), 'utf8'), /alwaysApply: true/);
+  for (const harness of ['OpenCode', 'Cursor', 'Claude Code']) {
+    assert.ok(report.manual.every(step => !step.startsWith(`${harness}:`)), `${harness} was pushed, so it needs no step`);
   }
-  assert.ok(report.manual.every(step => !/Claude Code:/.test(step)), 'Claude Code was composed, so it needs no step');
+  // Codex reads AGENTS.md, which the project owns, so it stays a named step.
+  assert.ok(report.manual.some(step => step.startsWith('Codex:')));
   assert.ok(report.manual.some(step => /Brief the agent at session start/.test(step)));
+
+  const removal = uninstall(wiki.root);
+  assert.ok(removal.removed.includes('.opencode/plugin/wikipoke.js'));
+  assert.ok(removal.removed.includes('.cursor/rules/wikipoke.mdc'));
+  assert.equal(existsSync(join(wiki.root, '.opencode')), false, 'an emptied directory is not left behind');
+});
+
+test('a foreign plugin or rule of the same name is left alone', async () => {
+  const wiki = await setup();
+  mkdirSync(join(wiki.root, '.opencode/plugin'), { recursive: true });
+  writeFileSync(join(wiki.root, '.opencode/plugin/wikipoke.js'), 'export default () => ({});\n');
+  const report = install(wiki.root);
+  assert.ok(report.manual.some(step => /Skipped \.opencode\/plugin\/wikipoke\.js/.test(step)));
+  assert.equal(readFileSync(join(wiki.root, '.opencode/plugin/wikipoke.js'), 'utf8'), 'export default () => ({});\n');
+  const removal = uninstall(wiki.root);
+  assert.ok(removal.preserved.includes('.opencode/plugin/wikipoke.js'));
 });
