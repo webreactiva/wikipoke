@@ -127,3 +127,10 @@ test('recover never releases a lock without the explicit flag', () => {
   assert.match(result.stderr, /--unlock/);
   assert.ok(existsSync(lock));
 });
+
+test('a path-installed CLI reports its own version', () => {
+  const result = run(directory(), '--version');
+  assert.equal(result.status, 0);
+  const manifest = JSON.parse(readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf8')) as { version: string };
+  assert.equal(result.stdout.trim(), manifest.version);
+});

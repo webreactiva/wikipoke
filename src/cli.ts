@@ -6,13 +6,17 @@ import { Command, InvalidArgumentError } from 'commander';
 import { parse } from 'yaml';
 import { Wiki } from './wiki.js';
 import { configSchema } from './model.js';
-import { answerSchema, patchSchema } from './model.js';
+import { answerSchema, eventSchema, patchSchema } from './model.js';
 import { z } from 'zod';
 import { hookActive, install, uninstall } from './integrations.js';
 import { Store } from './runtime/store.js';
 
+// A path-installed CLI has no registry entry to look the build up in, so the one question
+// an operator asks of an unfamiliar binary must be answerable by the binary itself.
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 const program = new Command();
 program.name('wikipoke').description('Maintain versioned, connected knowledge from project sources')
+  .version(manifest.version, '-v, --version', 'report the installed Wikipoke version')
   .option('--root <path>', 'project root', process.cwd());
 function root() { return resolve(program.opts().root); }
 function output(value: unknown) { process.stdout.write(JSON.stringify(value, null, 2) + '\n'); }
@@ -68,7 +72,8 @@ program.command('schema <kind>').description('emit the JSON schema for an agent-
   .action((kind: string) => { try {
     if (kind === 'patch') output(z.toJSONSchema(patchSchema));
     else if (kind === 'answer') output(z.toJSONSchema(answerSchema));
-    else throw new Error('Schema kind must be patch or answer');
+    else if (kind === 'event') output(z.toJSONSchema(eventSchema));
+    else throw new Error('Schema kind must be patch, answer or event');
   } catch (error) { fail(error); } });
 program.command('capture').description('persist and materialize a task event')
   .requiredOption('--event <file>', 'event JSON file')

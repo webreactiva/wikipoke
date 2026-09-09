@@ -1,22 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { parse, stringify } from 'yaml';
-import { configSchema, patchSchema, answerSchema, type Config, type Metadata, type Page, type Source } from './model.js';
+import { configSchema, patchSchema, answerSchema, eventSchema, type Config, type Metadata, type Page, type Source } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
 import { inventory, revision, git } from './sources/git.js';
 import { z } from 'zod';
 
-const eventSchema = z.object({
-  id: z.string().min(1), task: z.string().min(1), actor: z.string().min(1),
-  at: z.string().datetime(), kind: z.enum(['open', 'decision', 'close']),
-  choice: z.string().optional(), rationale: z.string().optional(),
-  alternatives: z.array(z.string()).default([]), evidence: z.array(z.string()).default([]),
-  closure: z.enum(['recorded', 'none_declared', 'incomplete']).optional(),
-}).superRefine((e, ctx) => {
-  if (e.kind === 'decision' && !e.choice) ctx.addIssue({ code: 'custom', message: 'Decision needs a choice' });
-  if (e.kind === 'close' && (!e.closure || (e.closure === 'none_declared' && !e.rationale)))
-    ctx.addIssue({ code: 'custom', message: 'Closure and explanation required' });
-});
 type Event = z.infer<typeof eventSchema>;
 interface Attempt { at: string; state: string; reason?: string }
 const stamp = () => new Date().toISOString();

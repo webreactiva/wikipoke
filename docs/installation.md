@@ -13,7 +13,16 @@ Installing runs `prepare`, which builds `dist/` in the checkout:
 
 ```sh
 npm install --save-dev /path/to/wikipoke
-npx --no-install wikipoke --help
+npx --no-install wikipoke --version
+```
+
+It is a path dependency, so any package manager installs it. In a workspace the
+CLI belongs to the root rather than to a member package, or the skills and hooks
+resolve against the wrong tree:
+
+```sh
+pnpm add -D -w /path/to/wikipoke
+yarn add --dev /path/to/wikipoke
 ```
 
 When developing Wikipoke itself, build the CLI directly. `build` clears `dist`

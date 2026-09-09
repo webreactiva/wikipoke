@@ -17,6 +17,17 @@ npx --no-install wikipoke init --include 'src/**'
 npx --no-install wikipoke install
 ```
 
+The dependency is a path install, so any package manager works; in a workspace
+the CLI belongs to the root, not to a member package:
+
+```sh
+pnpm add -D -w /path/to/wikipoke   # pnpm workspace root
+yarn add --dev /path/to/wikipoke
+```
+
+`wikipoke --version` reports the installed build, which is the only way to tell
+two path installs apart while there is no registry release.
+
 When developing Wikipoke itself, build it in place and call the CLI directly:
 
 ```sh
@@ -68,7 +79,9 @@ state, and integration behavior.
 
 `ask` creates a durable query page before the agent researches it; `answer`
 validates citations before closing it, and will not overwrite an answer already
-closed — revise one by asking again under a new `--request-id`. `capture` accepts a task event with an ID, task, actor, ISO
+closed — revise one by asking again under a new `--request-id`. `wikipoke schema event` emits the task-event
+contract, so an agent never reads the implementation to discover it. `capture`
+accepts a task event with an ID, task, actor, ISO
 timestamp, and `open`, `decision`, or `close` kind. A decision requires `choice`;
 a `none_declared` closure requires a rationale. See [operations](docs/operations.md).
 

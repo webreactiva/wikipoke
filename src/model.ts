@@ -32,3 +32,14 @@ export const patchSchema = z.object({ pages: z.array(z.object({
 })), revision: z.string().optional(), findings: z.array(z.string()).default([]) });
 export const answerSchema = z.object({ answer: z.string().min(1),
   citations: z.array(z.string()), gaps: z.array(z.string()).default([]) });
+export const eventSchema = z.object({
+  id: z.string().min(1), task: z.string().min(1), actor: z.string().min(1),
+  at: z.string().datetime(), kind: z.enum(['open', 'decision', 'close']),
+  choice: z.string().optional(), rationale: z.string().optional(),
+  alternatives: z.array(z.string()).default([]), evidence: z.array(z.string()).default([]),
+  closure: z.enum(['recorded', 'none_declared', 'incomplete']).optional(),
+}).superRefine((e, ctx) => {
+  if (e.kind === 'decision' && !e.choice) ctx.addIssue({ code: 'custom', message: 'Decision needs a choice' });
+  if (e.kind === 'close' && (!e.closure || (e.closure === 'none_declared' && !e.rationale)))
+    ctx.addIssue({ code: 'custom', message: 'Closure and explanation required' });
+});
