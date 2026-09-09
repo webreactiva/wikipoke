@@ -200,8 +200,14 @@ export class Wiki {
         if (old && old.meta.wikipoke.uid !== p.meta.wikipoke.uid) throw new Error('Cannot replace page identity');
         for (const source of p.meta.sources) {
           const known = allowed.get(source.id);
-          if (!known || known.resource !== source.resource || known.hash !== source.hash || known.revision !== source.revision)
-            throw new Error(`Unverified source: ${source.id}`);
+          // Naming the field that failed, not just the source: a patch built from a stale plan has a
+          // matching hash and a stale revision, and "unverified" alone sends an agent hunting a bug
+          // in the inventory instead of re-planning.
+          if (!known) throw new Error(`Unverified source: ${source.id} is outside the configured scope at this revision`);
+          for (const [field, mine, theirs] of [['resource', source.resource, known.resource],
+            ['hash', source.hash, known.hash], ['revision', source.revision, known.revision]] as const) {
+            if (mine !== theirs) throw new Error(`Unverified source: ${source.id} declares ${field} ${mine ?? 'nothing'}, sources have ${theirs}; re-plan with ingest`);
+          }
         }
         return { ...p, raw: render(p.meta, p.body) };
       });
