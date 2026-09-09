@@ -9,7 +9,7 @@ export const relationSchema = z.object({
 export const sourceSchema = z.object({
   id: z.string().min(1), resource: z.string().min(1), revision: z.string().optional(),
   hash: z.string().optional(), title: z.string().optional(),
-}).passthrough();
+});
 export const pageSchema = z.object({
   type: z.string().min(1), title: z.string().min(1), description: z.string().default(''),
   sources: z.array(sourceSchema).default([]),
@@ -28,7 +28,6 @@ export const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 export const patchSchema = z.object({ pages: z.array(z.object({
   path: z.string(), meta: pageSchema, body: z.string(),
-})), findings: z.array(z.string()).default([]) });
+})), revision: z.string().optional(), findings: z.array(z.string()).default([]) });
 export const answerSchema = z.object({ answer: z.string().min(1),
   citations: z.array(z.string()), gaps: z.array(z.string()).default([]) });
-export type Executor = (operation: string, input: unknown) => Promise<unknown>;

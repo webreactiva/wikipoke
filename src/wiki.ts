@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { parse, stringify } from 'yaml';
 import { configSchema, patchSchema, answerSchema, type Config, type Metadata, type Page } from './model.js';
-import { index, lint, loadPages, graph, parsePage, render } from './knowledge.js';
+import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
 import { inventory, revision, git } from './sources/git.js';
 import { z } from 'zod';
@@ -18,7 +18,9 @@ const eventSchema = z.object({
     ctx.addIssue({ code: 'custom', message: 'Closure and explanation required' });
 });
 type Event = z.infer<typeof eventSchema>;
+interface Attempt { at: string; state: string; reason?: string }
 const stamp = () => new Date().toISOString();
+const SAMPLE = 10;
 function slug(value: string): string {
   const result = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72).replace(/-+$/g, '');
@@ -29,6 +31,16 @@ function namedPath(directory: string, label: string, identity: string): string {
 }
 function metadata(type: string, title: string, uid: string): Metadata {
   return { type, title, description: title, sources: [], wikipoke: { uid, relations: [] } };
+}
+function trace(attempts: Attempt[]): string {
+  return attempts.length ? `\n# Attempts\n\n${attempts
+    .map(a => `- ${a.at} - ${a.state}${a.reason ? `: ${a.reason}` : ''}`).join('\n')}\n` : '';
+}
+function queryBody(query: Record<string, unknown>): string {
+  const answered = typeof query.answer === 'string';
+  return `# Question\n\n${query.question}\n` +
+    (answered ? `\n# Answer\n\n${query.answer}\n\n# Gaps\n\n${((query.gaps as string[]) ?? []).join('\n')}\n` : '') +
+    trace((query.attempts as Attempt[] | undefined) ?? []);
 }
 export class Wiki {
   readonly store: Store;
@@ -61,9 +73,10 @@ export class Wiki {
     });
     return new Wiki(root);
   }
-  pages() { return loadPages(this.store.path(this.config.wiki)); }
+  library(): Library { return loadPages(this.store.path(this.config.wiki)); }
+  pages(): Page[] { return this.library().pages; }
   pagePath(path: string) {
-    if (!path.endsWith('.md') || ['index.md', 'log.md'].includes(path)) throw new Error(`Invalid concept path: ${path}`);
+    if (!path.endsWith('.md') || reserved.includes(path)) throw new Error(`Invalid concept path: ${path}`);
     safePath(this.store.path(this.config.wiki), path);
     const parts = path.slice(0, -3).split('/');
     if (parts.some(part => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(part)))
@@ -71,8 +84,13 @@ export class Wiki {
     return `${this.config.wiki}/${path}`;
   }
   private publish(pages: Page[], extra: { path: string; before: string | null; after: string }[] = []) {
-    const existing = this.pages(), byPath = new Map(existing.map(p => [p.path, p]));
-    for (const p of pages) { this.pagePath(p.path); byPath.set(p.path, p); }
+    const { pages: existing, unreadable } = this.library(), byPath = new Map(existing.map(p => [p.path, p]));
+    const broken = new Map(unreadable.map(p => [p.path, p.reason]));
+    for (const p of pages) {
+      this.pagePath(p.path);
+      if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
+      byPath.set(p.path, p);
+    }
     const errors = lint([...byPath.values()]).filter(f => f.severity === 'error');
     if (errors.length) throw new Error(json(errors));
     const writes = pages.map(p => ({ path: this.pagePath(p.path), before: read(this.store.path(this.pagePath(p.path))),
@@ -84,11 +102,28 @@ export class Wiki {
   async status() {
     return this.store.locked(() => this.health());
   }
+  async graph() {
+    return this.store.locked(() => graph(this.pages()));
+  }
   async lint() {
-    return this.store.locked(() => lint(this.pages()));
+    return this.store.locked(() => { const { pages, unreadable } = this.library(); return lint(pages, unreadable); });
+  }
+  async attention() {
+    return this.store.locked(() => {
+      const health = this.health(), path = '.wikipoke/attention.json';
+      const count = (severity: string) => health.findings.filter(f => f.severity === severity).length;
+      const incomplete = health.tasks.filter(t => t.closure === 'incomplete').map(t => t.task);
+      const signal = { at: stamp(), revision: health.revision, checkpoint: health.checkpoint.lastIndexedCommit,
+        pages: health.pages, findings: { error: count('error'), warning: count('warning') },
+        drift: { count: health.drift.length, sample: health.drift.slice(0, SAMPLE) },
+        uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) },
+        tasks: { incomplete: incomplete.length, sample: incomplete.slice(0, SAMPLE) } };
+      this.store.commit([{ path, before: read(this.store.path(path)), after: json(signal) }]);
+      return signal;
+    });
   }
   private health() {
-    const inv = inventory(this.root, this.config), pages = this.pages();
+    const inv = inventory(this.root, this.config), { pages, unreadable } = this.library();
     const current = new Map(inv.sources.map(s => [s.id, s]));
     const covered = new Set(pages.filter(p => !['query', 'watchlog'].includes(p.meta.type))
       .flatMap(p => p.meta.sources.filter(s => s.hash === current.get(s.id)?.hash).map(s => s.id)));
@@ -103,7 +138,9 @@ export class Wiki {
         ? 'incomplete' : closed.closure;
       return { task, closure };
     });
-    return { revision: inv.revision, checkpoint: this.store.load('.wikipoke/state.json', { version: 1, lastIndexedCommit: null }), pages: pages.length, findings: lint(pages), drift,
+    return { revision: inv.revision, checkpoint: this.store.load<{ version: number; lastIndexedCommit: string | null }>(
+      '.wikipoke/state.json', { version: 1, lastIndexedCommit: null }), pages: pages.length,
+      findings: lint(pages, unreadable), drift,
       uncovered: inv.sources.filter(s => !covered.has(s.id)).map(s => s.id), tasks,
       graph: graph(pages) };
   }
@@ -123,12 +160,15 @@ export class Wiki {
   async publishPatch(input: unknown, ref = 'HEAD') {
     const output = patchSchema.parse(input);
     return this.store.locked(() => {
-      const inv = inventory(this.root, this.config, ref), existing = this.pages(), base = new Map(existing.map(p => [p.path, p.raw]));
-      if (revision(this.root, ref) !== inv.revision) throw new Error('Source revision changed before publication; plan again');
+      const inv = inventory(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
+      const base = new Map(existing.map(p => [p.path, p.raw])), broken = new Map(unreadable.map(p => [p.path, p.reason]));
+      if (output.revision && output.revision !== inv.revision)
+        throw new Error(`Source revision changed after planning: patch declares ${output.revision}, sources are at ${inv.revision}; plan again`);
       const allowed = new Map(inv.sources.map(s => [s.id, s]));
       const updated = output.pages.map(p => {
         this.pagePath(p.path);
         if (['query', 'watchlog'].includes(p.meta.type)) throw new Error('Publish cannot replace captured history');
+        if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
         if (read(this.store.path(this.pagePath(p.path))) !== (base.get(p.path) ?? null)) throw new Error(`Concurrent edit: ${p.path}`);
         const old = existing.find(e => e.path === p.path);
         if (old && old.meta.wikipoke.uid !== p.meta.wikipoke.uid) throw new Error('Cannot replace page identity');
@@ -155,9 +195,9 @@ export class Wiki {
         if (record.state === 'answered') return record;
       }
       const at = stamp(), meta = metadata('query', question, `query:${id}`);
-      meta.wikipoke.query = { requestId, question, ref: ref ?? 'HEAD', at, state: 'pending', attempts: before ?
-        [...((before.meta.wikipoke.query as any).attempts ?? []), { at, state: 'pending' }] : [{ at, state: 'pending' }] };
-      this.publish([{ path, meta, body: `# Question\n\n${question}\n`, raw: '' }]);
+      const attempts: Attempt[] = [...(before ? (before.meta.wikipoke.query as any).attempts ?? [] : []), { at, state: 'pending' }];
+      meta.wikipoke.query = { requestId, question, ref: ref ?? 'HEAD', at, state: 'pending', attempts };
+      this.publish([{ path, meta, body: queryBody(meta.wikipoke.query as Record<string, unknown>), raw: '' }]);
       const inv = inventory(this.root, this.config, ref), pages = this.pages().filter(p => p.meta.type !== 'query');
       const tokens = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
       const suggestedPages = pages.map(p => ({ path: p.path, score: tokens.reduce((n, t) => n + Number(`${p.meta.title} ${p.body}`.toLowerCase().includes(t)), 0) }))
@@ -170,18 +210,32 @@ export class Wiki {
     return this.store.locked(() => {
       const page = this.pages().find(p => p.meta.type === 'query' && (p.meta.wikipoke.query as any)?.requestId === requestId);
       if (!page) throw new Error('Unknown query request ID');
-      const query = page.meta.wikipoke.query as Record<string, unknown>;
-      const inv = inventory(this.root, this.config, query.ref as string);
-      const citations = answer.citations.map(id => {
-        const source = inv.sources.find(s => s.id === id);
-        if (!source) throw new Error(`Unknown citation: ${id}`);
-        const { content, ...evidence } = source; return evidence;
-      });
-      const meta = page.meta;
-      meta.sources = citations;
-      meta.wikipoke.query = { ...query, ...answer, revision: inv.revision, state: 'answered', completedAt: stamp() };
-      this.publish([{ path: page.path, meta, body: `# Question\n\n${query.question}\n\n# Answer\n\n${answer.answer}\n\n# Gaps\n\n${answer.gaps.join('\n')}\n`, raw: '' }]);
-      return meta.wikipoke.query;
+      const query = page.meta.wikipoke.query as Record<string, unknown>, meta = page.meta;
+      if (query.state === 'answered') throw new Error('Query already answered; ask again with a new request ID to revise it');
+      const previous: Attempt[] = (query.attempts as Attempt[] | undefined) ?? [];
+      const record = (next: Record<string, unknown>) => {
+        meta.wikipoke.query = next;
+        this.publish([{ path: page.path, meta, body: queryBody(next), raw: '' }]);
+        return next;
+      };
+      try {
+        const inv = inventory(this.root, this.config, query.ref as string);
+        const citations = answer.citations.map(id => {
+          const source = inv.sources.find(s => s.id === id);
+          if (!source) throw new Error(`Unknown citation: ${id}`);
+          const { content, ...evidence } = source; return evidence;
+        });
+        if (!citations.length && !answer.gaps.length)
+          throw new Error('Answer needs cited evidence, or declared gaps when no evidence exists');
+        const at = stamp(), state = citations.length ? 'answered' : 'unsupported';
+        meta.sources = citations;
+        return record({ ...query, ...answer, revision: inv.revision, state, completedAt: at,
+          attempts: [...previous, { at, state }] });
+      } catch (error) {
+        const reason = (error as Error).message;
+        record({ ...query, attempts: [...previous, { at: stamp(), state: 'failed', reason }] });
+        throw error;
+      }
     });
   }
   events(): Event[] {
@@ -200,7 +254,7 @@ export class Wiki {
         const decisionPath = namedPath('decisions', e.choice!, e.id), meta = metadata('decision', e.choice!, `decision:${hash(e.id)}`);
         const existing = this.pages().find(p => p.path === decisionPath);
         if (existing) return existing;
-        meta.wikipoke.decision = { state: 'proposed', actor: e.actor, eventId: e.id, at: e.at, conformance: 'unknown' };
+        meta.wikipoke.decision = { actor: e.actor, eventId: e.id, at: e.at };
         return { path: decisionPath, meta, raw: '', body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n\n# Alternatives\n\n${e.alternatives.join('\n')}\n\n# Declared evidence (not yet verified)\n\n${e.evidence.join('\n')}\n` };
       });
       log.wikipoke.relations = decisions.map(p => ({ type: 'records', target: '/' + p.path, evidence: [], basis: 'observed' }));
@@ -228,8 +282,9 @@ export class Wiki {
   async seal(ref = 'HEAD') {
     return this.store.locked(() => {
       const health = this.health(), commit = revision(this.root, ref);
-      if (health.drift.length || health.uncovered.length || health.findings.some(f => f.severity === 'error'))
-        throw new Error('Cannot advance checkpoint while wiki health has pending work');
+      const errors = health.findings.filter(f => f.severity === 'error').length;
+      if (health.drift.length || health.uncovered.length || errors)
+        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)`);
       const state = { version: 1, lastIndexedCommit: commit, sealedAt: stamp() };
       const path = '.wikipoke/state.json';
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(state) }]);

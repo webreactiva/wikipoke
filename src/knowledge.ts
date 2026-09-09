@@ -8,21 +8,35 @@ import { pageSchema, type Page, type Metadata, type Finding } from './model.js';
 import { files, read } from './runtime/store.js';
 
 const parser = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']);
+// Wikipoke generates these at the wiki root; anywhere deeper they are ordinary pages.
+export const reserved = ['index.md', 'log.md'];
+export interface Unreadable { path: string; reason: string }
+export interface Library { pages: Page[]; unreadable: Unreadable[] }
 export function parsePage(raw: string, path: string): Page {
   const tree = parser.parse(raw), first = tree.children[0];
   if (first?.type !== 'yaml') throw new Error(`${path}: missing YAML frontmatter`);
   const doc = parseDocument((first as unknown as { value: string }).value);
-  if (doc.errors.length) throw new Error(`${path}: ${doc.errors[0].message}`);
-  const meta = pageSchema.parse(doc.toJS());
-  return { path, meta, raw, body: raw.slice(first.position!.end.offset).replace(/^\r?\n/, '') };
+  if (doc.errors.length) throw new Error(`${path}: ${doc.errors[0].message.split('\n')[0]}`);
+  const meta = pageSchema.safeParse(doc.toJS());
+  if (!meta.success) throw new Error(`${path}: ${meta.error.issues
+    .map(i => `${i.path.join('.') || 'frontmatter'} ${i.message.split('\n')[0]}`).join('; ')}`);
+  return { path, meta: meta.data, raw, body: raw.slice(first.position!.end.offset).replace(/^\r?\n/, '') };
 }
 export function render(meta: Metadata, body: string): string {
-  pageSchema.parse(meta);
-  return `---\n${stringify(meta)}---\n${body.trim()}\n`;
+  return `---\n${stringify(pageSchema.parse(meta))}---\n${body.trim()}\n`;
 }
-export function loadPages(root: string): Page[] {
-  return files(root).filter(p => p.endsWith('.md') && !['index.md', 'log.md'].includes(posix.basename(p)))
-    .map(p => parsePage(read(p)!, relative(root, p).split('\\').join('/')));
+export function loadPages(root: string): Library {
+  const pages: Page[] = [], unreadable: Unreadable[] = [];
+  for (const file of files(root).filter(p => p.endsWith('.md'))) {
+    const path = relative(root, file).split('\\').join('/');
+    if (reserved.includes(path)) continue;
+    try { pages.push(parsePage(read(file)!, path)); }
+    catch (error) {
+      const reason = (error as Error).message;
+      unreadable.push({ path, reason: reason.startsWith(`${path}: `) ? reason.slice(path.length + 2) : reason });
+    }
+  }
+  return { pages, unreadable };
 }
 export interface Edge { from: string; to: string; type: string; evidence: string[] }
 export function target(from: string, value: string): string {
@@ -49,8 +63,9 @@ export function graph(pages: Page[]) {
   return { nodes: pages.map(p => ({ id: p.path, uid: p.meta.wikipoke.uid, type: p.meta.type, title: p.meta.title })),
     edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()] };
 }
-export function lint(pages: Page[]): Finding[] {
+export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
+  for (const u of unreadable) findings.push({ code: 'invalid-page', severity: 'error', page: u.path, message: u.reason });
   for (const p of pages) {
     if (ids.has(p.meta.wikipoke.uid)) findings.push({ code: 'duplicate-id', severity: 'error', page: p.path, message: p.meta.wikipoke.uid });
     ids.add(p.meta.wikipoke.uid);
