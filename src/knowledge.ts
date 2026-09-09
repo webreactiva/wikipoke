@@ -43,6 +43,11 @@ export function target(from: string, value: string): string {
   const path = decodeURIComponent(value.split('#')[0]);
   return posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join(posix.dirname(from), path || posix.basename(from)));
 }
+// Relations whose meaning does not depend on which end you read first. The graph stores one edge per
+// symmetric pair with its ends in a fixed order, so a reader never sees the same fact twice - and
+// declares the list in its output, because "no reciprocal pair exists" is otherwise indistinguishable
+// from "the writer only ever recorded one direction".
+export const symmetric = ['related_to', 'contradicts'];
 export function graph(pages: Page[]) {
   const edges: Edge[] = [];
   for (const page of pages) {
@@ -56,12 +61,17 @@ export function graph(pages: Page[]) {
     };
     visit(tree, 'link', node => link(node.url));
     visit(tree, 'linkReference', node => { const url = definitions.get(node.identifier); if (url) link(url); });
-    for (const s of page.meta.sources) edges.push({ from: page.path, to: s.resource ?? s.id, type: 'source', evidence: [s.id] });
+    // The evidence for a provenance edge is the source it points at, so it is only worth stating when
+    // the resource read differs from the id it is known by - with a Git adapter it never does.
+    for (const s of page.meta.sources) {
+      const to = s.resource ?? s.id;
+      edges.push({ from: page.path, to, type: 'source', evidence: to === s.id ? [] : [s.id] });
+    }
   }
-  const normalized = edges.map(e => ['related_to', 'contradicts'].includes(e.type) && e.from > e.to
+  const normalized = edges.map(e => symmetric.includes(e.type) && e.from > e.to
     ? { ...e, from: e.to, to: e.from } : e);
   return { nodes: pages.map(p => ({ id: p.path, uid: p.meta.wikipoke.uid, type: p.meta.type, title: p.meta.title })),
-    edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()] };
+    edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()], symmetric };
 }
 export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
@@ -89,12 +99,19 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   for (const e of edges.filter(e => e.type !== 'source')) {
     if (!paths.has(e.to)) findings.push({ code: 'broken-link', severity: 'warning', page: e.from, message: e.to });
   }
-  const replacements = edges.filter(e => e.type === 'supersedes');
-  const cycle = (id: string, visiting: Set<string>): boolean => {
-    if (visiting.has(id)) return true;
-    return replacements.filter(e => e.from === id).some(e => cycle(e.to, new Set([...visiting, id])));
+  // A cycle in a directed relation is a claim that cannot be true of both ends at once. Supersession
+  // is an error because it makes the replacement order undecidable; a dependency cycle is a warning
+  // because code really does contain them, and the wiki's job is to show it, not to refuse it.
+  const cyclic = (type: string) => {
+    const directed = edges.filter(e => e.type === type);
+    const walk = (id: string, visiting: Set<string>): boolean => visiting.has(id) ||
+      directed.filter(e => e.from === id).some(e => walk(e.to, new Set([...visiting, id])));
+    return pages.filter(p => walk(p.path, new Set())).map(p => p.path);
   };
-  for (const p of pages) if (cycle(p.path, new Set())) findings.push({ code: 'replacement-cycle', severity: 'error', page: p.path, message: 'Cyclic supersession' });
+  for (const path of cyclic('supersedes'))
+    findings.push({ code: 'replacement-cycle', severity: 'error', page: path, message: 'Cyclic supersession' });
+  for (const path of cyclic('depends_on'))
+    findings.push({ code: 'dependency-cycle', severity: 'warning', page: path, message: 'Cyclic dependency' });
   return findings;
 }
 // The index answers "what does this project know", so it carries knowledge only. Process — the event

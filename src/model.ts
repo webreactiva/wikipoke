@@ -26,10 +26,13 @@ export interface Finding { code: string; message: string; page?: string; severit
 export const configSchema = z.object({
   version: z.literal(1), wiki: z.string().default('wiki'), language: z.string().default('en'),
   include: z.array(z.string()).min(1), exclude: z.array(z.string()).default([]),
-  // What happens when an agent stops having touched source it never explained. `remind` states the
-  // debt and lets the turn end; `block` refuses the stop until a decision is captured, which is the
-  // only setting that actually gets rationale recorded while it still exists.
-  capture: z.enum(['off', 'remind', 'block']).default('remind'),
+  // What happens when an agent stops having touched source it never explained. `block` is the default
+  // because a reminder demonstrably is not enough: given a correct notice naming all ten files it had
+  // just changed, an agent finished the turn anyway and, asked why, answered "no valid excuse - I
+  // focused on implementing and let the notice pass". Rationale is not skipped on purpose; it is
+  // skipped because finishing the task is what has the agent's attention. `remind` tells the human
+  // instead, and `off` says nothing.
+  capture: z.enum(['off', 'remind', 'block']).default('block'),
   limits: z.object({ batchFiles: z.number().int().positive(),
     batchBytes: z.number().int().positive().default(64 * 1024) }),
 });

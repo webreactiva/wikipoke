@@ -404,7 +404,7 @@ test('a touched source stops being debt once a decision claims it', async () => 
   const wiki = await setup();
   wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-1' });
   assert.deepEqual((await wiki.touched('ses-1')).unexplained, ['src/main.ts']);
-  assert.equal((await wiki.touched('ses-1')).mode, 'remind');
+  assert.equal((await wiki.touched('ses-1')).mode, 'block');
   await wiki.capture({ id: 'j1', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
     kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.', evidence: ['src/main.ts'] });
   assert.deepEqual((await wiki.touched('ses-1')).unexplained, []);
@@ -504,4 +504,26 @@ test('an answer can cite a page, and the query is connected to what answered it'
   await wiki.ask('Anything else?', 'bad');
   await assert.rejects(wiki.answer('bad', { answer: 'x', citations: ['concepts/nope.md'], gaps: [] }),
     /Unknown citation: concepts\/nope\.md/);
+});
+
+test('the graph says which relations are symmetric and stops repeating itself', async () => {
+  const wiki = await setup();
+  const plan: any = await wiki.ingest();
+  const sources = plan.sources.map(({ content, ...source }: any) => source);
+  const page = (path: string, relations: any[]) => ({ path, meta: { type: 'entity', title: path,
+    description: path, sources, wikipoke: { uid: path, relations } }, body: 'Body.' });
+  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [
+    page('a.md', [{ type: 'related_to', target: '/b.md' }, { type: 'depends_on', target: '/b.md' }]),
+    page('b.md', [{ type: 'related_to', target: '/a.md' }, { type: 'depends_on', target: '/a.md' }]),
+  ] });
+  const result: any = await wiki.graph();
+  // Declared, so a reader can tell "no reciprocal pair" from "recorded in one direction only".
+  assert.deepEqual(result.symmetric, ['related_to', 'contradicts']);
+  assert.equal(result.edges.filter((e: any) => e.type === 'related_to').length, 1);
+  // A provenance edge points at its own evidence, so it no longer restates it.
+  assert.deepEqual(result.edges.find((e: any) => e.type === 'source').evidence, []);
+  // The dependency really is circular, and saying so is the wiki's job.
+  const findings = await wiki.lint();
+  assert.equal(findings.filter(f => f.code === 'dependency-cycle').length, 2);
+  assert.equal(findings.every(f => f.code !== 'replacement-cycle'), true);
 });

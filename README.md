@@ -113,8 +113,16 @@ compares that journal against the evidence of every recorded decision. The
 | `capture` | At the end of a turn that changed unexplained source |
 | --- | --- |
 | `off` | nothing |
-| `remind` (default) | the human is told what went unrecorded |
-| `block` | the agent is sent back to record the reason before it can stop |
+| `remind` | the human is told what went unrecorded |
+| `block` (default) | the agent is sent back to record the reason before it can stop |
+
+`block` is the default because a reminder is demonstrably not enough. In a trial on a clean
+repository, an OpenCode agent was given a correct notice naming all ten source files it had just
+changed — it confirmed afterwards that it had read it, quoted it back in full, and had finished the
+turn anyway: *"no valid excuse — I focused on implementing the variant and let the notice pass"*.
+Rationale does not go unrecorded because an agent decides to skip it. It goes unrecorded because
+finishing the task is what has the agent's attention, and only a stop it cannot walk past competes
+with that.
 
 **OpenCode** gets the same pair through its plugin, with one honest difference:
 `tool.execute.after` journals the edit, but OpenCode exposes no hook that can

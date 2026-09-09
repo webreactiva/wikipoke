@@ -249,14 +249,16 @@ test('the stop hook asks for the reason while the agent that changed the code is
     input: JSON.stringify(payload) }).trim();
   assert.equal(stop({ session_id: 'ses1' }), '');
   new Wiki(wiki.root).note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses1' });
-  const reminded = JSON.parse(stop({ session_id: 'ses1' }));
-  assert.match(reminded.systemMessage, /src\/main\.ts/);
-  assert.equal(reminded.decision, undefined);
+  const blocked = JSON.parse(stop({ session_id: 'ses1' }));
+  assert.equal(blocked.decision, 'block');
+  assert.match(blocked.reason, /src\/main\.ts/);
   // A stop already blocked once has had its chance; asking again is how a hook loops forever.
   assert.equal(stop({ session_id: 'ses1', stop_hook_active: true }), '');
   writeFileSync(join(wiki.root, 'wikipoke.config.yaml'),
-    readFileSync(join(wiki.root, 'wikipoke.config.yaml'), 'utf8').replace('capture: remind', 'capture: block'));
-  assert.equal(JSON.parse(stop({ session_id: 'ses1' })).decision, 'block');
+    readFileSync(join(wiki.root, 'wikipoke.config.yaml'), 'utf8').replace('capture: block', 'capture: remind'));
+  const reminded = JSON.parse(stop({ session_id: 'ses1' }));
+  assert.equal(reminded.decision, undefined);
+  assert.match(reminded.systemMessage, /src\/main\.ts/);
   await new Wiki(wiki.root).capture({ id: 's1', task: 'retries', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
     kind: 'decision', choice: 'Three retries', rationale: 'Measured.', evidence: ['src/main.ts'] });
   assert.equal(stop({ session_id: 'ses1' }), '');

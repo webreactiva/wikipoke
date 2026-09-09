@@ -444,7 +444,7 @@ export function install(root: string): InstallReport {
     atomic(configured, settingsScript(briefingCommand));
     activeBriefing = true;
   } else if (!activeBriefing) {
-    manual.push(`Claude Code: add a SessionStart hook running \`${briefingCommand}\` to ${settings}; it already exists and was left unchanged.`);
+    manual.push(`Claude Code: ${settings} already exists and was left unchanged. Add three hooks to it by hand: SessionStart running \`${briefingCommand}\`, PostToolUse on Edit|Write|MultiEdit|NotebookEdit running \`sh ${journal}\`, and Stop running \`sh ${stop}\`. Without the last two, a decision is only captured when somebody remembers to, which is after the reason is gone.`);
   }
   // These two harnesses auto-discover a file of their own, so the briefing pushes itself rather than
   // waiting for a human to paste an instruction that, unpasted, means nothing happens at all.
