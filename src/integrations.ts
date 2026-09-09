@@ -282,20 +282,42 @@ const briefingCommand = `sh ${briefing}`;
 // out from under the agent's own Wikipoke commands.
 const pluginScript = `// ${marker}; briefs the agent and records which sources it edits.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
-const briefed = new Map();
+// The briefing runs the maintenance pass, which takes the writer lock, so it runs once per session.
+// But debt appears mid-session - the first page published is what makes a missing flow reportable -
+// and a briefing frozen at startup can never say so. So the expensive pass stays once per session
+// and the signal it leaves behind is re-read from disk, which costs a file read and no lock at all.
+const briefed = new Map(), refreshed = new Map();
 function brief(key, directory) {
-  if (briefed.has(key)) return briefed.get(key);
-  let signal = "";
+  if (!briefed.has(key)) {
+    let signal = "";
+    try {
+      signal = execFileSync("sh", ["${briefing}"], {
+        cwd: directory, encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch { signal = ""; }
+    briefed.set(key, signal);
+    return signal;
+  }
+  const now = Date.now(), cached = refreshed.get(key);
+  if (cached && now - cached.at < 60000) return cached.line;
+  let line = briefed.get(key);
   try {
-    signal = execFileSync("sh", ["${briefing}"], {
-      cwd: directory, encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch { signal = ""; }
-  briefed.set(key, signal);
-  return signal;
+    const signal = JSON.parse(readFileSync(join(directory, ".wikipoke", "attention.json"), "utf8"));
+    const owed = [];
+    if (signal.uncovered && signal.uncovered.count) owed.push(signal.uncovered.count + " undocumented source(s)");
+    if (signal.drift && signal.drift.count) owed.push(signal.drift.count + " page(s) citing moved code");
+    if (signal.findings && signal.findings.error) owed.push(signal.findings.error + " error finding(s)");
+    if (signal.unexplained && signal.unexplained.count) owed.push(signal.unexplained.count + " changed source(s) with no decision recorded");
+    if (signal.tasks && signal.tasks.incomplete) owed.push(signal.tasks.incomplete + " task(s) without a recorded decision");
+    if (signal.flows && signal.flows.missing) owed.push("no flow page describing how the code runs end to end");
+    line = owed.length ? "Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile;" +
+      " the full signal is in .wikipoke/attention.json." : "";
+  } catch { /* no signal on disk yet leaves the startup briefing standing */ }
+  refreshed.set(key, { at: now, line });
+  return line;
 }
 // OpenCode exposes no hook that can refuse a stop, so the debt is put where the agent cannot miss it
 // instead: its own system prompt, refreshed at most once a minute. \`journal\` takes no writer lock,

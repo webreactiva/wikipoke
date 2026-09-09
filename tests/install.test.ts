@@ -277,3 +277,21 @@ test('the OpenCode plugin journals its own edits and carries the debt into the p
   assert.deepEqual(written.map(line => JSON.parse(line).file), ['src/main.ts', 'wiki/index.md']);
   assert.deepEqual(await new Wiki(wiki.root).touched('oc-1').then(t => t.unexplained), ['src/main.ts']);
 });
+
+test('the OpenCode briefing refreshes from the signal instead of freezing at startup', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  fakeCli(wiki.root, `cd "${repoRoot}" && exec "${process.execPath}" --import tsx "${cliSource}" "$@"`);
+  const plugin = await import(join(wiki.root, '.opencode/plugin/wikipoke.js') + '?fresh');
+  const hooks = await plugin.wikipoke({ directory: wiki.root });
+  const say = async () => { const out: any = { system: [] };
+    await hooks['experimental.chat.system.transform']({ sessionID: 'oc-brief' }, out); return out.system.join(' '); };
+  const first = await say();
+  assert.match(first, /undocumented source/);
+  // Debt that appears mid-session — a missing flow only becomes reportable once pages exist — has to
+  // reach an agent that never restarts. The startup briefing alone could never say this.
+  await new Wiki(wiki.root).attention();
+  writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
+    uncovered: { count: 0 }, flows: { count: 0, missing: true }, findings: { error: 0 } }));
+  assert.match(await say(), /no flow page/);
+});
