@@ -43,6 +43,16 @@ wiki/                      editable Markdown knowledge
 
 The source inventory reads the whole scope through one batched `git cat-file` process rather than one process per file, so a thousand-file scope stays well under a second end to end.
 
+## Extensions
+
+A project attaches its own scripts to points in Wikipoke's lifecycle by declaring them in `wikipoke.config.yaml` under `extensions`. Each entry names an `event`, a shell command to `run`, an optional `timeout`, and — on a `.before` event only — whether it is `blocking`. The script receives the event as one JSON object on stdin, runs from the project root, and answers with its exit status.
+
+They are declared rather than discovered. A directory whose contents run is a directory anything can be dropped into, and `doctor` could never report which of those files was meant to be there; as configuration, the attached set is listed by `doctor` and any unreadable entry is named as a problem.
+
+Extensions are dispatched in the CLI, on either side of the command, never inside the writer lock. A script called with the lock held would be handed a lifecycle event and a tool that answers `Wiki writer locked` — an instruction it cannot carry out — so an extension is free to run Wikipoke commands of its own. An observer that fails is reported on stderr and never fails the command it was watching; a blocking extension that fails refuses the action before anything is written.
+
+The payload is a summary of the command, never its output: an `ingest` plan carries the text of every source in its batch, and piping that into every extension on every pass is the cost the surface exists to avoid. The full event table is in [extensions](./extensions.md).
+
 ## Writes and concurrency
 
 Writes use a transaction journal and a single writer lock. Recovery completes an interrupted transaction or stops on an external edit conflict. `recover --unlock` releases a lock left by a dead process and reports the recorded owner.

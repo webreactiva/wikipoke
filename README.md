@@ -162,7 +162,9 @@ configuration, scheduling, hooks, queries, task events, and release captures.
 Use the [user guide](docs/user-guide.md) for everyday workflows, the
 [knowledge format](docs/format.md) for page structure, and the
 [architecture guide](docs/architecture.md) for skills, hooks, CLI boundaries,
-state, and integration behavior.
+state, and integration behavior. To attach your own scripts to Wikipoke's
+lifecycle instead of asking the tool to grow another setting, see
+[extensions](docs/extensions.md).
 
 `ask` creates a durable query page before the agent researches it; `answer`
 validates citations before closing it, and will not overwrite an answer already
