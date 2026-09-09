@@ -72,7 +72,10 @@ Run \`${cli} ask "<question>" --request-id <id>\` first: it creates the durable 
 any research, so the question survives even if you fail to answer it. Use \`--ref <commit>\` for a
 question about historical code.
 
-Read the \`suggestedPages\` and the source evidence yourself. Get the contract with
+\`ask\` answers with \`priorAnswers\` — questions already answered whose wording overlaps yours. Read
+those first: one may already answer you, and reusing a cited answer beats researching the same
+ground twice. \`suggestedPages\` carries the knowledge pages worth reading. Read them and the source
+evidence yourself. Get the contract with
 \`${cli} schema answer\`, then persist the answer with
 \`${cli} answer --request-id <id> --response <file>\`.
 

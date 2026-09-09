@@ -203,11 +203,24 @@ export class Wiki {
       const attempts: Attempt[] = [...(before ? (before.meta.wikipoke.query as any).attempts ?? [] : []), { at, state: 'pending' }];
       meta.wikipoke.query = { requestId, question, ref: ref ?? 'HEAD', at, state: 'pending', attempts };
       this.publish([{ path, meta, body: queryBody(meta.wikipoke.query as Record<string, unknown>), raw: '' }]);
-      const inv = inventory(this.root, this.config, ref), pages = this.pages().filter(p => p.meta.type !== 'query');
+      const inv = inventory(this.root, this.config, ref), everything = this.pages();
+      const pages = everything.filter(p => p.meta.type !== 'query');
       const tokens = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-      const suggestedPages = pages.map(p => ({ path: p.path, score: tokens.reduce((n, t) => n + Number(`${p.meta.title} ${p.body}`.toLowerCase().includes(t)), 0) }))
+      const overlap = (text: string) => tokens.reduce((n, t) => n + Number(text.toLowerCase().includes(t)), 0);
+      const suggestedPages = pages.map(p => ({ path: p.path, score: overlap(`${p.meta.title} ${p.body}`) }))
         .sort((a, b) => b.score - a.score).slice(0, 6).map(p => p.path);
-      return { ...(meta.wikipoke.query as object), path, revision: inv.revision, suggestedPages };
+      // A question already answered is the cheapest evidence in the wiki, and it was the one kind of
+      // page suggestion excluded outright. Prior answers are offered separately from knowledge pages
+      // because they are a different move: read one and reuse it, rather than research from source.
+      const priorAnswers = everything.filter(p => p.meta.type === 'query' && p.path !== path)
+        .map(p => ({ page: p, record: p.meta.wikipoke.query as Record<string, unknown> | undefined }))
+        .filter(({ record }) => record?.state === 'answered' && typeof record.question === 'string')
+        .map(({ page, record }) => ({ path: page.path, question: record!.question as string,
+          requestId: record!.requestId as string, score: overlap(record!.question as string) }))
+        .filter(candidate => candidate.score > 0)
+        .sort((a, b) => b.score - a.score).slice(0, 3)
+        .map(({ score, ...candidate }) => candidate);
+      return { ...(meta.wikipoke.query as object), path, revision: inv.revision, suggestedPages, priorAnswers };
     });
   }
   async answer(requestId: string, input: unknown) {

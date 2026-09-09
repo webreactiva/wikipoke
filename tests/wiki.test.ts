@@ -310,3 +310,17 @@ test('the knowledge index carries knowledge, not the event tape', async () => {
   assert.match(written, /decisions\//);
   assert.doesNotMatch(written, /watchlogs\//);
 });
+
+test('asking again offers the answers already given instead of hiding them', async () => {
+  const wiki = await setup();
+  await wiki.ask('How many retries does the client make?', 'first');
+  await wiki.answer('first', { answer: 'Three retries.', citations: ['src/main.ts'], gaps: [] });
+  const repeated: any = await wiki.ask('How many retries are configured?', 'second');
+  assert.deepEqual(repeated.priorAnswers.map((prior: any) => prior.requestId), ['first']);
+  assert.equal(repeated.priorAnswers[0].question, 'How many retries does the client make?');
+  const unrelated: any = await wiki.ask('Which theme tokens exist?', 'third');
+  assert.deepEqual(unrelated.priorAnswers, []);
+  // A question still pending is not an answer, so it is never offered as one.
+  const pending: any = await wiki.ask('How many retries are configured now?', 'fourth');
+  assert.deepEqual(pending.priorAnswers.map((prior: any) => prior.requestId), ['first']);
+});
