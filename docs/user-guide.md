@@ -7,7 +7,7 @@ repository must already be a Git repository with at least one commit — then
 choose a narrow source scope:
 
 ```sh
-npm install --save-dev /path/to/wikipoke
+npm install --save-dev /path/to/wikipoke   # or pnpm add -D -w, or yarn add --dev
 npx --no-install wikipoke init --include 'src/**' --exclude '**/*.test.ts' --batch-files 10 --batch-bytes 65536
 npx --no-install wikipoke install
 ```

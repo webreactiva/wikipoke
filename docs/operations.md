@@ -39,6 +39,7 @@ Record the code commit the manifest names, and ask historical questions with
 except by `snapshot` itself, and a label can only be captured once.
 
 Historical external sources remain subject to their own retention/access rules.
+
 ## Changes nobody explained
 
 A decision event's `evidence` names the source files the choice was about. Once
