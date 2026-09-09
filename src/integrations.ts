@@ -7,6 +7,9 @@ import { Store, atomic, read } from './runtime/store.js';
 const header = '<!-- managed by wikipoke; do not edit this line -->';
 const marker = 'managed by Wikipoke';
 const notifier = '.wikipoke/hooks/post-commit';
+const cli = 'wikipoke';
+const resolve_ = `Resolve the CLI once and reuse it: \\\`node_modules/.bin/${cli}\\\` when it exists,
+otherwise \\\`npx --no-install ${cli}\\\`. Every command below assumes that prefix, written here as \\\`${cli}\\\`.`;
 const skills: Record<string, string> = {
   'wikipoke-ingest': `---
 name: wikipoke-ingest
@@ -16,10 +19,40 @@ user_invocable: true
 
 ${header}
 
-Run \`npx --no-install wikipoke ingest\` to obtain the bounded source plan. Read the
-returned sources and related pages yourself, get the exact payload contract with
-\`npx --no-install wikipoke schema patch\`, then prepare a structured patch and publish it with
-\`npx --no-install wikipoke publish --patch <file>\`. Do not modify source code.
+${resolve_}
+
+## Plan
+
+Run \`${cli} ingest\`. The plan is bounded by \`limits.batchFiles\` and \`limits.batchBytes\`,
+so it is meant to be read whole — never truncate it. It answers with:
+
+- \`sources\` — the batch to document, each with \`id\`, \`resource\`, \`revision\`, \`hash\` and \`content\`.
+- \`pages\` and \`catalog\` — the wiki context and every existing page, so you connect rather than duplicate.
+- \`revision\` — the commit the plan was made against.
+- \`complete\` and \`remaining\` — whether anything is left, and how much.
+
+Read the sources and the related pages yourself, and reason in your own flow. Do not modify source code.
+
+## Publish
+
+Get the exact contract with \`${cli} schema patch\`, then publish with \`${cli} publish --patch <file>\`.
+Three things the schema states but that are easy to get wrong:
+
+- **Copy each source's \`revision\` and \`hash\` verbatim from the plan into \`meta.sources\`.** They are
+  the pinned evidence. Never recompute a hash: it is a SHA-256 of the decoded file content, it is
+  already in the plan, and \`publish\` rejects a value that does not match.
+- **\`body\` is one Markdown string**, not an array of lines.
+- **Declare the plan's \`revision\` in the patch.** Publication is then refused if the sources moved
+  while you were working, instead of recording knowledge against code that no longer exists.
+
+## Repeat
+
+One pass documents one batch. Loop — \`ingest\`, publish, \`ingest\` again — until \`complete\` is true,
+re-planning each time so the batch reflects what you just published. Prefer a page that carries a
+decision and its consequence over one that restates what the code already says.
+
+Read \`.wikipoke/attention.json\` for the bounded health signal; it is refreshed on every commit.
+Use \`${cli} status\` only when you need the full uncovered list, which is unbounded.
 `,
   'wikipoke-query': `---
 name: wikipoke-query
@@ -29,10 +62,20 @@ user_invocable: true
 
 ${header}
 
-Run \`npx --no-install wikipoke ask "<question>" --request-id <id>\` first. Read the
-suggested wiki pages and source evidence yourself, get the exact payload contract with
-\`npx --no-install wikipoke schema answer\`, then persist a cited answer with
-\`npx --no-install wikipoke answer --request-id <id> --response <file>\`.
+${resolve_}
+
+Run \`${cli} ask "<question>" --request-id <id>\` first: it creates the durable query page before
+any research, so the question survives even if you fail to answer it. Use \`--ref <commit>\` for a
+question about historical code.
+
+Read the \`suggestedPages\` and the source evidence yourself. Get the contract with
+\`${cli} schema answer\`, then persist the answer with
+\`${cli} answer --request-id <id> --response <file>\`.
+
+- Every entry in \`citations\` must name a page path or a source id that exists; unknown citations are rejected.
+- When the evidence does not exist, declare \`gaps\` instead of inventing support. An answer carried by
+  gaps alone closes the query as \`unsupported\`, which is an honest outcome, not a failure.
+- \`answered\` is terminal. To revise a closed answer, ask again under a new \`--request-id\`.
 `,
   'wikipoke-decision': `---
 name: wikipoke-decision
@@ -42,10 +85,19 @@ user_invocable: true
 
 ${header}
 
-Use \`npx --no-install wikipoke capture --event <event.json>\` when a relevant decision is made,
-and before closing a task. Do not reconstruct undisclosed rationale from a diff.
+${resolve_}
+
+Get the contract with \`${cli} schema event\`, then use \`${cli} capture --event <event.json>\` when a
+relevant decision is made, and before closing a task.
+
+- A \`decision\` event requires the \`choice\` that was made; record \`alternatives\` and \`evidence\` when they were stated.
+- Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`
+  and explain in \`rationale\` why no reason is on record. Wikipoke keeps absent rationale as unknown
+  rather than guessing, and that is the point.
+- An \`open\` event without a matching \`close\` shows up as incomplete capture in the attention signal.
 `,
 };
+
 const notifierScript = `#!/bin/sh
 # ${marker}; safe notifier, never runs an LLM or blocks a commit.
 # Refreshes .wikipoke/attention.json in place: a failed run keeps the previous signal.
