@@ -52,6 +52,46 @@ exits silently when neither is present. It never invokes a model and never
 blocks a commit. Schedule the same `maintain --once` command if commits are not
 the trigger you want.
 
+## Brief the agent at session start
+
+A fresh signal nobody reads changes nothing. `install` also writes
+`.wikipoke/hooks/session-start`, a no-LLM script that refreshes the signal and
+prints one line when the wiki owes work — undocumented sources, pages citing
+moved code, error findings, tasks with no recorded decision — and stays silent
+when it owes none. Run it where the agent will see it.
+
+Wikipoke composes this for Claude Code only when the project has no
+`.claude/settings.json`, and never rewrites one it finds. Every other harness is
+told, not configured: a harness config carries permissions and plugins that are
+not Wikipoke's to edit. `install` prints the step for each, and `doctor` reports
+whether the briefing is composed.
+
+**Claude Code** — in `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume",
+        "hooks": [{ "type": "command", "command": "sh .wikipoke/hooks/session-start", "timeout": 20 }] }
+    ]
+  }
+}
+```
+
+**Codex** and **OpenCode** have no session hook of this shape. Add one line to
+`AGENTS.md`, which both read:
+
+```markdown
+At the start of a session, run `sh .wikipoke/hooks/session-start` and act on what it prints.
+```
+
+OpenCode can instead run the command from an `opencode.json` plugin, which makes
+it automatic rather than advisory.
+
+**Cursor** has no session hook either: put the same line in a `.cursor/rules/`
+rule file.
+
 ## Operations
 
 ```sh

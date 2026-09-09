@@ -18,6 +18,7 @@ wiki/                      editable Markdown knowledge
   write.lock/              single writer lock, with owner.json
   events/                  implementation decision events
   hooks/post-commit        generated notifier
+  hooks/session-start      generated agent briefing
   releases/                release manifests
 .agents/skills/            generated host-neutral instructions
 ```
@@ -41,6 +42,8 @@ A Markdown file the parser cannot read — malformed frontmatter, or none — is
 `install` creates ingestion, query, and decision skills under `.agents/skills/`. They are provider-neutral instructions, not runtime integrations with a particular agent. A host must support the project skill convention or be configured to read those files.
 
 The installer activates a delegating Git `post-commit` hook only when no hook exists. That delegator resolves the repository root at run time instead of embedding an absolute path, so a clone or a moved checkout keeps working. When a hook already exists the installer preserves it and reports the manual composition step instead.
+
+The briefing at `.wikipoke/hooks/session-start` closes the other half of the loop: the notifier keeps the signal fresh, the briefing puts it in front of the agent, printing one line when the wiki owes work and nothing when it does not. Wikipoke composes it into `.claude/settings.json` only when that file is absent; every other harness gets a reported step rather than an edited config, because a harness config carries permissions and plugins that are not Wikipoke's to rewrite.
 
 The notifier runs `maintain --once`, which writes `.wikipoke/attention.json` itself. It resolves the CLI from `node_modules/.bin/wikipoke`, then `npx --no-install wikipoke`, and exits silently when neither is available; a failed run leaves the previous signal in place. `uninstall` removes only what `install` created, leaving the wiki, configuration, events, releases, and any foreign hook untouched.
 

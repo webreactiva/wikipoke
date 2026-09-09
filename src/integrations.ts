@@ -7,6 +7,8 @@ import { Store, atomic, read } from './runtime/store.js';
 const header = '<!-- managed by wikipoke; do not edit this line -->';
 const marker = 'managed by Wikipoke';
 const notifier = '.wikipoke/hooks/post-commit';
+const briefing = '.wikipoke/hooks/session-start';
+const settings = '.claude/settings.json';
 const cli = 'wikipoke';
 const resolve_ = `Resolve the CLI once and reuse it: \\\`node_modules/.bin/${cli}\\\` when it exists,
 otherwise \\\`npx --no-install ${cli}\\\`. Every command below assumes that prefix, written here as \\\`${cli}\\\`.`;
@@ -110,6 +112,48 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 exit 0
 `;
+// The post-commit notifier keeps the signal fresh, but a fresh file nobody reads changes
+// nothing: an agent opens a session blind unless its harness puts the debt in front of it.
+// This is the same no-LLM command, printing a one-line brief and staying silent when clean.
+const briefingScript = `#!/bin/sh
+# ${marker}; session briefing, never runs an LLM and never fails a session.
+# Refreshes the attention signal, then prints one line when the wiki owes work.
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/wikipoke.config.yaml" ] || exit 0
+if [ -x "$root/node_modules/.bin/wikipoke" ]; then
+  cli="$root/node_modules/.bin/wikipoke"
+elif command -v npx >/dev/null 2>&1; then
+  cli="npx --no-install wikipoke"
+else
+  exit 0
+fi
+$cli --root "$root" maintain --once >/dev/null 2>&1 || exit 0
+node -e '
+const fs = require("node:fs");
+try {
+  const s = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const owed = [];
+  if (s.uncovered?.count) owed.push(s.uncovered.count + " undocumented source(s)");
+  if (s.drift?.count) owed.push(s.drift.count + " page(s) citing moved code");
+  if (s.findings?.error) owed.push(s.findings.error + " error finding(s)");
+  if (s.tasks?.incomplete) owed.push(s.tasks.incomplete + " task(s) without a recorded decision");
+  if (owed.length) process.stdout.write("Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile; the full signal is in .wikipoke/attention.json.\\n");
+} catch { /* no signal yet is not a problem worth reporting */ }
+' "$root/.wikipoke/attention.json" 2>/dev/null
+exit 0
+`;
+const briefingCommand = `sh ${briefing}`;
+const settingsScript = (command: string) => `${JSON.stringify({
+  hooks: { SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command, timeout: 20 }] }] },
+}, null, 2)}\n`;
+// Only Claude Code has a session hook Wikipoke can compose without owning the file. The rest are
+// told, not configured: a harness config carries permissions and plugins that are not ours to edit,
+// and an instruction line an agent reads is a working adapter where no lifecycle hook exists.
+const harnesses: [string, string][] = [
+  ['Codex', `add a line to AGENTS.md telling the agent to run \`${briefingCommand}\` before it starts work.`],
+  ['OpenCode', `no session hook exists; add the same line to AGENTS.md, or run \`${briefingCommand}\` from an opencode.json plugin.`],
+  ['Cursor', `no session hook exists; put the same line in a .cursor/rules/ rule file.`],
+];
 const delegatorScript = `#!/bin/sh
 # ${marker}; delegates to the project-local notifier, resolved at run time.
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -118,7 +162,7 @@ hook="$root/${notifier}"
 exec "$hook" "$@"
 `;
 
-export interface InstallReport { skills: string[]; hook: string; activeHook: boolean; manual: string[] }
+export interface InstallReport { skills: string[]; hook: string; activeHook: boolean; briefing: string; activeBriefing: boolean; manual: string[] }
 export interface UninstallReport { removed: string[]; preserved: string[]; manual: string[] }
 function hookPath(root: string): string {
   const value = execFileSync('git', ['-C', root, 'rev-parse', '--git-path', 'hooks'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -127,6 +171,9 @@ function hookPath(root: string): string {
 export function hookActive(root: string): boolean {
   try { return read(`${hookPath(root)}/post-commit`)?.includes(notifier) ?? false; }
   catch { return false; }
+}
+export function briefingActive(root: string): boolean {
+  return read(resolve(root, settings))?.includes(briefing) ?? false;
 }
 export function install(root: string): InstallReport {
   const store = new Store(root), manual: string[] = [], installed: string[] = [];
@@ -146,8 +193,23 @@ export function install(root: string): InstallReport {
     activeHook = true;
   } else if (hookActive(root)) activeHook = true;
   else manual.push(`Compose ${relative(root, hook)} from the project's existing post-commit hook manager.`);
+  const brief = store.path(briefing);
+  atomic(brief, briefingScript);
+  chmodSync(brief, 0o755);
+  // Composition, not adoption: a harness config the project already owns is never rewritten,
+  // because a settings file carries permissions and hooks that are none of Wikipoke's business.
+  let activeBriefing = briefingActive(root);
+  const configured = store.path(settings);
+  if (!activeBriefing && !existsSync(configured)) {
+    atomic(configured, settingsScript(briefingCommand));
+    activeBriefing = true;
+  } else if (!activeBriefing) {
+    manual.push(`Claude Code: add a SessionStart hook running \`${briefingCommand}\` to ${settings}; it already exists and was left unchanged.`);
+  }
+  for (const [harness, step] of harnesses) manual.push(`${harness}: ${step}`);
+  manual.push('See "Brief the agent at session start" in the Wikipoke README for the exact snippets.');
   manual.push('Schedule `npx --no-install wikipoke maintain --once` to refresh the deterministic attention signal.');
-  return { skills: installed, hook: relative(root, hook), activeHook, manual };
+  return { skills: installed, hook: relative(root, hook), activeHook, briefing: relative(root, brief), activeBriefing, manual };
 }
 function prune(directory: string): void { try { rmdirSync(directory); } catch { /* keep non-empty directories */ } }
 function wikiDirectory(root: string): string {
@@ -168,6 +230,12 @@ export function uninstall(root: string): UninstallReport {
   prune(store.path('.agents/skills')); prune(store.path('.agents'));
   const hook = store.path(notifier);
   if (read(hook) !== null) { rmSync(hook); removed.push(relative(root, hook)); prune(dirname(hook)); }
+  const brief = store.path(briefing);
+  if (read(brief) !== null) { rmSync(brief); removed.push(relative(root, brief)); prune(dirname(brief)); }
+  const configured = store.path(settings);
+  const old_ = read(configured);
+  if (old_ !== null && old_ === settingsScript(briefingCommand)) { rmSync(configured); removed.push(settings); prune(dirname(configured)); }
+  else if (old_ !== null && old_.includes(briefing)) { preserved.push(settings); manual.push(`Remove the ${briefing} session hook from ${settings} by hand: the file carries settings Wikipoke did not write.`); }
   try {
     const target = `${hookPath(root)}/post-commit`, old = read(target);
     if (old !== null && old.includes(marker) && old.includes(notifier)) { rmSync(target); removed.push(relative(root, target)); }

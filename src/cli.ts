@@ -8,7 +8,7 @@ import { Wiki } from './wiki.js';
 import { configSchema } from './model.js';
 import { answerSchema, eventSchema, patchSchema } from './model.js';
 import { z } from 'zod';
-import { hookActive, install, uninstall } from './integrations.js';
+import { briefingActive, hookActive, install, uninstall } from './integrations.js';
 import { Store } from './runtime/store.js';
 
 // A path-installed CLI has no registry entry to look the build up in, so the one question
@@ -97,12 +97,14 @@ program.command('doctor').description('report environment and configured capabil
     const configPath = resolve(path, 'wikipoke.config.yaml'), configured = existsSync(configPath);
     const report: Record<string, unknown> = { node: process.version, git: version, repository: repo,
       config: configured ? 'wikipoke.config.yaml' : null, wiki: null,
-      hook: '.wikipoke/hooks/post-commit', hookComposed: hookActive(path), pending: null, problems };
+      hook: '.wikipoke/hooks/post-commit', hookComposed: hookActive(path),
+      briefing: '.wikipoke/hooks/session-start', briefingComposed: briefingActive(path), pending: null, problems };
     if (Number(process.versions.node.split('.')[0]) < 22) problems.push(`Node 22 or later is required; running ${process.version}.`);
     if (!version) problems.push('Git is not on PATH; Wikipoke reads every source from Git.');
     else if (!repo) problems.push(`No Git repository with at least one commit at ${path}.`);
     if (!configured) problems.push('No wikipoke.config.yaml; run init to configure the wiki.');
     if (!report.hookComposed) problems.push('No post-commit hook composes .wikipoke/hooks/post-commit; the attention signal will not refresh on commit.');
+    if (!report.briefingComposed) problems.push('No agent harness runs .wikipoke/hooks/session-start; an agent will open a session without the attention signal.');
     if (configured) {
       try { report.wiki = (parse(readFileSync(configPath, 'utf8')) as { wiki?: string }).wiki ?? 'wiki'; }
       catch (error) { problems.push(`Unreadable configuration: ${(error as Error).message}`); }

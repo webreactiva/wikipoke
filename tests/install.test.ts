@@ -146,3 +146,54 @@ test('uninstall is idempotent and safe on an untouched project', async () => {
   assert.deepEqual(report.removed, []);
   assert.ok(report.preserved.includes('wiki'));
 });
+test('install composes a session briefing so an agent does not open a session blind', async () => {
+  const wiki = await setup();
+  const report = install(wiki.root);
+  assert.equal(report.activeBriefing, true);
+  const settings = JSON.parse(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'));
+  assert.equal(settings.hooks.SessionStart[0].hooks[0].command, 'sh .wikipoke/hooks/session-start');
+  assert.match(readFileSync(join(wiki.root, '.wikipoke/hooks/session-start'), 'utf8'), /never runs an LLM/);
+  const removal = uninstall(wiki.root);
+  assert.ok(removal.removed.includes('.claude/settings.json'));
+  assert.ok(removal.removed.includes('.wikipoke/hooks/session-start'));
+});
+
+test('install never rewrites a settings file the project already owns', async () => {
+  const wiki = await setup();
+  mkdirSync(join(wiki.root, '.claude'), { recursive: true });
+  writeFileSync(join(wiki.root, '.claude/settings.json'), '{ "permissions": { "allow": [] } }\n');
+  const report = install(wiki.root);
+  assert.equal(report.activeBriefing, false);
+  assert.ok(report.manual.some(message => /session-start/.test(message)));
+  assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), '{ "permissions": { "allow": [] } }\n');
+  uninstall(wiki.root);
+  assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), '{ "permissions": { "allow": [] } }\n');
+});
+
+test('the session briefing reports what the wiki owes and stays silent when clean', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  fakeCli(wiki.root, 'exit 0');
+  mkdirSync(join(wiki.root, '.wikipoke'), { recursive: true });
+  writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
+    uncovered: { count: 244 }, drift: { count: 2 }, findings: { error: 1 }, tasks: { incomplete: 0 } }));
+  const owed = spawnSync(join(wiki.root, '.wikipoke/hooks/session-start'), [], { cwd: wiki.root, encoding: 'utf8' });
+  assert.match(owed.stdout, /244 undocumented source\(s\)/);
+  assert.match(owed.stdout, /2 page\(s\) citing moved code/);
+  assert.match(owed.stdout, /1 error finding\(s\)/);
+  writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
+    uncovered: { count: 0 }, drift: { count: 0 }, findings: { error: 0 }, tasks: { incomplete: 0 } }));
+  const clean = spawnSync(join(wiki.root, '.wikipoke/hooks/session-start'), [], { cwd: wiki.root, encoding: 'utf8' });
+  assert.equal(clean.stdout, '');
+  assert.equal(clean.status, 0);
+});
+
+test('install names a briefing step for every harness it cannot compose itself', async () => {
+  const wiki = await setup();
+  const report = install(wiki.root);
+  for (const harness of ['Codex', 'OpenCode', 'Cursor']) {
+    assert.ok(report.manual.some(step => step.startsWith(`${harness}:`)), `no step for ${harness}`);
+  }
+  assert.ok(report.manual.every(step => !/Claude Code:/.test(step)), 'Claude Code was composed, so it needs no step');
+  assert.ok(report.manual.some(step => /Brief the agent at session start/.test(step)));
+});

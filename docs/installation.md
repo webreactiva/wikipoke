@@ -114,6 +114,13 @@ absolute path. It never replaces an existing hook or hook manager; in that case
 it reports the composition step instead. `doctor` reports whether the notifier
 is active.
 
+`install` also writes `.wikipoke/hooks/session-start`, which refreshes the signal
+and prints one line when the wiki owes work. Commits keep the signal fresh; this
+puts it in front of the agent. Wikipoke composes it into `.claude/settings.json`
+only when that file does not exist, and never rewrites one it finds; for Claude
+Code, Codex, OpenCode and Cursor it reports the manual step instead. The README
+section "Brief the agent at session start" carries the snippet for each.
+
 Re-run `install` after an upgrade. It updates only files bearing its managed
 marker and reports foreign files it leaves unchanged.
 
