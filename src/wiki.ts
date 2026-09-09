@@ -4,10 +4,10 @@ import { dirname } from 'node:path';
 import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { configSchema, patchSchema, answerSchema, eventSchema, touchSchema,
-  type Config, type Metadata, type Page, type Source, type Touch } from './model.js';
+  type Config, type Metadata, type Page, type SourceMeta, type Touch } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { changed, ignored, inventory, revision, uncommitted, git } from './sources/git.js';
+import { changed, ignored, manifest, sourcesFor, revision, uncommitted, git } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
@@ -35,13 +35,13 @@ function slug(value: string): string {
 // large module outweigh an agent's context, and a truncated plan loses the pinned evidence
 // the patch has to carry. The first pending source always ships, so a file larger than the
 // budget is still planned rather than blocking the queue behind it forever.
-function budgeted(pending: Source[], limits: Config['limits']): Source[] {
-  const batch: Source[] = [];
+function budgeted(pending: SourceMeta[], limits: Config['limits']): SourceMeta[] {
+  const batch: SourceMeta[] = [];
   let bytes = 0;
   for (const source of pending) {
     if (batch.length >= limits.batchFiles) break;
-    if (batch.length && bytes + source.content.length > limits.batchBytes) break;
-    batch.push(source); bytes += source.content.length;
+    if (batch.length && bytes + source.size > limits.batchBytes) break;
+    batch.push(source); bytes += source.size;
   }
   return batch;
 }
@@ -211,7 +211,7 @@ export class Wiki {
     // relative to the code, and without it they silently never fire.
     return this.store.locked(() => {
       const { pages, unreadable } = this.library();
-      return lint(pages, unreadable, inventory(this.root, this.config).sources.length);
+      return lint(pages, unreadable, manifest(this.root, this.config).sources.length);
     });
   }
   // Both durable inputs only ever grow. The journal is observation, not knowledge: once every file a
@@ -278,7 +278,7 @@ export class Wiki {
     });
   }
   private health() {
-    const inv = inventory(this.root, this.config), { pages, unreadable } = this.library();
+    const inv = manifest(this.root, this.config), { pages, unreadable } = this.library();
     const current = new Map(inv.sources.map(s => [s.id, s]));
     // A decision cites the code it was about, not the code it documents. Counting it as coverage
     // would let a wiki with no knowledge in it report every source as documented.
@@ -330,11 +330,14 @@ export class Wiki {
   }
   async ingest(ref = 'HEAD') {
     return this.store.locked(() => {
-      const inv = inventory(this.root, this.config, ref), existing = this.pages();
+      // Planning needs identity and digest for everything, and content for the batch alone. Reading
+      // the whole repository into memory to choose ten files is what put the peak at 425 MB.
+      const inv = manifest(this.root, this.config, ref), existing = this.pages();
       const documented = new Set(existing.filter(p => !['query', 'decision'].includes(p.meta.type))
         .flatMap(p => p.meta.sources.filter(s => inv.sources.some(c => c.id === s.id && sameDigest(c.hash, s.hash))).map(s => s.id)));
       const pending = inv.sources.filter(s => !documented.has(s.id));
-      const sources = budgeted(pending, this.config.limits);
+      const batch = budgeted(pending, this.config.limits);
+      const sources = sourcesFor(this.root, this.config, batch.map(s => s.id), ref);
       const sourceIds = new Set(sources.map(s => s.id));
       const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
       for (const edge of graph(existing).edges) if (edge.type === 'depends_on' && direct.has(edge.to)) direct.add(edge.from);
@@ -354,7 +357,7 @@ export class Wiki {
   async publishPatch(input: unknown, ref = 'HEAD') {
     const output = patchSchema.parse(input);
     return this.store.locked(() => {
-      const inv = inventory(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
+      const inv = manifest(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
       const base = new Map(existing.map(p => [p.path, p.raw]));
       // A page a human is midway through writing must never be overwritten. A page full of conflict
       // markers is not that: git wrote them, nobody wants them kept, and refusing to publish over it
@@ -407,7 +410,7 @@ export class Wiki {
       // Offering it as a suggestion was not enough - it was ignored - so it is returned instead of a
       // new query. A stale answer is not reused: drift there means the code moved under it.
       if (!before && !again) {
-        const wanted = normalize(question), current = inventory(this.root, this.config, ref);
+        const wanted = normalize(question), current = manifest(this.root, this.config, ref);
         const known = new Map(current.sources.map(source => [source.id, source.hash]));
         const answered = existing.find(p => {
           const record = p.meta.wikipoke.query as Record<string, unknown> | undefined;
@@ -435,7 +438,7 @@ export class Wiki {
       const attempts: Attempt[] = [...(before ? (before.meta.wikipoke.query as any).attempts ?? [] : []), { at, state: 'pending' }];
       meta.wikipoke.query = { requestId, question, ref: ref ?? 'HEAD', at, state: 'pending', attempts };
       this.publish([{ path, meta, body: queryBody(meta.wikipoke.query as Record<string, unknown>, undefined, path), raw: '' }]);
-      const inv = inventory(this.root, this.config, ref), everything = this.pages();
+      const inv = manifest(this.root, this.config, ref), everything = this.pages();
       const pages = everything.filter(p => p.meta.type !== 'query');
       const tokens = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
       const overlap = (text: string) => tokens.reduce((n, t) => n + Number(text.toLowerCase().includes(t)), 0);
@@ -473,7 +476,7 @@ export class Wiki {
         return next;
       };
       try {
-        const inv = inventory(this.root, this.config, query.ref as string);
+        const inv = manifest(this.root, this.config, query.ref as string);
         const library = this.pages();
         // A citation is a source id or the path of a page, which is what the query skill has always
         // promised and what the code used to reject. Both are evidence; they are not the same edge.
@@ -481,7 +484,7 @@ export class Wiki {
         // an answered question is finally connected to the knowledge it was answered from.
         const cited = answer.citations.map(id => {
           const source = inv.sources.find(s => s.id === id);
-          if (source) { const { content, ...evidence } = source; return { source: evidence }; }
+          if (source) { const { size, ...evidence } = source; return { source: evidence }; }
           const page = library.find(p => p.path === id);
           if (page) return { page };
           throw new Error(`Unknown citation: ${id}; name a source id from the plan or the path of a page in the wiki`);
@@ -573,7 +576,7 @@ export class Wiki {
       // Declared evidence names files. Resolved against the inventory it becomes real provenance:
       // the decision joins the graph through the code it is about, and drift can say that the source
       // behind a choice has moved - which is the one thing a decision record has to be able to say.
-      const inv = inventory(this.root, this.config);
+      const inv = manifest(this.root, this.config);
       const known = new Map(inv.sources.map(source => [source.id, source]));
       const recorded = events.filter(e => e.kind === 'decision');
       const named = recorded.map(e => {
@@ -594,7 +597,7 @@ export class Wiki {
         // a later choice under the same task shows up on the pages decided beside it.
         const cited = e.evidence.filter(file => known.has(file));
         const pinned = existing?.meta.sources.length ? existing.meta.sources
-          : cited.map(file => { const { content, ...source } = known.get(file)!; return source; });
+          : cited.map(file => { const { size, ...source } = known.get(file)!; return source; });
         const meta = existing ? { ...existing.meta, title: name, description: name } : metadata('decision', name, uid);
         meta.sources = pinned;
         // Relations on a decision page are Wikipoke's to write, and Wikipoke no longer writes any:

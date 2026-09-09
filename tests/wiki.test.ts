@@ -763,3 +763,17 @@ test('maintenance keeps the tape from growing without bound, and loses nothing',
   assert.deepEqual((await wiki.touched()).files, ['src/other.ts']);
   assert.deepEqual((await wiki.touched()).unexplained, ['src/other.ts']);
 });
+
+test('a plan carries the content of its batch and nothing else', async () => {
+  const wiki = await setup();
+  for (let n = 0; n < 12; n++) writeFileSync(join(wiki.root, `src/m${n}.ts`), `export const v${n} = ${n};\n`);
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'many');
+  const plan: any = await wiki.ingest();
+  // Batch size is the limit, and every source in it arrives readable.
+  assert.equal(plan.sources.length, 5);
+  assert.equal(plan.sources.every((s: any) => typeof s.content === 'string' && s.content.length > 0), true);
+  assert.equal(plan.remaining, 8);
+  // Coverage, drift and verification all work from digests, so nothing else needs reading at all.
+  const status: any = await wiki.status();
+  assert.equal(status.uncovered.length, 13);
+});

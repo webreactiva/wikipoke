@@ -2,6 +2,13 @@
 
 ## Agent-first boundary
 
+Every command except `ingest` works from identities and digests alone, never from
+source text: coverage, drift and patch verification all ask "is this the same
+content", which a hash answers. Only planning reads code, and only the batch it
+plans. Blobs are read a group at a time and a source nobody asked for is hashed
+from its bytes without ever being decoded, so the peak is one group rather than
+the repository — 127 MB rather than 315 MB on a 75 MB tree.
+
 Wikipoke does not invoke a model provider. It is independent of Claude, Codex, OpenCode, and other hosts. The host agent owns interpretation, code reading, and editorial judgement. Wikipoke owns deterministic source inventory, planning, validation, publication, query records, decision events, graph reconstruction, checkpoints, and release records.
 
 ## Repository layout

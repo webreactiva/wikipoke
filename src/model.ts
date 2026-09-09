@@ -23,7 +23,12 @@ export const pageSchema = z.object({
 }).passthrough();
 export type Metadata = z.infer<typeof pageSchema>;
 export interface Page { path: string; meta: Metadata; body: string; raw: string }
-export interface Source { id: string; resource: string; revision: string; hash: string; content: string }
+// What every command except one actually needs: the identity of a source and the digest that proves
+// its content, without the content. Holding the whole scope in memory to answer "did this change"
+// cost 425 MB of resident memory for 117 MB of sources on a real monorepo.
+export interface SourceMeta { id: string; resource: string; revision: string; hash: string; size: number }
+export interface Source extends SourceMeta { content: string }
+export interface Manifest { revision: string; sources: SourceMeta[] }
 export interface Inventory { revision: string; sources: Source[] }
 export interface Finding { code: string; message: string; page?: string; severity: 'error' | 'warning' }
 export const configSchema = z.object({

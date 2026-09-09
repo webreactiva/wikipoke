@@ -1,9 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { minimatch } from 'minimatch';
-import type { Config, Inventory, Source } from '../model.js';
+import type { Config, Inventory, Manifest, Source, SourceMeta } from '../model.js';
 import { hash } from '../runtime/store.js';
 
-const scan = 8 * 1024, budget = 32 * 1024 * 1024, span = 512;
+// Blobs are read a group at a time, and the group is the peak. Thirty-two megabytes of source
+// becomes that again as decoded strings before any of it can be released; eight keeps the peak flat
+// at the cost of a few more `cat-file` invocations, which are cheap next to the memory.
+const scan = 8 * 1024, budget = 8 * 1024 * 1024, span = 512;
 // A digest is written into every page and only ever answers "is this the same content". Sixteen hex
 // characters settle that; the other forty-eight are carried, diffed and re-read forever for nothing.
 // Callers compare by prefix, so a wiki written by an earlier release stays valid.
@@ -65,7 +68,10 @@ export function uncommitted(root: string, config: Config): string[] {
   const names = rows.map(row => row.slice(3)).filter(Boolean);
   return [...new Set(names.filter(name => !ignored(name, config)))].sort();
 }
-export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
+// One walk over the tree, reading blobs a group at a time. `keep` decides which contents survive the
+// group they were read in; everything else is hashed and dropped, so the peak is one group rather
+// than the whole repository. Callers that need no content at all keep none.
+function walk(root: string, config: Config, ref: string, keep: (name: string) => boolean): Inventory {
   const rev = revision(root, ref);
   const rows = git(root, 'ls-tree', '-r', '-z', rev).split('\0').filter(Boolean);
   const wanted = rows.flatMap(row => {
@@ -86,10 +92,26 @@ export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory
       const body = output.subarray(stop + 1, stop + 1 + size);
       cursor = stop + 2 + size;
       if (!textual(body)) continue;
-      const content = body.toString('utf8');
+      // Hashing the bytes gives the same digest as hashing the decoded string, so a source nobody
+      // asked the content of is never decoded at all - no string is created to be dropped.
+      const wanted_ = keep(blob.name);
       sources.push({ id: blob.name, resource: blob.name, revision: rev.slice(0, shortRevision),
-        hash: hash(content).slice(0, digest), content });
+        hash: hash(body).slice(0, digest), size: body.length,
+        content: wanted_ ? body.toString('utf8') : '' });
     }
   }
   return { revision: rev, sources };
+}
+export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
+  return walk(root, config, ref, () => true);
+}
+// Identity and digest for every source in scope, and no content at all.
+export function manifest(root: string, config: Config, ref = 'HEAD'): Manifest {
+  const { revision: rev, sources } = walk(root, config, ref, () => false);
+  return { revision: rev, sources: sources.map(({ content, ...meta }) => meta) };
+}
+// The content of a named few, for the one command that reads code rather than checking it.
+export function sourcesFor(root: string, config: Config, ids: string[], ref = 'HEAD'): Source[] {
+  const wanted = new Set(ids);
+  return walk(root, config, ref, name => wanted.has(name)).sources.filter(s => wanted.has(s.id));
 }
