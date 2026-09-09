@@ -306,3 +306,22 @@ test('every generated hook is a syntactically valid shell script', async () => {
     assert.equal(checked.status, 0, `${hook}: ${checked.stderr}`);
   }
 });
+
+test('install keeps the writer lock out of every commit', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  const ignored = readFileSync(join(wiki.root, '.gitignore'), 'utf8');
+  assert.match(ignored, /\.wikipoke\/write\.lock\//);
+  assert.match(ignored, /\.wikipoke\/transaction\.json/);
+  // `git add -A` is the habit, because the post-commit hook dirties the tree on every commit. What
+  // it must never pick up is the lock: a clone of that commit is locked from birth and silent.
+  mkdirSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });
+  writeFileSync(join(wiki.root, '.wikipoke/write.lock/owner.json'), '{"pid":1}');
+  execFileSync('git', ['-C', wiki.root, 'add', '-A']);
+  const staged = execFileSync('git', ['-C', wiki.root, 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
+  assert.equal(/write\.lock/.test(staged), false);
+  // Knowledge in the same directory still travels.
+  assert.match(staged, /\.wikipoke\/state\.json/);
+  install(wiki.root);
+  assert.equal(readFileSync(join(wiki.root, '.gitignore'), 'utf8'), ignored);
+});

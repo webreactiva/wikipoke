@@ -243,15 +243,25 @@ test('publishing never copies source content into the frontmatter', async () => 
   assert.deepEqual(Object.keys(echoed.meta.sources[0] ?? {}).sort(), ['hash', 'id', 'revision']);
 });
 
-test('publish refuses a patch planned on a superseded revision', async () => {
+test('publish refuses a patch whose evidence moved, and only that', async () => {
   const wiki = await setup();
   const plan: any = await wiki.ingest();
+  // Somebody commits something else entirely while the agent is writing. The cited source did not
+  // move, so the work stands: rejecting it here threw away a whole batch for a typo in a README.
   writeFileSync(join(wiki.root, 'src/extra.ts'), 'export const extra = 1;\n');
   git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'extra');
-  await assert.rejects(wiki.publishPatch({ ...patch(plan.sources), revision: plan.revision }), /plan again/);
-  const replanned: any = await wiki.ingest();
-  await wiki.publishPatch({ ...patch(replanned.sources), revision: replanned.revision });
-  assert.deepEqual((await wiki.status()).uncovered, []);
+  await wiki.publishPatch({ ...patch(plan.sources), revision: plan.revision });
+  assert.deepEqual((await wiki.status()).uncovered, ['src/extra.ts']);
+
+  // The cited source itself moving is a different matter: the page was written against content that
+  // no longer exists, and that is refused by the hash it pinned.
+  const stale: any = await wiki.ingest();
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 99;\n');
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'moved');
+  await assert.rejects(wiki.publishPatch({ pages: [{ path: 'concepts/retries.md',
+    meta: { type: 'concept', title: 'Retries', description: 'Retry policy',
+      sources: [{ id: 'src/main.ts', revision: stale.revision, hash: hash('export const retries = 3;\n').slice(0, 16) }],
+      wikipoke: { uid: 'retries', relations: [] } }, body: 'Body.' }], findings: [] }), /declares hash/);
 });
 
 test('attention writes a bounded signal instead of the whole graph', async () => {
@@ -585,4 +595,22 @@ test('a wiki with no flow through it cannot be sealed as complete', async () => 
   await assert.rejects(wiki.seal(), /no page describes a flow/);
   await wiki.publishPatch({ pages: [page('flows/one.md', 'flow', sources)], findings: [] });
   assert.ok((await wiki.seal() as any).lastIndexedCommit);
+});
+
+test('a checkpoint that is no longer in the repository is reported, not read as clean', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  const flows = { path: 'flows/one.md', meta: { type: 'flow', title: 'Flow', description: 'Flow',
+    sources: (await wiki.ingest() as any).sources.map(({ content, ...s }: any) => s),
+    wikipoke: { uid: 'flow', relations: [] } }, body: 'Body.' };
+  await wiki.publishPatch({ pages: [flows], findings: [] });
+  await wiki.seal();
+  // What a squash-merge leaves behind: state.json names a commit this repository does not have.
+  writeFileSync(join(wiki.root, '.wikipoke/state.json'),
+    JSON.stringify({ version: 1, lastIndexedCommit: '0'.repeat(40), sealedAt: '2026-09-09T10:00:00Z' }));
+  const status: any = await wiki.status();
+  assert.equal(status.findings.some((f: any) => f.code === 'lost-checkpoint'), true);
+  assert.deepEqual(status.unexplained, []);
+  // And it holds the next seal instead of certifying over a comparison that never ran.
+  await assert.rejects(wiki.seal(), /error finding/);
 });

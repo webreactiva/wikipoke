@@ -437,12 +437,34 @@ export function captureActive(root: string): boolean {
   const configured = read(resolve(root, settings));
   return !!configured && configured.includes(journal) && configured.includes(stop);
 }
+// A commit carrying the writer lock clones into a repository that is locked from birth: every
+// command fails and the session briefing - the one channel anyone reads - stays silent, because
+// silence is also what a healthy wiki prints. The post-commit hook rewrites the attention signal, so
+// the tree is dirty right after every commit and `git add -A` becomes the habit. Two lines in
+// .gitignore make that habit harmless. The rest of .wikipoke/ is knowledge and must stay versioned.
+function ignoreVolatile(root: string): string | null {
+  const path = resolve(root, '.gitignore'), current = read(path);
+  const wanted = ['.wikipoke/write.lock/', '.wikipoke/transaction.json'];
+  const missing = wanted.filter(entry => !(current ?? '').split('\n').some(line => line.trim() === entry));
+  if (!missing.length) return null;
+  const body = current ?? '';
+  atomic(path, `${body}${body && !body.endsWith('\n') ? '\n' : ''}${body ? '\n' : ''}# ${marker}: never commit the writer lock or an in-flight transaction\n${missing.join('\n')}\n`);
+  return '.gitignore';
+}
 export function install(root: string): InstallReport {
   const store = new Store(root), manual: string[] = [], installed: string[] = [];
+  const ignored_ = ignoreVolatile(root);
+  if (ignored_) installed.push(ignored_);
+  // `.agents/skills/` is the neutral home and OpenCode reads it. Claude Code does not - verified by
+  // a project whose only skill lives there and never appears in the session's skill list - so the
+  // same file is written where Claude Code looks. A block message naming a skill the agent cannot
+  // invoke is worse than no message at all.
   for (const [name, content] of Object.entries(skills)) {
-    const path = store.path(`.agents/skills/${name}/SKILL.md`), old = read(path);
-    if (old !== null && !old.includes(header)) { manual.push(`Skipped ${relative(root, path)}: not managed by Wikipoke.`); continue; }
-    atomic(path, content); installed.push(relative(root, path));
+    for (const home of ['.agents/skills', '.claude/skills']) {
+      const path = store.path(`${home}/${name}/SKILL.md`), old = read(path);
+      if (old !== null && !old.includes(header)) { manual.push(`Skipped ${relative(root, path)}: not managed by Wikipoke.`); continue; }
+      atomic(path, content); installed.push(`${home}/${name}/SKILL.md`);
+    }
   }
   const hook = store.path(notifier);
   atomic(hook, notifierScript);
@@ -496,12 +518,14 @@ function wikiDirectory(root: string): string {
 export function uninstall(root: string): UninstallReport {
   const store = new Store(root), removed: string[] = [], preserved: string[] = [], manual: string[] = [];
   for (const name of Object.keys(skills)) {
-    const path = store.path(`.agents/skills/${name}/SKILL.md`), old = read(path);
-    if (old === null) continue;
-    if (!old.includes(header)) { preserved.push(relative(root, path)); manual.push(`Kept ${relative(root, path)}: not managed by Wikipoke.`); continue; }
-    rmSync(path); removed.push(relative(root, path)); prune(dirname(path));
+    for (const home of ['.agents/skills', '.claude/skills']) {
+      const path = store.path(`${home}/${name}/SKILL.md`), old = read(path);
+      if (old === null) continue;
+      if (!old.includes(header)) { preserved.push(relative(root, path)); manual.push(`Kept ${relative(root, path)}: not managed by Wikipoke.`); continue; }
+      rmSync(path); removed.push(relative(root, path)); prune(dirname(path));
+    }
   }
-  prune(store.path('.agents/skills')); prune(store.path('.agents'));
+  for (const home of ['.agents/skills', '.agents', '.claude/skills']) prune(store.path(home));
   const hook = store.path(notifier);
   if (read(hook) !== null) { rmSync(hook); removed.push(relative(root, hook)); prune(dirname(hook)); }
   for (const path of [briefing, journal, stop]) {

@@ -239,11 +239,14 @@ export class Wiki {
     });
     const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
       '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
+    const reachable = this.reachable(checkpoint.lastIndexedCommit);
+    const findings = lint(pages, unreadable);
+    if (!reachable) findings.push({ code: 'lost-checkpoint', severity: 'error',
+      message: `The sealed checkpoint ${checkpoint.lastIndexedCommit} is not in this repository, so changes since it cannot be compared; seal again once the wiki is level with the code` });
     return { revision: inv.revision, checkpoint, pages: pages.length,
-      flows: pages.filter(p => p.meta.type === 'flow').length,
-      findings: lint(pages, unreadable), drift,
+      flows: pages.filter(p => p.meta.type === 'flow').length, findings, drift,
       uncovered: inv.sources.filter(s => !covered.has(s.id)).map(s => s.id), tasks,
-      unexplained: this.unexplained(checkpoint.lastIndexedCommit, events),
+      unexplained: reachable ? this.unexplained(checkpoint.lastIndexedCommit, events) : [],
       graph: graph(pages) };
   }
   // Source that moved since the sealed checkpoint and that no decision event claims as its evidence:
@@ -251,9 +254,16 @@ export class Wiki {
   // capture is for work done with the wiki in place — code that predates it cannot be explained now.
   private unexplained(checkpoint: string | null, events: Event[]): string[] {
     if (!checkpoint) return [];
-    const explained = new Set(events.filter(e => e.kind === 'decision').flatMap(e => e.evidence));
-    try { return changed(this.root, this.config, checkpoint).filter(id => !explained.has(id)); }
-    catch { return []; }
+    const explained = new Set(events.filter(e => e.kind === 'decision' ||
+      (e.kind === 'close' && e.closure === 'none_declared')).flatMap(e => e.evidence));
+    return changed(this.root, this.config, checkpoint).filter(id => !explained.has(id));
+  }
+  // A squash-merge, a deleted branch or a fresh clone can leave the sealed commit unreachable. The
+  // comparison then cannot run at all, and answering "nothing unexplained" would be a green light
+  // meaning the opposite: the signal is gone, not clean.
+  private reachable(checkpoint: string | null): boolean {
+    if (!checkpoint) return true;
+    try { revision(this.root, checkpoint); return true; } catch { return false; }
   }
   async ingest(ref = 'HEAD') {
     return this.store.locked(() => {
@@ -278,7 +288,9 @@ export class Wiki {
     return this.store.locked(() => {
       const inv = inventory(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
       const base = new Map(existing.map(p => [p.path, p.raw])), broken = new Map(unreadable.map(p => [p.path, p.reason]));
-      if (output.revision && output.revision !== inv.revision)
+      // The patch's revision is recorded, not enforced: what matters is that every source it cites
+      // still has the content it was written against, and each source carries its own hash for that.
+      if (output.revision && output.revision !== inv.revision && output.pages.every(p => !p.meta.sources.length))
         throw new Error(`Source revision changed after planning: patch declares ${output.revision}, sources are at ${inv.revision}; plan again`);
       const allowed = new Map(inv.sources.map(s => [s.id, s]));
       const updated = output.pages.map(p => {
@@ -296,10 +308,12 @@ export class Wiki {
           if (!known) throw new Error(`Unverified source: ${source.id} is outside the configured scope at this revision`);
           if (source.resource !== undefined && source.resource !== known.resource)
             throw new Error(`Unverified source: ${source.id} declares resource ${source.resource}, sources have ${known.resource}; re-plan with ingest`);
-          for (const [field, mine, theirs] of [['hash', source.hash, known.hash],
-            ['revision', source.revision, known.revision]] as const) {
-            if (!sameDigest(mine, theirs)) throw new Error(`Unverified source: ${source.id} declares ${field} ${mine ?? 'nothing'}, sources have ${theirs}; re-plan with ingest`);
-          }
+          // Only the hash is checked. It already proves the content the page was written against,
+          // while the revision is the commit that content happened to sit in - so requiring it to
+          // match threw away a whole batch of an agent's work every time anyone committed anything
+          // during the turn, including a typo in a README the plan never touched.
+          if (!sameDigest(source.hash, known.hash))
+            throw new Error(`Unverified source: ${source.id} declares hash ${source.hash ?? 'nothing'}, sources have ${known.hash}; re-plan with ingest`);
         }
         // An agent fills in fields it knows the schema has, even ones the plan stopped offering. The
         // frontmatter is normalized here so the file on disk never repeats a path twice.
@@ -327,9 +341,12 @@ export class Wiki {
         const known = new Map(current.sources.map(source => [source.id, source.hash]));
         const answered = existing.find(p => {
           const record = p.meta.wikipoke.query as Record<string, unknown> | undefined;
+          // Reuse rests on the evidence still matching, so an answer with no pinned source has
+          // nothing to check: `every` over an empty list is vacuously true, and the answer would be
+          // reusable forever no matter how far the code moved underneath it.
           return p.meta.type === 'query' && record?.state === 'answered' &&
             typeof record.question === 'string' && normalize(record.question) === wanted &&
-            record.ref === (ref ?? 'HEAD') &&
+            record.ref === (ref ?? 'HEAD') && p.meta.sources.length > 0 &&
             p.meta.sources.every(source => sameDigest(source.hash, known.get(source.id)));
         });
         if (answered) {
