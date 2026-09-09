@@ -76,7 +76,8 @@ test('a failed attempt never erases the answer already recorded', async () => {
   const kept = wiki.pages()[0], query = kept.meta.wikipoke.query as any;
   assert.match(kept.body, /# Answer\n\nUnclear\./);
   assert.match(kept.body, /# Gaps\n\nNo source states it/);
-  assert.equal(query.answer, 'Unclear.');
+  assert.equal(query.answer, undefined, 'the prose lives in the body, never twice in one file');
+  assert.deepEqual(query.gaps, ['No source states it']);
   assert.equal(query.state, 'unsupported');
   assert.equal(query.attempts.at(-1).state, 'failed');
   await wiki.answer('kept', { answer: 'Three.', citations: ['src/main.ts'], gaps: [] });

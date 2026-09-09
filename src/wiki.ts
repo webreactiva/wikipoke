@@ -39,10 +39,19 @@ function trace(attempts: Attempt[]): string {
   return attempts.length ? `\n# Attempts\n\n${attempts
     .map(a => `- ${a.at} - ${a.state}${a.reason ? `: ${a.reason}` : ''}`).join('\n')}\n` : '';
 }
-function queryBody(query: Record<string, unknown>): string {
-  const answered = typeof query.answer === 'string';
+const answerHeading = '\n# Answer\n\n', gapsHeading = '\n\n# Gaps\n';
+// The page body holds the prose once. The frontmatter keeps machine state — state, citations, gaps,
+// attempts, completedAt — and no second copy of the answer, because two copies of the same text in
+// one editable file is one copy that silently goes stale the first time a human corrects the page.
+function answerProse(body: string): string | undefined {
+  const start = body.indexOf(answerHeading);
+  if (start < 0) return undefined;
+  const from = start + answerHeading.length, stop = body.indexOf(gapsHeading, from);
+  return stop < 0 ? undefined : body.slice(from, stop);
+}
+function queryBody(query: Record<string, unknown>, prose?: string): string {
   return `# Question\n\n${query.question}\n` +
-    (answered ? `\n# Answer\n\n${query.answer}\n\n# Gaps\n\n${((query.gaps as string[]) ?? []).join('\n')}\n` : '') +
+    (prose === undefined ? '' : `${answerHeading}${prose}${gapsHeading}\n${((query.gaps as string[]) ?? []).join('\n')}\n`) +
     trace((query.attempts as Attempt[] | undefined) ?? []);
 }
 export class Wiki {
@@ -231,9 +240,12 @@ export class Wiki {
       const query = page.meta.wikipoke.query as Record<string, unknown>, meta = page.meta;
       if (query.state === 'answered') throw new Error('Query already answered; ask again with a new request ID to revise it');
       const previous: Attempt[] = (query.attempts as Attempt[] | undefined) ?? [];
-      const record = (next: Record<string, unknown>) => {
+      // A retry re-renders the page, so it reads back the prose already written rather than dropping
+      // it: an unsupported answer keeps its text while a later attempt fails.
+      const written = answerProse(page.body);
+      const record = (next: Record<string, unknown>, prose = written) => {
         meta.wikipoke.query = next;
-        this.publish([{ path: page.path, meta, body: queryBody(next), raw: '' }]);
+        this.publish([{ path: page.path, meta, body: queryBody(next, prose), raw: '' }]);
         return next;
       };
       try {
@@ -247,8 +259,8 @@ export class Wiki {
           throw new Error('Answer needs cited evidence, or declared gaps when no evidence exists');
         const at = stamp(), state = citations.length ? 'answered' : 'unsupported';
         meta.sources = citations;
-        return record({ ...query, ...answer, revision: inv.revision, state, completedAt: at,
-          attempts: [...previous, { at, state }] });
+        return record({ ...query, citations: answer.citations, gaps: answer.gaps,
+          revision: inv.revision, state, completedAt: at, attempts: [...previous, { at, state }] }, answer.answer);
       } catch (error) {
         const reason = (error as Error).message;
         record({ ...query, attempts: [...previous, { at: stamp(), state: 'failed', reason }] });
