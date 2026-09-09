@@ -320,6 +320,13 @@ test('install keeps the writer lock out of every commit', async () => {
   const ignored = readFileSync(join(wiki.root, '.gitignore'), 'utf8');
   assert.match(ignored, /\.wikipoke\/write\.lock\//);
   assert.match(ignored, /\.wikipoke\/transaction\.json/);
+  // Scratch files belong inside the project: /tmp is a sandbox boundary in most harnesses, and a
+  // permission prompt for a temporary plan file is a poor way to spend a human's attention.
+  assert.match(ignored, /\.wikipoke\/tmp\//);
+  for (const skill of ['wikipoke-ingest', 'wikipoke-query', 'wikipoke-decision']) {
+    const text = readFileSync(join(wiki.root, '.claude/skills', skill, 'SKILL.md'), 'utf8');
+    assert.match(text, /\.wikipoke\/tmp\//, skill);
+  }
   // `git add -A` is the habit, because the post-commit hook dirties the tree on every commit. What
   // it must never pick up is the lock: a clone of that commit is locked from birth and silent.
   mkdirSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });

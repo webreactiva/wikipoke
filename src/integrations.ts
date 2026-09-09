@@ -27,6 +27,11 @@ ${header}
 
 ${resolve_}
 
+Write the intermediate JSON files these commands take and produce under \`.wikipoke/tmp/\`, which is
+git-ignored. Anywhere outside the project - \`/tmp\` and friends - is a sandbox boundary in most
+harnesses, and asking a human for permission to write a scratch file is a poor way to spend their
+attention.
+
 ## Plan
 
 Run \`${cli} ingest\`. The plan is bounded by \`limits.batchFiles\` and \`limits.batchBytes\`,
@@ -44,7 +49,8 @@ Read the sources and the related pages yourself, and reason in your own flow. Do
 
 ## Publish
 
-Get the exact contract with \`${cli} schema patch\`, then publish with \`${cli} publish --patch <file>\`.
+Get the exact contract with \`${cli} schema patch\`, then publish with
+\`${cli} publish --patch .wikipoke/tmp/patch.json\`.
 Three things the schema states but that are easy to get wrong:
 
 - **Copy each source's \`revision\` and \`hash\` verbatim from the plan into \`meta.sources\`.** They are
@@ -107,9 +113,10 @@ that answer with \`reused: true\` and writes no new page. That is the answer - r
 \`ask\` answers with \`priorAnswers\` — questions already answered whose wording overlaps yours. Read
 those first: one may already answer you, and reusing a cited answer beats researching the same
 ground twice. \`suggestedPages\` carries the knowledge pages worth reading. Read them and the source
-evidence yourself. Get the contract with
-\`${cli} schema answer\`, then persist the answer with
-\`${cli} answer --request-id <id> --response <file>\`.
+evidence yourself. Get the contract with \`${cli} schema answer\`, then persist the answer with
+\`${cli} answer --request-id <id> --response .wikipoke/tmp/answer.json\`. Keep that file, and any
+event JSON, under \`.wikipoke/tmp/\`: it is git-ignored and inside the project, so no harness has to
+ask anyone for permission to write a scratch file.
 
 - Every entry in \`citations\` must name a page path or a source id that exists; unknown citations are
   rejected. Both are real: a source id pins provenance, a page path becomes an \`asks_about\` relation
@@ -131,8 +138,9 @@ ${header}
 
 ${resolve_}
 
-Get the contract with \`${cli} schema event\`, then use \`${cli} capture --event <event.json>\` when a
-relevant decision is made, and before closing a task.
+Get the contract with \`${cli} schema event\`, then use
+\`${cli} capture --event .wikipoke/tmp/event.json\` when a relevant decision is made, and before
+closing a task. Write that file under \`.wikipoke/tmp/\`, which is git-ignored and inside the project.
 
 A task is a piece of work that reached a choice worth remembering — not every file you document.
 Open one when you expect to record a decision under it.
@@ -471,7 +479,7 @@ export function captureActive(root: string): boolean {
 // .gitignore make that habit harmless. The rest of .wikipoke/ is knowledge and must stay versioned.
 function ignoreVolatile(root: string): string | null {
   const path = resolve(root, '.gitignore'), current = read(path);
-  const wanted = ['.wikipoke/write.lock/', '.wikipoke/transaction.json'];
+  const wanted = ['.wikipoke/write.lock/', '.wikipoke/transaction.json', '.wikipoke/tmp/'];
   const missing = wanted.filter(entry => !(current ?? '').split('\n').some(line => line.trim() === entry));
   if (!missing.length) return null;
   const body = current ?? '';
