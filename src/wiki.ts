@@ -263,9 +263,14 @@ export class Wiki {
         return { path: decisionPath, meta, raw: '', body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n\n# Alternatives\n\n${e.alternatives.join('\n')}\n\n# Declared evidence (not yet verified)\n\n${e.evidence.join('\n')}\n` };
       });
       log.wikipoke.relations = decisions.map(p => ({ type: 'records', target: '/' + p.path, evidence: [], basis: 'observed' }));
+      // A task that recorded no choice has nothing to teach: its open/close pair is already durable
+      // in .wikipoke/events and counted in the attention signal, and a page saying only "Task opened"
+      // buys shelf space in the wiki with no knowledge in it. The tape is kept, not published; the
+      // watchlog appears the moment the task records its first decision, carrying the whole history.
+      if (!decisions.length) return { id: event.id, task: event.task, materialized: false, decisions: 0 };
       this.publish([...decisions, { path: namedPath('watchlogs', event.task, event.task), meta: log, raw: '',
         body: '# Recorded events\n\n' + events.map(e => `## ${e.at} - ${e.kind}\n\nActor: ${e.actor}\n\n${e.choice ?? e.closure ?? 'Task opened'}\n\n${e.rationale ?? ''}\n`).join('\n') }]);
-      return { id: event.id, task: event.task, materialized: true };
+      return { id: event.id, task: event.task, materialized: true, decisions: decisions.length };
     });
   }
   async snapshot(label: string, ref = 'HEAD') {

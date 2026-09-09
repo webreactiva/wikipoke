@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -275,4 +275,38 @@ test('a source larger than the budget is planned instead of blocking the queue',
   const plan: any = await new Wiki(root).ingest();
   assert.deepEqual(plan.sources.map((source: any) => source.id), ['src/huge.ts']);
   assert.equal(plan.remaining, 1);
+});
+
+test('a task that records no decision leaves a tape but no wiki page', async () => {
+  const wiki = await setup();
+  const base = { task: 'read the registry', actor: 'agent/test', at: '2026-09-09T10:00:00Z' };
+  const opened: any = await wiki.capture({ ...base, id: 'e1', kind: 'open' });
+  assert.equal(opened.materialized, false);
+  const closed: any = await wiki.capture({ ...base, id: 'e2', kind: 'close', closure: 'none_declared',
+    rationale: 'Documentation-only task; nobody stated a choice.' });
+  assert.equal(closed.materialized, false);
+  assert.equal(wiki.pages().some(page => page.meta.type === 'watchlog'), false);
+  assert.equal(existsSync(join(wiki.root, 'wiki/watchlogs')), false);
+  // The tape is durable even though nothing was published.
+  assert.equal(wiki.events().filter(event => event.task === base.task).length, 2);
+
+  const recorded: any = await wiki.capture({ ...base, id: 'e3', kind: 'decision',
+    choice: 'The registry stays a plain map', rationale: 'A map keeps the bundle tree-shakeable.' });
+  assert.equal(recorded.materialized, true);
+  const log = wiki.pages().find(page => page.meta.type === 'watchlog')!;
+  assert.match(log.body, /Task opened/);
+  assert.match(log.body, /The registry stays a plain map/);
+  assert.match(log.body, /none_declared/);
+});
+
+test('the knowledge index carries knowledge, not the event tape', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  const base = { task: 'pick a retry count', actor: 'agent/test', at: '2026-09-09T10:00:00Z' };
+  await wiki.capture({ ...base, id: 'd1', kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.' });
+  assert.equal(wiki.pages().some(page => page.meta.type === 'watchlog'), true);
+  const written = readFileSync(join(wiki.root, 'wiki/index.md'), 'utf8');
+  assert.match(written, /concepts\/retries\.md/);
+  assert.match(written, /decisions\//);
+  assert.doesNotMatch(written, /watchlogs\//);
 });

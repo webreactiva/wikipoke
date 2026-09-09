@@ -85,6 +85,11 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   for (const p of pages) if (cycle(p.path, new Set())) findings.push({ code: 'replacement-cycle', severity: 'error', page: p.path, message: 'Cyclic supersession' });
   return findings;
 }
+// The index answers "what does this project know", so it carries knowledge only. A watchlog is the
+// event tape of one task — process, not knowledge — and listing it here means the index degrades in
+// exact proportion to how diligently an agent captures decisions. It stays reachable through the
+// decision pages it records, the graph, and the event store.
 export function index(pages: Page[]): string {
-  return '# Knowledge index\n\n' + pages.map(p => `- [${p.meta.title.replace(/[\[\]\n]/g, '')}](${p.path}) - ${p.meta.description.replace(/\n/g, ' ')}`).join('\n') + '\n';
+  const knowledge = pages.filter(p => p.meta.type !== 'watchlog');
+  return '# Knowledge index\n\n' + knowledge.map(p => `- [${p.meta.title.replace(/[\[\]\n]/g, '')}](${p.path}) - ${p.meta.description.replace(/\n/g, ' ')}`).join('\n') + '\n';
 }

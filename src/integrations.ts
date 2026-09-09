@@ -94,10 +94,16 @@ ${resolve_}
 Get the contract with \`${cli} schema event\`, then use \`${cli} capture --event <event.json>\` when a
 relevant decision is made, and before closing a task.
 
+A task is a piece of work that reached a choice worth remembering — not every file you document.
+Open one when you expect to record a decision under it.
+
 - A \`decision\` event requires the \`choice\` that was made; record \`alternatives\` and \`evidence\` when they were stated.
 - Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`
   and explain in \`rationale\` why no reason is on record. Wikipoke keeps absent rationale as unknown
   rather than guessing, and that is the point.
+- A task that records no decision publishes no page: the events are kept, and \`capture\` answers
+  \`materialized: false\`. Do not open and close empty tasks to look thorough — it writes nothing
+  and only shows up as incomplete capture.
 - An \`open\` event without a matching \`close\` shows up as incomplete capture in the attention signal.
 `,
 };
