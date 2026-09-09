@@ -31,6 +31,19 @@ function fakeCli(root: string, body: string) {
 function notify(root: string) {
   return spawnSync(join(root, '.wikipoke/hooks/post-commit'), [], { cwd: root, encoding: 'utf8' });
 }
+// The refresh is detached so the commit does not wait for it, which is the whole point; a test that
+// wants to see its effect has to wait where the commit does not.
+async function settled(path: string, within = 5000): Promise<string | null> {
+  for (const started = Date.now(); Date.now() - started < within;) {
+    const seen = readFileSyncOrNull(path);
+    if (seen !== null) return seen;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return readFileSyncOrNull(path);
+}
+function readFileSyncOrNull(path: string): string | null {
+  try { return readFileSync(path, 'utf8'); } catch { return null; }
+}
 
 test('install writes valid agent-neutral skills and preserves foreign skill files', async () => {
   const wiki = await setup(), foreign = join(wiki.root, '.agents/skills/wikipoke-query/SKILL.md');
@@ -64,7 +77,7 @@ test('the delegated hook resolves the notifier at run time, not from a baked pat
   fakeCli(wiki.root, 'printf "%s\\n" "$*" > "$2/.wikipoke/invocation"');
   const result = spawnSync(join(wiki.root, '.git/hooks/post-commit'), [], { cwd: wiki.root, encoding: 'utf8' });
   assert.equal(result.status, 0);
-  assert.equal(readFileSync(join(wiki.root, '.wikipoke/invocation'), 'utf8').trim(),
+  assert.equal((await settled(join(wiki.root, '.wikipoke/invocation')))?.trim(),
     `--root ${realpathSync(wiki.root)} maintain --once`);
 });
 
@@ -72,11 +85,14 @@ test('the notifier refreshes the signal through maintain --once', async () => {
   const wiki = await setup();
   install(wiki.root);
   fakeCli(wiki.root, 'printf "%s\\n" "$*" > "$2/.wikipoke/invocation"\nprintf "{\\"refreshed\\":true}\\n" > "$2/.wikipoke/attention.json"');
+  const started = Date.now();
   const result = notify(wiki.root);
+  // The commit must not wait for a pass that reads every source in the repository.
+  assert.ok(Date.now() - started < 400, `hook took ${Date.now() - started}ms`);
   assert.equal(result.status, 0);
-  assert.equal(readFileSync(join(wiki.root, '.wikipoke/invocation'), 'utf8').trim(),
+  assert.equal((await settled(join(wiki.root, '.wikipoke/invocation')))?.trim(),
     `--root ${realpathSync(wiki.root)} maintain --once`);
-  assert.equal(readFileSync(join(wiki.root, '.wikipoke/attention.json'), 'utf8'), '{"refreshed":true}\n');
+  assert.equal(await settled(join(wiki.root, '.wikipoke/attention.json')), '{"refreshed":true}\n');
 });
 
 test('a failed refresh keeps the previous attention signal and never fails the commit', async () => {

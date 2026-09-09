@@ -280,7 +280,10 @@ test('attention writes a bounded signal instead of the whole graph', async () =>
   assert.equal(signal.checkpoint, null);
   assert.deepEqual(Object.keys(signal.findings).sort(), ['error', 'warning']);
   assert.equal('graph' in signal, false);
-  assert.deepEqual(JSON.parse(read(join(wiki.root, '.wikipoke/attention.json'))!), signal);
+  // What the pass pruned is about this run, not part of the signal a session reads back.
+  const { pruned, ...written } = signal as any;
+  assert.deepEqual(pruned, { journals: 0, archived: 0 });
+  assert.deepEqual(JSON.parse(read(join(wiki.root, '.wikipoke/attention.json'))!), written);
   await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
   assert.deepEqual((await wiki.graph()).nodes.map(n => n.id), wiki.pages().map(p => p.path));
 });
@@ -716,4 +719,47 @@ test('a wiki shaped like the file tree is reported, and a wiki of knowledge is n
   const mirrored: any = await wiki.status();
   assert.deepEqual(mirrored.uncovered, []);
   assert.equal(mirrored.findings.some((f: any) => f.code === 'mirrors-the-tree'), true);
+});
+
+test('a captured release can be found and read back by its label', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'wiki');
+  await wiki.snapshot('v1.0.0');
+  await wiki.snapshot('v1.1.0');
+  const listed: any = await wiki.releases();
+  // Newest first, and each one names the refs that hold it — the manifest file is named after the
+  // hash of its label, so without this there was no way to get from a label to anything.
+  assert.deepEqual(listed.map((r: any) => r.label), ['v1.1.0', 'v1.0.0']);
+  assert.match(listed[0].refs.code, /^refs\/wikipoke\/[a-f0-9]{64}\/code$/);
+  const one: any = await wiki.release('v1.0.0');
+  assert.equal(one.reachable.code, true);
+  assert.equal(one.reachable.wiki, true);
+  await assert.rejects(wiki.release('v9'), /list them with/);
+});
+
+test('maintenance keeps the tape from growing without bound, and loses nothing', async () => {
+  const wiki = await setup();
+  const base = { task: 'retry policy', actor: 'agent/test' };
+  writeFileSync(join(wiki.root, 'src/other.ts'), 'export const backoff = 250;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'second source');
+  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'done' });
+  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/other.ts', tool: 'Edit', session: 'owing' });
+  await wiki.capture({ ...base, id: 'p1', kind: 'open', at: '2026-09-09T09:00:00Z' });
+  await wiki.capture({ ...base, id: 'p2', kind: 'decision', at: '2026-09-09T10:00:00Z',
+    title: 'Three retries', choice: 'Bound them.', evidence: ['src/main.ts'] });
+  await wiki.capture({ ...base, id: 'p3', kind: 'close', at: '2026-09-09T11:00:00Z', closure: 'recorded' });
+  await wiki.capture({ id: 'p4', task: 'still open', actor: 'agent/test', at: '2026-09-09T12:00:00Z', kind: 'open' });
+
+  const before = wiki.events().length;
+  const pruned: any = (await wiki.attention() as any).pruned;
+  // A closed, materialized task folds into one file per month. A task still in flight does not move.
+  assert.equal(pruned.archived, 3);
+  assert.equal(existsSync(join(wiki.root, '.wikipoke/events/archive/2026-09.jsonl')), true);
+  assert.equal(wiki.events().length, before);
+  assert.deepEqual(wiki.events().map(e => e.id), ['p1', 'p2', 'p3', 'p4']);
+  // The journal of a session whose files are all explained has done its job; one still owing stays.
+  assert.equal(pruned.journals, 1);
+  assert.deepEqual((await wiki.touched()).files, ['src/other.ts']);
+  assert.deepEqual((await wiki.touched()).unexplained, ['src/other.ts']);
 });

@@ -93,6 +93,10 @@ program.command('capture').description('persist and materialize a task event')
 program.command('snapshot <label>').description('capture exact code and wiki revisions')
   .option('--ref <commit>', 'code commit', 'HEAD')
   .action(async (label, options) => { try { output(await new Wiki(root()).snapshot(label, options.ref)); } catch (error) { fail(error); } });
+program.command('releases').description('list captured releases, newest first')
+  .action(async () => { try { output(await new Wiki(root()).releases()); } catch (error) { fail(error); } });
+program.command('release <label>').description('read one captured release and whether its refs still exist')
+  .action(async (label: string) => { try { output(await new Wiki(root()).release(label)); } catch (error) { fail(error); } });
 program.command('seal').description('advance the Git checkpoint after complete reconciliation')
   .option('--ref <commit>', 'code commit', 'HEAD')
   .action(async options => { try { output(await new Wiki(root()).seal(options.ref)); } catch (error) { fail(error); } });

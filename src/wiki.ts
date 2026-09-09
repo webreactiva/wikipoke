@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
@@ -214,8 +214,53 @@ export class Wiki {
       return lint(pages, unreadable, inventory(this.root, this.config).sources.length);
     });
   }
+  // Both durable inputs only ever grow. The journal is observation, not knowledge: once every file a
+  // session touched is explained, its entries have done their job and the tape of decisions is what
+  // survives. Events are knowledge and are never deleted - they are folded into one file per month,
+  // because ten thousand files in a flat directory is what makes reading them expensive, not their
+  // content. Only tasks that are closed and materialized are folded, so nothing in flight moves.
+  private prune(): { journals: number; archived: number } {
+    const directory = this.store.path('.wikipoke/journal');
+    const events = this.events();
+    const explained = new Set(events.filter(e => e.kind === 'decision' ||
+      (e.kind === 'close' && e.closure === 'none_declared')).flatMap(e => e.evidence));
+    let journals = 0;
+    for (const file of files(directory).filter(f => f.endsWith('.jsonl'))) {
+      const entries = (read(file) ?? '').split('\n').filter(Boolean).flatMap(line => {
+        try { return [touchSchema.parse(JSON.parse(line))]; } catch { return []; }
+      });
+      const owed = entries.some(t => !ignored(t.file, this.config) && !explained.has(t.file));
+      if (!owed && entries.length) { rmSync(file); journals += 1; }
+    }
+    return { journals, archived: this.archive(events) };
+  }
+  private archive(events: Event[]): number {
+    const closed = new Set(events.filter(e => e.kind === 'close').map(e => e.task));
+    const months = new Map<string, Event[]>();
+    for (const event of events) {
+      if (!closed.has(event.task)) continue;
+      const loose = this.store.path(`.wikipoke/events/${hash(event.id)}.json`);
+      if (!read(loose)) continue;
+      const month = event.at.slice(0, 7);
+      months.set(month, [...(months.get(month) ?? []), event]);
+    }
+    let archived = 0;
+    for (const [month, batch] of months) {
+      const path = `.wikipoke/events/archive/${month}.jsonl`;
+      const before = read(this.store.path(path));
+      const kept = new Set((before ?? '').split('\n').filter(Boolean));
+      for (const event of batch) kept.add(JSON.stringify(event));
+      this.store.commit([{ path, before, after: [...kept].sort().join('\n') + '\n' }]);
+      for (const event of batch) { rmSync(this.store.path(`.wikipoke/events/${hash(event.id)}.json`)); archived += 1; }
+    }
+    return archived;
+  }
   async attention() {
     return this.store.locked(() => {
+      // The maintenance pass is the only thing that runs on its own, so it is where growth is kept
+      // in check. It happens before the signal is computed, so what the signal reports is the tape
+      // that will still be there tomorrow.
+      const pruned = this.prune();
       const health = this.health(), path = '.wikipoke/attention.json';
       const count = (severity: string) => health.findings.filter(f => f.severity === severity).length;
       const incomplete = health.tasks.filter(t => t.closure === 'incomplete').map(t => t.task);
@@ -229,7 +274,7 @@ export class Wiki {
         unexplained: { count: health.unexplained.length, sample: health.unexplained.slice(0, SAMPLE) },
         tasks: { incomplete: incomplete.length, sample: incomplete.slice(0, SAMPLE) } };
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(signal) }]);
-      return signal;
+      return { ...signal, pruned };
     });
   }
   private health() {
@@ -500,8 +545,17 @@ export class Wiki {
       since: entries[0]?.at ?? null, until: entries[entries.length - 1]?.at ?? null };
   }
   events(): Event[] {
-    return files(this.store.path('.wikipoke/events')).filter(f => f.endsWith('.json'))
-      .map(f => eventSchema.parse(JSON.parse(read(f)!))).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+    const directory = this.store.path('.wikipoke/events');
+    const loose = files(directory).filter(f => f.endsWith('.json') && !f.includes('/archive/'))
+      .map(f => eventSchema.parse(JSON.parse(read(f)!)));
+    // Folded months read as one file each. A tape of ten thousand events is then a handful of reads
+    // rather than ten thousand, and nothing was thrown away to get there.
+    const folded = files(`${directory}/archive`).filter(f => f.endsWith('.jsonl'))
+      .flatMap(f => (read(f) ?? '').split('\n').filter(Boolean).flatMap(line => {
+        try { return [eventSchema.parse(JSON.parse(line))]; } catch { return []; }
+      }));
+    const byId = new Map([...folded, ...loose].map(e => [e.id, e]));
+    return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
   }
   async capture(input: unknown) {
     const event = eventSchema.parse(input), eventPath = `.wikipoke/events/${hash(event.id)}.json`;
@@ -586,6 +640,31 @@ export class Wiki {
       const manifest = { label, code, wiki, at: stamp(), health: this.health() };
       this.store.commit([{ path: dest, before: null, after: json(manifest) }]);
       return manifest;
+    });
+  }
+  // A capture nobody can read back is a capture that did not happen. The manifest is named by the
+  // hash of its label, so the only way to find one was to know the hash - which nothing printed.
+  async releases() {
+    return this.store.locked(() => files(this.store.path('.wikipoke/releases'))
+      .filter(f => f.endsWith('.json'))
+      .flatMap(f => { try { return [JSON.parse(read(f)!)]; } catch { return []; } })
+      .map(({ health, ...manifest }) => ({ ...manifest,
+        // The health at capture time is kept in the file and summarized here: a listing is for
+        // finding a release, and the full graph of the day it was taken is not that.
+        pending: (health?.uncovered?.length ?? 0) + (health?.drift?.length ?? 0),
+        refs: { code: `refs/wikipoke/${hash(manifest.label)}/code`, wiki: `refs/wikipoke/${hash(manifest.label)}/wiki` } }))
+      .sort((a, b) => b.at.localeCompare(a.at)));
+  }
+  async release(label: string) {
+    return this.store.locked(() => {
+      const manifest = read(this.store.path(`.wikipoke/releases/${hash(label)}.json`));
+      if (!manifest) throw new Error(`No release captured under that label; list them with: wikipoke releases`);
+      const parsed = JSON.parse(manifest);
+      // Reachability is the question a reader actually has: a ref that a history rewrite dropped
+      // makes the manifest a record of something that can no longer be checked out.
+      const reachable = (commit: string) => { try { revision(this.root, commit); return true; } catch { return false; } };
+      return { ...parsed, refs: { code: `refs/wikipoke/${hash(label)}/code`, wiki: `refs/wikipoke/${hash(label)}/wiki` },
+        reachable: { code: reachable(parsed.code), wiki: reachable(parsed.wiki) } };
     });
   }
   async seal(ref = 'HEAD') {

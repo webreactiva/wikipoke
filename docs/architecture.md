@@ -19,7 +19,8 @@ wiki/                      editable Markdown knowledge
   transaction.json         in-flight write journal, removed on completion
   write.lock/              single writer lock, with owner.json
   events/                  implementation decision events
-  journal/                 observed file edits, one JSONL per agent session
+  events/archive/          closed tasks folded into one JSONL per month
+  journal/                 observed file edits, one JSONL per agent session, pruned once explained
   hooks/post-commit        generated notifier
   hooks/session-start      generated agent briefing
   hooks/tool-journal       generated edit recorder, one appended line per edit

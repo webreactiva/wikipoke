@@ -181,12 +181,18 @@ Open one when you expect to record a decision under it.
 const notifierScript = `#!/bin/sh
 # ${marker}; safe notifier, never runs an LLM or blocks a commit.
 # Refreshes .wikipoke/attention.json in place: a failed run keeps the previous signal.
+# The refresh reads every source in scope, which on a large repository costs the better part of a
+# second. Paid on every commit that is a tax people eventually uninstall, and nothing waits on the
+# result - the signal is read at the start of the next session, not at the end of this commit. So it
+# is detached: the commit returns immediately and the file is rewritten a moment later. A second
+# commit arriving mid-refresh finds the writer lock held, exits silently, and leaves the previous
+# signal standing, which is the same thing that already happens when the refresh fails.
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -n "$root" ] || exit 0
 if [ -x "$root/node_modules/.bin/wikipoke" ]; then
-  "$root/node_modules/.bin/wikipoke" --root "$root" maintain --once >/dev/null 2>&1 || exit 0
+  ( "$root/node_modules/.bin/wikipoke" --root "$root" maintain --once >/dev/null 2>&1 & ) >/dev/null 2>&1
 elif command -v npx >/dev/null 2>&1; then
-  npx --no-install wikipoke --root "$root" maintain --once >/dev/null 2>&1 || exit 0
+  ( npx --no-install wikipoke --root "$root" maintain --once >/dev/null 2>&1 & ) >/dev/null 2>&1
 fi
 exit 0
 `;
