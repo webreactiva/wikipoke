@@ -39,8 +39,10 @@ test('inventory reads every included file in one pass across batch groups', () =
   const first = inv.sources.find(source => source.id === 'src/mod0.ts')!;
   assert.equal(first.content, 'export const value0 = 0;\n');
   assert.equal(first.resource, 'src/mod0.ts');
-  assert.equal(first.revision, inv.revision);
-  assert.equal(first.hash, hash('export const value0 = 0;\n'));
+  // Both digests are abbreviated: they only ever answer "same content, same commit", and every page
+  // in the wiki carries them. The full values stay derivable from the repository.
+  assert.equal(first.revision, inv.revision.slice(0, 12));
+  assert.equal(first.hash, hash('export const value0 = 0;\n').slice(0, 16));
   assert.equal(inv.sources.find(source => source.id === 'src/mod599.ts')!.content, 'export const value599 = 599;\n');
 });
 
@@ -55,7 +57,7 @@ test('inventory keeps text with multibyte characters and drops binary blobs', ()
   assert.deepEqual(names.sort(), ['src/past-window.md', 'src/text.md']);
   const text = inventory(root, config).sources.find(source => source.id === 'src/text.md')!;
   assert.equal(text.content, 'Programación con acentos y emoji 🐙\n');
-  assert.equal(text.hash, hash('Programación con acentos y emoji 🐙\n'));
+  assert.equal(text.hash, hash('Programación con acentos y emoji 🐙\n').slice(0, 16));
 });
 
 test('inventory ignores symlink entries', () => {

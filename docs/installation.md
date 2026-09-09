@@ -207,14 +207,19 @@ appended to `attempts` without erasing what is already written.
 
 ## Capture implementation decisions
 
-Create event JSON outside the wiki or through an agent skill, then persist it:
+Give each decision a short `title`: it names the page and the change-log entry.
+Without one, the first sentence of the choice is used instead, which is derived
+rather than chosen. Create event JSON outside the wiki or through an agent skill,
+then persist it:
 
 ```sh
 npx --no-install wikipoke --root /work/acme capture --event decision.json
 ```
 
-Decision events materialize as watchlogs and decision pages. Wikipoke
-records absent rationale as unknown and never infers it from a diff. Open and
+Decision events materialize as decision pages and an entry in the generated
+`wiki/log.md`. Wikipoke records absent rationale as unknown and never infers it
+from a diff, which is why the `session-stop` hook asks for the reason during the
+turn that made the change rather than in a later documentation pass. Open and
 close task events make incomplete capture visible. See [operations](./operations.md)
 for the event form.
 

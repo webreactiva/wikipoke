@@ -86,11 +86,46 @@ whether the briefing is composed.
 At the start of a session, run `sh .wikipoke/hooks/session-start` and act on what it prints.
 ```
 
-OpenCode can instead run the command from an `opencode.json` plugin, which makes
-it automatic rather than advisory.
+OpenCode needs no such line: `install` writes `.opencode/plugin/wikipoke.js`,
+which OpenCode auto-discovers, and the plugin runs the same no-LLM briefing once
+per session.
 
 **Cursor** has no session hook either: put the same line in a `.cursor/rules/`
 rule file.
+
+## Ask for the reason while it still exists
+
+A diff proves a file changed and can never say why. The reason exists in one
+place and for one moment: the agent making the change, while it is still making
+it. So `install` writes two more hooks and composes them for Claude Code
+alongside the briefing.
+
+`.wikipoke/hooks/tool-journal` runs after every edit and appends one line to
+`.wikipoke/journal/<session>.jsonl` naming the file a tool touched. It parses no
+configuration, reads no Git, takes no writer lock and imports nothing of
+Wikipoke, because a hook on that path has to cost nothing. Scope is applied later,
+on read.
+
+`.wikipoke/hooks/session-stop` runs once, when the agent tries to finish, and
+compares that journal against the evidence of every recorded decision. The
+`capture` setting decides what happens next:
+
+| `capture` | At the end of a turn that changed unexplained source |
+| --- | --- |
+| `off` | nothing |
+| `remind` (default) | the human is told what went unrecorded |
+| `block` | the agent is sent back to record the reason before it can stop |
+
+**OpenCode** gets the same pair through its plugin, with one honest difference:
+`tool.execute.after` journals the edit, but OpenCode exposes no hook that can
+refuse a stop, so there is nowhere to enforce `block`. The debt goes into the
+agent's own system prompt instead, refreshed at most once a minute — it is put
+where the agent cannot miss it rather than made impossible to walk past.
+
+`wikipoke journal [--session <id>]` answers the same question on demand. Unlike
+the checkpoint signal it needs no commit and no `seal`, so it works inside the
+turn that made the change. It takes no writer lock, which is what makes asking it
+repeatedly while an agent works safe.
 
 ## Operations
 

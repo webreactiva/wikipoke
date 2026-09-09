@@ -65,6 +65,12 @@ For a historical question, pass a commit: `wikipoke ask "..." --ref <commit>`.
 
 ## Record implementation decisions
 
+A question already answered comes back instead of being researched again: when
+the same question — compared on its letters and digits, so punctuation does not
+matter — is already `answered` against sources that have not moved, `ask` returns
+that answer with `reused: true` and writes no page. `--again` overrides it, and a
+cited source that has since changed disables the reuse on its own.
+
 Run `wikipoke-decision` whenever a material implementation choice is made and
 before task closure:
 
@@ -72,9 +78,20 @@ before task closure:
 wikipoke capture --event decision.json
 ```
 
-Decision events create pages in `wiki/decisions/`; task histories live in
-`wiki/watchlogs/`. Open and close events make incomplete capture visible in
+Decision events create pages in `wiki/decisions/` and an entry in the generated
+`wiki/log.md`. The event tape itself stays in `.wikipoke/events/` and is never
+transcribed into a page: a task's open and close events are process, not
+knowledge. Open and close events make incomplete capture visible in
 `wikipoke status`.
+
+The `tool-journal` hook records which files an agent edited, and the
+`session-stop` hook reads that journal when the agent tries to finish. Under
+OpenCode the plugin does both halves, except that nothing there can refuse a
+stop, so `block` degrades to a line in the agent's system prompt. What it
+does then is `capture` in the configuration: `remind` states the debt to the
+human, `block` sends the agent back to record the reason while it still has one,
+and `off` disables the prompt. `wikipoke journal` reports the same thing on
+demand, for one session or for all of them.
 
 ## Maintain and release
 

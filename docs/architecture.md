@@ -10,15 +10,20 @@ Wikipoke does not invoke a model provider. It is independent of Claude, Codex, O
 wikipoke.config.yaml       source scope and batch policy
 .wikipokeignore            optional source exclusions, adopted at init
 wiki/                      editable Markdown knowledge
-  entities/ decisions/ queries/ watchlogs/
+  index.md                 generated map of what the project knows
+  log.md                   generated chronology of what changed in the code, and why
+  entities/ flows/ concepts/ decisions/ queries/
 .wikipoke/
   state.json               last fully reconciled Git commit
   attention.json           latest compact hook signal
   transaction.json         in-flight write journal, removed on completion
   write.lock/              single writer lock, with owner.json
   events/                  implementation decision events
+  journal/                 observed file edits, one JSONL per agent session
   hooks/post-commit        generated notifier
   hooks/session-start      generated agent briefing
+  hooks/tool-journal       generated edit recorder, one appended line per edit
+  hooks/session-stop       generated end-of-turn decision prompt
   releases/                release manifests
 .agents/skills/            generated host-neutral instructions
 ```

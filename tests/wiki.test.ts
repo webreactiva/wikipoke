@@ -43,9 +43,31 @@ test('queries persist before agent research and deduplicate request IDs', async 
   await wiki.ask('How many retries?', 'request-1');
   assert.equal(wiki.pages().length, 1);
   await wiki.answer('request-1', { answer: 'Three retries.', citations: ['src/main.ts'], gaps: [] });
-  await wiki.ask('How many retries?', 'request-2');
-  assert.equal(wiki.pages().length, 2);
   await assert.rejects(wiki.ask('Different?', 'request-1'), /already used/);
+});
+
+test('the same question already answered comes back instead of being researched twice', async () => {
+  const wiki = await setup();
+  await wiki.ask('How many retries?', 'first');
+  await wiki.answer('first', { answer: 'Three retries.', citations: ['src/main.ts'], gaps: [] });
+
+  // Same question, different wording of the punctuation, new request id: no second page.
+  const again: any = await wiki.ask('How many retries', 'second');
+  assert.equal(again.reused, true);
+  assert.equal(again.requestId, 'first');
+  assert.match(again.answer, /Three retries/);
+  assert.equal(wiki.pages().length, 1);
+
+  // Asking for it anyway is one flag, because revising a closed answer is a real need.
+  await wiki.ask('How many retries?', 'third', undefined, true);
+  assert.equal(wiki.pages().length, 2);
+
+  // And once the cited code moves, the old answer is no longer evidence of anything.
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 9;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change');
+  const stale: any = await wiki.ask('How many retries?', 'fourth');
+  assert.equal(stale.reused, undefined);
+  assert.equal(stale.state, 'pending');
 });
 
 test('unknown citations fail without losing the question or the attempt', async () => {
@@ -163,9 +185,24 @@ test('captured records use readable slug paths', async () => {
   await wiki.ask('How many retries?', 'readable-query');
   await wiki.capture({ id: 'readable-decision', task: 'Improve retry policy', actor: 'agent/test',
     at: '2026-09-09T10:00:00Z', kind: 'decision', choice: 'Use bounded retries' });
-  assert.ok(wiki.pages().some(page => /^queries\/how-many-retries-[a-f0-9]{8}\.md$/.test(page.path)));
-  assert.ok(wiki.pages().some(page => /^decisions\/use-bounded-retries-[a-f0-9]{8}\.md$/.test(page.path)));
-  assert.ok(wiki.pages().some(page => /^watchlogs\/improve-retry-policy-[a-f0-9]{8}\.md$/.test(page.path)));
+  assert.ok(wiki.pages().some(page => page.path === 'queries/how-many-retries.md'));
+  assert.ok(wiki.pages().some(page => page.path === 'decisions/use-bounded-retries.md'));
+});
+
+test('a name already taken gets a number, and a published page never gets renamed', async () => {
+  const wiki = await setup();
+  const base = { task: 'retries', actor: 'agent/test', at: '2026-09-09T10:00:00Z', kind: 'decision' as const };
+  // A choice is a paragraph; without a title the first sentence names the page.
+  await wiki.capture({ ...base, id: 'one', choice: 'Bound the retries. The tail latency is what matters here, and it is measured.' });
+  assert.ok(wiki.pages().some(page => page.path === 'decisions/bound-the-retries.md'));
+  await wiki.capture({ ...base, id: 'two', choice: 'Bound the retries. A second, unrelated choice that happens to open the same way.' });
+  const paths = wiki.pages().map(page => page.path).sort();
+  assert.deepEqual(paths.filter(p => p.startsWith('decisions/')),
+    ['decisions/bound-the-retries-2.md', 'decisions/bound-the-retries.md']);
+  // Capturing again resolves both by uid, so neither page moves.
+  await wiki.capture({ ...base, id: 'three', title: 'Jitter the backoff', choice: 'Add jitter.' });
+  assert.deepEqual(wiki.pages().map(page => page.path).sort().filter(p => p.startsWith('decisions/')),
+    ['decisions/bound-the-retries-2.md', 'decisions/bound-the-retries.md', 'decisions/jitter-the-backoff.md']);
 });
 
 test('an unreadable page is reported as a finding instead of breaking every command', async () => {
@@ -195,7 +232,8 @@ test('publishing never copies source content into the frontmatter', async () => 
       wikipoke: { uid: 'retries', relations: [] } }, body: 'Requests use three retries.' }] });
   const page = readFileSync(join(wiki.root, 'wiki/concepts/retries.md'), 'utf8');
   assert.equal(page.includes('export const retries'), false);
-  assert.deepEqual(Object.keys(wiki.pages()[0].meta.sources[0]).sort(), ['hash', 'id', 'resource', 'revision']);
+  // With a Git adapter the resource is the id, so the plan never offers a field that only repeats one.
+  assert.deepEqual(Object.keys(wiki.pages()[0].meta.sources[0]).sort(), ['hash', 'id', 'revision']);
 });
 
 test('publish refuses a patch planned on a superseded revision', async () => {
@@ -286,30 +324,30 @@ test('a task that records no decision leaves a tape but no wiki page', async () 
   const closed: any = await wiki.capture({ ...base, id: 'e2', kind: 'close', closure: 'none_declared',
     rationale: 'Documentation-only task; nobody stated a choice.' });
   assert.equal(closed.materialized, false);
-  assert.equal(wiki.pages().some(page => page.meta.type === 'watchlog'), false);
-  assert.equal(existsSync(join(wiki.root, 'wiki/watchlogs')), false);
+  assert.equal(wiki.pages().length, 0);
   // The tape is durable even though nothing was published.
   assert.equal(wiki.events().filter(event => event.task === base.task).length, 2);
 
   const recorded: any = await wiki.capture({ ...base, id: 'e3', kind: 'decision',
     choice: 'The registry stays a plain map', rationale: 'A map keeps the bundle tree-shakeable.' });
   assert.equal(recorded.materialized, true);
-  const log = wiki.pages().find(page => page.meta.type === 'watchlog')!;
-  assert.match(log.body, /Task opened/);
-  assert.match(log.body, /The registry stays a plain map/);
-  assert.match(log.body, /none_declared/);
+  const decision = wiki.pages().find(page => page.meta.type === 'decision')!;
+  assert.match(decision.body, /The registry stays a plain map/);
+  assert.match(decision.body, /A map keeps the bundle tree-shakeable/);
 });
 
-test('the knowledge index carries knowledge, not the event tape', async () => {
+test('capture publishes the choice, never a transcript of the task', async () => {
   const wiki = await setup();
   await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
   const base = { task: 'pick a retry count', actor: 'agent/test', at: '2026-09-09T10:00:00Z' };
+  await wiki.capture({ ...base, id: 'd0', kind: 'open' });
   await wiki.capture({ ...base, id: 'd1', kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.' });
-  assert.equal(wiki.pages().some(page => page.meta.type === 'watchlog'), true);
+  // The open event is on the tape and nowhere in the wiki: no page restates "Task opened".
+  assert.equal(wiki.pages().every(page => !/Task opened/.test(page.body)), true);
+  assert.equal(existsSync(join(wiki.root, 'wiki/watchlogs')), false);
   const written = readFileSync(join(wiki.root, 'wiki/index.md'), 'utf8');
   assert.match(written, /concepts\/retries\.md/);
   assert.match(written, /decisions\//);
-  assert.doesNotMatch(written, /watchlogs\//);
 });
 
 test('asking again offers the answers already given instead of hiding them', async () => {
@@ -348,4 +386,122 @@ test('a change with no decision behind it is reported, but only once a checkpoin
   const signal: any = await wiki.attention();
   assert.equal(signal.unexplained.count, 1);
   assert.deepEqual(signal.unexplained.sample, ['src/added.ts']);
+});
+
+test('the journal records what a hook observed and forgets what is out of scope', async () => {
+  const wiki = await setup();
+  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-1' });
+  wiki.note({ at: '2026-09-09T10:01:00Z', file: 'wiki/index.md', tool: 'Write', session: 'ses-1' });
+  wiki.note({ at: '2026-09-09T10:02:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-2' });
+  // The hook appends without parsing the config; scope is resolved on read, so the wiki edit drops out.
+  assert.deepEqual((await wiki.touched('ses-1')).files, ['src/main.ts']);
+  assert.equal((await wiki.touched('ses-1')).entries, 1);
+  assert.deepEqual((await wiki.touched()).files, ['src/main.ts']);
+  assert.equal((await wiki.touched()).entries, 2);
+});
+
+test('a touched source stops being debt once a decision claims it', async () => {
+  const wiki = await setup();
+  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-1' });
+  assert.deepEqual((await wiki.touched('ses-1')).unexplained, ['src/main.ts']);
+  assert.equal((await wiki.touched('ses-1')).mode, 'remind');
+  await wiki.capture({ id: 'j1', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
+    kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.', evidence: ['src/main.ts'] });
+  assert.deepEqual((await wiki.touched('ses-1')).unexplained, []);
+  // Unlike the checkpoint signal, this needed no commit and no seal: the turn is still running.
+  assert.deepEqual((await wiki.status()).unexplained, []);
+});
+
+test('the generated log carries the chronology of the code, newest first', async () => {
+  const wiki = await setup();
+  const base = { task: 'retry policy', actor: 'agent/test' };
+  await wiki.capture({ ...base, id: 'l1', kind: 'decision', at: '2026-09-09T10:00:00Z',
+    choice: 'Three retries', rationale: 'Measured tail latency.', evidence: ['src/main.ts'] });
+  await wiki.capture({ ...base, id: 'l2', kind: 'decision', at: '2026-09-09T12:00:00Z',
+    choice: 'Jitter the backoff', rationale: 'Synchronized retries stampede.', evidence: ['src/main.ts'] });
+  const log = readFileSync(join(wiki.root, 'wiki/log.md'), 'utf8');
+  assert.ok(log.indexOf('Jitter the backoff') < log.indexOf('Three retries'));
+  assert.match(log, /Touched: `src\/main\.ts`/);
+  // The log is chronology, not knowledge: the index never lists it.
+  assert.doesNotMatch(readFileSync(join(wiki.root, 'wiki/index.md'), 'utf8'), /log\.md/);
+});
+
+test('lint names the flow a file-by-file wiki never notices is missing', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/other.ts'), 'export const backoff = 250;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'second source');
+  const sources = (await wiki.ingest() as any).sources.map(({ content, ...source }: any) => source);
+  const page = (path: string, type: string, cited: any[]) => ({ path, meta: { type, title: path,
+    description: path, sources: cited, wikipoke: { uid: path, relations: [] } }, body: 'Body.' });
+  await wiki.publishPatch({ pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
+    page('c.md', 'entity', [])], findings: [] });
+  // Every source is claimed and coverage reads green, which is exactly when the gap is invisible.
+  assert.deepEqual((await wiki.status()).uncovered, []);
+  assert.equal((await wiki.lint()).some(f => f.code === 'no-flows'), true);
+
+  await wiki.publishPatch({ pages: [page('flows/thin.md', 'flow', sources.slice(0, 1))], findings: [] });
+  assert.equal((await wiki.lint()).some(f => f.code === 'no-flows'), false);
+  // A flow resting on one file is an entity wearing the wrong type.
+  assert.equal((await wiki.lint()).some(f => f.code === 'thin-flow'), true);
+  await wiki.publishPatch({ pages: [page('flows/whole.md', 'flow', sources)], findings: [] });
+  assert.equal((await wiki.lint()).filter(f => f.code === 'thin-flow').length, 1);
+});
+
+test('a wiki written with full-length digests is not reported as drifted after an upgrade', async () => {
+  const wiki = await setup();
+  const plan: any = await wiki.ingest();
+  // What an earlier release wrote: the whole SHA-256 and the whole commit, plus the resource it
+  // always repeated. Every one of those pages is still on disk in real projects.
+  const legacy = plan.sources.map((source: any) => ({ id: source.id, resource: source.id,
+    revision: git(wiki.root, 'rev-parse', 'HEAD'), hash: hash(readFileSync(join(wiki.root, source.id), 'utf8')) }));
+  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/retries.md',
+    meta: { type: 'concept', title: 'Retries', description: 'Retry policy', sources: legacy,
+      wikipoke: { uid: 'retries', relations: [] } }, body: 'Requests use three retries.' }] });
+  const status: any = await wiki.status();
+  assert.deepEqual(status.drift, []);
+  assert.deepEqual(status.uncovered, []);
+  // And it still notices a real change, rather than accepting any prefix as proof of anything.
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 9;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change');
+  assert.equal((await wiki.status()).drift.length, 1);
+});
+
+test('a decision joins the graph through the code it was about', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await wiki.capture({ id: 'g1', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T10:00:00Z',
+    kind: 'decision', title: 'Three retries', choice: 'Bound the retries at three.',
+    rationale: 'Measured at p99.', evidence: ['src/main.ts', 'src/deleted.ts'] });
+  const page = wiki.pages().find(p => p.meta.type === 'decision')!;
+  // Declared evidence resolved against the inventory becomes real provenance, pinned at this hash.
+  assert.deepEqual(page.meta.sources.map(s => s.id), ['src/main.ts']);
+  // What is out of scope is not silently dropped; it stays declared in the body, unverified.
+  assert.match(page.body, /Declared evidence not in scope[\s\S]*src\/deleted\.ts/);
+  const edges = (await wiki.graph()).edges;
+  assert.equal(edges.some(e => e.type === 'source' && e.from === page.path && e.to === 'src/main.ts'), true);
+  // `related_to` is symmetric, so the graph stores one edge with its ends in a fixed order.
+  assert.equal(edges.some(e => e.type === 'related_to' &&
+    [e.from, e.to].sort().join(' ') === ['concepts/retries.md', page.path].sort().join(' ')), true);
+
+  // A second choice under the same task links to the first, in both directions.
+  await wiki.capture({ id: 'g2', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T11:00:00Z',
+    kind: 'decision', title: 'Jitter the backoff', choice: 'Jitter it.', evidence: ['src/main.ts'] });
+  const both = (await wiki.graph()).edges.filter(e => e.type === 'related_to'
+    && e.from.startsWith('decisions/') && e.to.startsWith('decisions/'));
+  assert.equal(both.length, 1);
+  assert.equal((await wiki.status()).uncovered.length, 0);
+});
+
+test('an answer can cite a page, and the query is connected to what answered it', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await wiki.ask('How many retries?', 'cited');
+  await wiki.answer('cited', { answer: 'Three.', citations: ['src/main.ts', 'concepts/retries.md'], gaps: [] });
+  const query = wiki.pages().find(p => p.meta.type === 'query')!;
+  assert.deepEqual(query.meta.sources.map(s => s.id), ['src/main.ts']);
+  const edges = (await wiki.graph()).edges.filter(e => e.from === query.path);
+  assert.equal(edges.some(e => e.type === 'asks_about' && e.to === 'concepts/retries.md'), true);
+  await wiki.ask('Anything else?', 'bad');
+  await assert.rejects(wiki.answer('bad', { answer: 'x', citations: ['concepts/nope.md'], gaps: [] }),
+    /Unknown citation: concepts\/nope\.md/);
 });

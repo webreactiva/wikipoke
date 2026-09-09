@@ -4,6 +4,10 @@ import type { Config, Inventory, Source } from '../model.js';
 import { hash } from '../runtime/store.js';
 
 const scan = 8 * 1024, budget = 32 * 1024 * 1024, span = 512;
+// A digest is written into every page and only ever answers "is this the same content". Sixteen hex
+// characters settle that; the other forty-eight are carried, diffed and re-read forever for nothing.
+// Callers compare by prefix, so a wiki written by an earlier release stays valid.
+const digest = 16, shortRevision = 12;
 interface Blob { name: string; oid: string; size: number }
 
 export function git(root: string, ...args: string[]): string {
@@ -13,7 +17,7 @@ export function revision(root: string, ref = 'HEAD'): string {
   return git(root, 'rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`).trim();
 }
 function matches(path: string, pattern: string): boolean { return minimatch(path, pattern, { dot: true }); }
-function ignored(name: string, config: Config): boolean {
+export function ignored(name: string, config: Config): boolean {
   return name === config.wiki || name.startsWith(config.wiki + '/') || name.startsWith('.wikipoke/') ||
     name.startsWith('.git/') || name === 'wikipoke.config.yaml' ||
     !config.include.some(p => matches(name, p)) || config.exclude.some(p => matches(name, p)) ||
@@ -74,7 +78,8 @@ export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory
       cursor = stop + 2 + size;
       if (!textual(body)) continue;
       const content = body.toString('utf8');
-      sources.push({ id: blob.name, resource: blob.name, revision: rev, hash: hash(content), content });
+      sources.push({ id: blob.name, resource: blob.name, revision: rev.slice(0, shortRevision),
+        hash: hash(content).slice(0, digest), content });
     }
   }
   return { revision: rev, sources };

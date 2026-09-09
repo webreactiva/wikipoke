@@ -51,3 +51,23 @@ and in the session briefing.
 The comparison stays silent until a checkpoint exists. Capture explains work done
 with the wiki in place; code that predates it cannot be explained after the fact,
 and a backdated event tape is bookkeeping, not knowledge.
+
+## What an agent touched, before any commit
+
+That comparison needs a commit and a sealed checkpoint, which is too late to ask
+anyone why. The journal answers the same question earlier and from observation
+rather than declaration:
+
+```sh
+wikipoke journal --session ses_01H...
+```
+
+It reports the in-scope files a session edited, and which of them no decision
+claims. Entries come from the `tool-journal` hook, which appends one unfiltered
+line per edit; `include`, `exclude` and the wiki path are applied when the
+journal is read, so a hook that runs on every keystroke of an agent's work never
+parses a configuration file.
+
+Omit `--session` for every session on record. `capture` in
+`wikipoke.config.yaml` — `off`, `remind` or `block` — decides what
+`session-stop` does with the answer.

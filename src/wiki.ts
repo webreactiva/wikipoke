@@ -1,14 +1,29 @@
 import { randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { configSchema, patchSchema, answerSchema, eventSchema, type Config, type Metadata, type Page, type Source } from './model.js';
+import { configSchema, patchSchema, answerSchema, eventSchema, touchSchema,
+  type Config, type Metadata, type Page, type Source, type Touch } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { changed, inventory, revision, git } from './sources/git.js';
+import { changed, ignored, inventory, revision, git } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
 interface Attempt { at: string; state: string; reason?: string }
 const stamp = () => new Date().toISOString();
+// A session id comes from whatever harness is driving; it names a file, so it is reduced to the
+// characters a file name can carry rather than trusted and resolved.
+// A digest written by an earlier release is longer than one written today, and both name the same
+// content. Comparing by prefix keeps every wiki already on disk valid instead of reporting the whole
+// repository as drifted the moment the tool is upgraded. Eight characters is the floor: below that a
+// prefix stops being evidence of anything.
+function sameDigest(mine?: string, theirs?: string): boolean {
+  if (!mine || !theirs) return mine === theirs;
+  if (mine.length < 8 || theirs.length < 8) return mine === theirs;
+  return mine.startsWith(theirs) || theirs.startsWith(mine);
+}
+const sessionFile = (session?: string) => (session ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 96) || 'unknown';
 const SAMPLE = 10;
 function slug(value: string): string {
   const result = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -29,8 +44,21 @@ function budgeted(pending: Source[], limits: Config['limits']): Source[] {
   }
   return batch;
 }
-function namedPath(directory: string, label: string, identity: string): string {
-  return `${directory}/${slug(label)}-${hash(identity).slice(0, 8)}.md`;
+// A readable path is worth more than a deterministic one, and the page's identity never lived in the
+// path anyway - it lives in `wikipoke.uid`. So the name is just the slug, and the numeric suffix
+// appears only when a name is genuinely taken. Callers resolve an existing page by uid first, so a
+// published page keeps the path it already has and nothing is ever renamed underneath a link.
+function unique(directory: string, label: string, taken: Set<string>): string {
+  const base = `${directory}/${slug(label)}`;
+  if (!taken.has(`${base}.md`)) return `${base}.md`;
+  for (let n = 2; ; n++) if (!taken.has(`${base}-${n}.md`)) return `${base}-${n}.md`;
+}
+// A choice is a paragraph; a title is a name. When an event declares no title, the first sentence is
+// the closest thing to one it has - better than the whole paragraph, and honest about being derived.
+function headline(value: string): string {
+  const first = value.split('\n')[0].trim();
+  const sentence = first.split(/(?<=[.:;])\s/)[0] || first;
+  return sentence.length > 90 ? sentence.slice(0, 90).replace(/\s+\S*$/, '') : sentence;
 }
 function metadata(type: string, title: string, uid: string): Metadata {
   return { type, title, description: title, sources: [], wikipoke: { uid, relations: [] } };
@@ -48,6 +76,13 @@ function answerProse(body: string): string | undefined {
   if (start < 0) return undefined;
   const from = start + answerHeading.length, stop = body.indexOf(gapsHeading, from);
   return stop < 0 ? undefined : body.slice(from, stop);
+}
+// Two spellings of the same question are the same question. Normalizing to letters and digits alone
+// catches the case that actually happens - the same words asked twice, once with a comma - without
+// pretending to understand meaning, which a string comparison cannot do.
+function normalize(question: string): string {
+  return question.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .match(/[\p{L}\p{N}]+/gu)?.join(' ') ?? '';
 }
 function queryBody(query: Record<string, unknown>, prose?: string): string {
   return `# Question\n\n${query.question}\n` +
@@ -109,7 +144,37 @@ export class Wiki {
       after: render(p.meta, p.body) }));
     const idx = `${this.config.wiki}/index.md`;
     writes.push({ path: idx, before: read(this.store.path(idx)), after: index([...byPath.values()]) });
+    const chronology = this.changelog([...byPath.values()]);
+    if (chronology) {
+      const log = `${this.config.wiki}/log.md`;
+      writes.push({ path: log, before: read(this.store.path(log)), after: chronology });
+    }
     this.store.commit([...writes, ...extra].filter(w => w.before !== w.after));
+  }
+  // index.md answers "what does this project know". This answers the other question, the one a diff
+  // can restate and never explain: what has been done to the code, and why. It is generated from the
+  // decision tape, newest first, so it grows only when somebody records a reason.
+  private changelog(pages: Page[]): string {
+    const byUid = new Map(pages.map(p => [p.meta.wikipoke.uid, p]));
+    const decisions = this.events().filter(e => e.kind === 'decision')
+      .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+    if (!decisions.length) return '';
+    const entries = decisions.flatMap(event => {
+      // The log links pages, so it is written from what is published, resolved by identity. An event
+      // whose page is not there yet simply has no line: a broken link would be worse than a gap.
+      const page = byUid.get(`decision:${hash(event.id)}`);
+      if (!page) return [];
+      // Pages written before decisions carried a title have a whole paragraph as their name. The log
+      // is a list and has to stay readable, so it links the first sentence of whatever it finds.
+      const title = headline(page.meta.title).replace(/[\[\]\n]/g, '');
+      const touched = event.evidence.length
+        ? event.evidence.map(file => `\`${file}\``).join(', ')
+        : '_no file declared_';
+      return [`## ${event.at} - ${event.task}\n\n[${title}](${page.path}) - ${event.actor}\n\nTouched: ${touched}\n`];
+    });
+    if (!entries.length) return '';
+    return '# Change log\n\nWhat changed in the code and why, newest first. Generated from the recorded '
+      + 'decisions on every publication; hand edits are replaced.\n\n' + entries.join('\n');
   }
   async status() {
     return this.store.locked(() => this.health());
@@ -125,8 +190,11 @@ export class Wiki {
       const health = this.health(), path = '.wikipoke/attention.json';
       const count = (severity: string) => health.findings.filter(f => f.severity === severity).length;
       const incomplete = health.tasks.filter(t => t.closure === 'incomplete').map(t => t.task);
+      // Flows are counted, not sampled: their absence is one fact, and it is the one kind of pending
+      // work a diff can never raise, because nothing goes uncovered when a flow is missing.
+      const flows = { count: health.flows, missing: health.findings.some(f => f.code === 'no-flows') };
       const signal = { at: stamp(), revision: health.revision, checkpoint: health.checkpoint.lastIndexedCommit,
-        pages: health.pages, findings: { error: count('error'), warning: count('warning') },
+        pages: health.pages, flows, findings: { error: count('error'), warning: count('warning') },
         drift: { count: health.drift.length, sample: health.drift.slice(0, SAMPLE) },
         uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) },
         unexplained: { count: health.unexplained.length, sample: health.unexplained.slice(0, SAMPLE) },
@@ -138,9 +206,11 @@ export class Wiki {
   private health() {
     const inv = inventory(this.root, this.config), { pages, unreadable } = this.library();
     const current = new Map(inv.sources.map(s => [s.id, s]));
-    const covered = new Set(pages.filter(p => !['query', 'watchlog'].includes(p.meta.type))
-      .flatMap(p => p.meta.sources.filter(s => s.hash === current.get(s.id)?.hash).map(s => s.id)));
-    const drift = pages.flatMap(p => p.meta.sources.filter(s => s.hash && s.hash !== current.get(s.id)?.hash)
+    // A decision cites the code it was about, not the code it documents. Counting it as coverage
+    // would let a wiki with no knowledge in it report every source as documented.
+    const covered = new Set(pages.filter(p => !['query', 'decision'].includes(p.meta.type))
+      .flatMap(p => p.meta.sources.filter(s => sameDigest(s.hash, current.get(s.id)?.hash)).map(s => s.id)));
+    const drift = pages.flatMap(p => p.meta.sources.filter(s => s.hash && !sameDigest(s.hash, current.get(s.id)?.hash))
       .map(s => ({ page: p.path, source: s.id, reason: current.has(s.id) ? 'changed' : 'missing' })));
     const events = this.events();
     const tasks = [...new Set(events.map(e => e.task))].map(task => {
@@ -154,6 +224,7 @@ export class Wiki {
     const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
       '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
     return { revision: inv.revision, checkpoint, pages: pages.length,
+      flows: pages.filter(p => p.meta.type === 'flow').length,
       findings: lint(pages, unreadable), drift,
       uncovered: inv.sources.filter(s => !covered.has(s.id)).map(s => s.id), tasks,
       unexplained: this.unexplained(checkpoint.lastIndexedCommit, events),
@@ -171,15 +242,18 @@ export class Wiki {
   async ingest(ref = 'HEAD') {
     return this.store.locked(() => {
       const inv = inventory(this.root, this.config, ref), existing = this.pages();
-      const documented = new Set(existing.filter(p => !['query', 'watchlog'].includes(p.meta.type))
-        .flatMap(p => p.meta.sources.filter(s => inv.sources.some(c => c.id === s.id && c.hash === s.hash)).map(s => s.id)));
+      const documented = new Set(existing.filter(p => !['query', 'decision'].includes(p.meta.type))
+        .flatMap(p => p.meta.sources.filter(s => inv.sources.some(c => c.id === s.id && sameDigest(c.hash, s.hash))).map(s => s.id)));
       const pending = inv.sources.filter(s => !documented.has(s.id));
       const sources = budgeted(pending, this.config.limits);
       const sourceIds = new Set(sources.map(s => s.id));
       const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
       for (const edge of graph(existing).edges) if (['depends_on', 'implements'].includes(edge.type) && direct.has(edge.to)) direct.add(edge.from);
       return { complete: pending.length === 0, remaining: pending.length - sources.length,
-        language: this.config.language, revision: inv.revision, sources,
+        language: this.config.language, revision: inv.revision,
+        // The plan is what an agent copies into the frontmatter, so it offers no field it would only
+        // be repeating: with a Git adapter the resource is the id.
+        sources: sources.map(({ resource, ...rest }) => resource === rest.id ? rest : { ...rest, resource }),
         pages: existing.filter(p => direct.has(p.path)), catalog: existing.map(p => ({ path: p.path, title: p.meta.title })) };
     });
   }
@@ -193,7 +267,7 @@ export class Wiki {
       const allowed = new Map(inv.sources.map(s => [s.id, s]));
       const updated = output.pages.map(p => {
         this.pagePath(p.path);
-        if (['query', 'watchlog'].includes(p.meta.type)) throw new Error('Publish cannot replace captured history');
+        if (p.meta.type === 'query') throw new Error('Publish cannot replace captured history');
         if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
         if (read(this.store.path(this.pagePath(p.path))) !== (base.get(p.path) ?? null)) throw new Error(`Concurrent edit: ${p.path}`);
         const old = existing.find(e => e.path === p.path);
@@ -204,9 +278,11 @@ export class Wiki {
           // matching hash and a stale revision, and "unverified" alone sends an agent hunting a bug
           // in the inventory instead of re-planning.
           if (!known) throw new Error(`Unverified source: ${source.id} is outside the configured scope at this revision`);
-          for (const [field, mine, theirs] of [['resource', source.resource, known.resource],
-            ['hash', source.hash, known.hash], ['revision', source.revision, known.revision]] as const) {
-            if (mine !== theirs) throw new Error(`Unverified source: ${source.id} declares ${field} ${mine ?? 'nothing'}, sources have ${theirs}; re-plan with ingest`);
+          if (source.resource !== undefined && source.resource !== known.resource)
+            throw new Error(`Unverified source: ${source.id} declares resource ${source.resource}, sources have ${known.resource}; re-plan with ingest`);
+          for (const [field, mine, theirs] of [['hash', source.hash, known.hash],
+            ['revision', source.revision, known.revision]] as const) {
+            if (!sameDigest(mine, theirs)) throw new Error(`Unverified source: ${source.id} declares ${field} ${mine ?? 'nothing'}, sources have ${theirs}; re-plan with ingest`);
           }
         }
         return { ...p, raw: render(p.meta, p.body) };
@@ -216,11 +292,33 @@ export class Wiki {
       return { published: updated.map(p => p.path), findings: output.findings };
     });
   }
-  async ask(question: string, requestId = randomUUID(), ref?: string) {
-    const id = hash(requestId), path = namedPath('queries', question, requestId);
+  async ask(question: string, requestId = randomUUID(), ref?: string, again = false) {
+    const id = hash(requestId);
     return this.store.locked(async () => {
-      const before = this.pages().find(p => p.meta.type === 'query' &&
-        (p.meta.wikipoke.query as Record<string, unknown> | undefined)?.requestId === requestId);
+      const existing = this.pages();
+      const before = existing.find(p => p.meta.wikipoke.uid === `query:${id}`);
+      const path = before?.path ?? unique('queries', question, new Set(existing.map(p => p.path)));
+      // The same question, already answered, against evidence that has not moved: the answer is the
+      // cheapest in the wiki and researching it again produces a second page saying the same thing.
+      // Offering it as a suggestion was not enough - it was ignored - so it is returned instead of a
+      // new query. A stale answer is not reused: drift there means the code moved under it.
+      if (!before && !again) {
+        const wanted = normalize(question), current = inventory(this.root, this.config, ref);
+        const known = new Map(current.sources.map(source => [source.id, source.hash]));
+        const answered = existing.find(p => {
+          const record = p.meta.wikipoke.query as Record<string, unknown> | undefined;
+          return p.meta.type === 'query' && record?.state === 'answered' &&
+            typeof record.question === 'string' && normalize(record.question) === wanted &&
+            record.ref === (ref ?? 'HEAD') &&
+            p.meta.sources.every(source => sameDigest(source.hash, known.get(source.id)));
+        });
+        if (answered) {
+          const record = answered.meta.wikipoke.query as Record<string, unknown>;
+          return { ...record, reused: true, path: answered.path, revision: current.revision,
+            language: this.config.language, answer: answerProse(answered.body),
+            note: 'This question was already answered against evidence that has not changed. Read this answer instead of researching it again; pass --again to research it anyway.' };
+        }
+      }
       if (before) {
         const record = before.meta.wikipoke.query as Record<string, unknown>;
         if (record.question !== question || record.ref !== (ref ?? 'HEAD')) throw new Error('Request ID already used for different input');
@@ -247,7 +345,8 @@ export class Wiki {
         .filter(candidate => candidate.score > 0)
         .sort((a, b) => b.score - a.score).slice(0, 3)
         .map(({ score, ...candidate }) => candidate);
-      return { ...(meta.wikipoke.query as object), path, revision: inv.revision, suggestedPages, priorAnswers };
+      return { ...(meta.wikipoke.query as object), path, revision: inv.revision,
+        language: this.config.language, suggestedPages, priorAnswers };
     });
   }
   async answer(requestId: string, input: unknown) {
@@ -268,15 +367,26 @@ export class Wiki {
       };
       try {
         const inv = inventory(this.root, this.config, query.ref as string);
-        const citations = answer.citations.map(id => {
+        const library = this.pages();
+        // A citation is a source id or the path of a page, which is what the query skill has always
+        // promised and what the code used to reject. Both are evidence; they are not the same edge.
+        // Source ids pin provenance in `sources`; a cited page becomes an `asks_about` relation, so
+        // an answered question is finally connected to the knowledge it was answered from.
+        const cited = answer.citations.map(id => {
           const source = inv.sources.find(s => s.id === id);
-          if (!source) throw new Error(`Unknown citation: ${id}`);
-          const { content, ...evidence } = source; return evidence;
+          if (source) { const { content, ...evidence } = source; return { source: evidence }; }
+          const page = library.find(p => p.path === id);
+          if (page) return { page };
+          throw new Error(`Unknown citation: ${id}; name a source id from the plan or the path of a page in the wiki`);
         });
-        if (!citations.length && !answer.gaps.length)
+        const citations = cited.flatMap(c => c.source ? [c.source] : []);
+        const referenced = cited.flatMap(c => c.page ? [c.page] : []);
+        if (!cited.length && !answer.gaps.length)
           throw new Error('Answer needs cited evidence, or declared gaps when no evidence exists');
-        const at = stamp(), state = citations.length ? 'answered' : 'unsupported';
+        const at = stamp(), state = cited.length ? 'answered' : 'unsupported';
         meta.sources = citations;
+        meta.wikipoke.relations = referenced.map(page => ({ type: 'asks_about' as const,
+          target: '/' + page.path, evidence: [] as string[], basis: 'observed' as const }));
         return record({ ...query, citations: answer.citations, gaps: answer.gaps,
           revision: inv.revision, state, completedAt: at, attempts: [...previous, { at, state }] }, answer.answer);
       } catch (error) {
@@ -285,6 +395,41 @@ export class Wiki {
         throw error;
       }
     });
+  }
+  // What an agent actually touched, as observed by a harness hook rather than declared afterwards.
+  // The journal is append-only and unfiltered on write, because a hook that parses the config on
+  // every edit is a hook nobody keeps installed; scope is resolved here, on read. It records the
+  // file and never a reason: a hook cannot see one, and inventing it is the failure this avoids.
+  note(input: unknown): Touch {
+    const touch = touchSchema.parse(input);
+    const path = this.store.path(`.wikipoke/journal/${sessionFile(touch.session)}.jsonl`);
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, JSON.stringify(touch) + '\n');
+    return touch;
+  }
+  journal(session?: string): Touch[] {
+    const directory = this.store.path('.wikipoke/journal');
+    const wanted = session ? [`${directory}/${sessionFile(session)}.jsonl`]
+      : files(directory).filter(f => f.endsWith('.jsonl'));
+    return wanted.flatMap(file => (read(file) ?? '').split('\n').filter(Boolean).flatMap(line => {
+      try { return [touchSchema.parse(JSON.parse(line))]; } catch { return []; }
+    })).filter(touch => !ignored(touch.file, this.config))
+      .sort((a, b) => a.at.localeCompare(b.at));
+  }
+  // The debt a turn is about to leave behind: source this session touched that no decision claims.
+  // Unlike the checkpoint-based signal, it needs no commit and no seal, so it can be answered while
+  // the agent is still in the turn that made the change — which is the only moment the why exists.
+  // Deliberately outside the writer lock. This is asked while the agent is mid-turn - by a stop hook,
+  // or by a plugin composing a system prompt - and taking the lock there would block the very agent
+  // whose work is being described. Both inputs are append-only files, so the worst a concurrent
+  // write can cost is one line that the next call will see.
+  async touched(session?: string) {
+    const entries = this.journal(session);
+    const explained = new Set(this.events().filter(e => e.kind === 'decision').flatMap(e => e.evidence));
+    const files = [...new Set(entries.map(e => e.file))].sort();
+    return { session: session ?? null, mode: this.config.capture, entries: entries.length,
+      files, unexplained: files.filter(file => !explained.has(file)),
+      since: entries[0]?.at ?? null, until: entries[entries.length - 1]?.at ?? null };
   }
   events(): Event[] {
     return files(this.store.path('.wikipoke/events')).filter(f => f.endsWith('.json'))
@@ -296,23 +441,60 @@ export class Wiki {
       const old = read(this.store.path(eventPath));
       if (old && old !== json(event)) throw new Error('Event ID already exists with different content');
       if (!old) this.store.commit([{ path: eventPath, before: null, after: json(event) }]);
-      const events = this.events().filter(e => e.task === event.task), taskId = hash(event.task);
-      const log = metadata('watchlog', event.task, `task:${taskId}`);
-      const decisions = events.filter(e => e.kind === 'decision').map(e => {
-        const decisionPath = namedPath('decisions', e.choice!, e.id), meta = metadata('decision', e.choice!, `decision:${hash(e.id)}`);
-        const existing = this.pages().find(p => p.path === decisionPath);
-        if (existing) return existing;
-        meta.wikipoke.decision = { actor: e.actor, eventId: e.id, at: e.at };
-        return { path: decisionPath, meta, raw: '', body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n\n# Alternatives\n\n${e.alternatives.join('\n')}\n\n# Declared evidence (not yet verified)\n\n${e.evidence.join('\n')}\n` };
+      const events = this.events().filter(e => e.task === event.task);
+      const published = this.pages(), byUid = new Map(published.map(p => [p.meta.wikipoke.uid, p]));
+      const taken = new Set(published.map(p => p.path));
+      // Declared evidence names files. Resolved against the inventory it becomes real provenance:
+      // the decision joins the graph through the code it is about, and drift can say that the source
+      // behind a choice has moved - which is the one thing a decision record has to be able to say.
+      const inv = inventory(this.root, this.config);
+      const known = new Map(inv.sources.map(source => [source.id, source]));
+      const recorded = events.filter(e => e.kind === 'decision');
+      const named = recorded.map(e => {
+        const uid = `decision:${hash(e.id)}`, existing = byUid.get(uid);
+        // Identity is the uid, never the path: a page already published keeps its name even after
+        // the naming rules change, so no link in the wiki is broken by a later release.
+        if (existing) return { event: e, uid, path: existing.path, existing };
+        const path = unique('decisions', e.title ?? headline(e.choice!), taken);
+        taken.add(path);
+        return { event: e, uid, path, existing: undefined };
       });
-      log.wikipoke.relations = decisions.map(p => ({ type: 'records', target: '/' + p.path, evidence: [], basis: 'observed' }));
-      // A task that recorded no choice has nothing to teach: its open/close pair is already durable
-      // in .wikipoke/events and counted in the attention signal, and a page saying only "Task opened"
-      // buys shelf space in the wiki with no knowledge in it. The tape is kept, not published; the
-      // watchlog appears the moment the task records its first decision, carrying the whole history.
+      const siblings = new Map(named.map(n => [n.event.id, n.path]));
+      const decisions = named.map(({ event: e, uid, path, existing }) => {
+        const name = e.title ?? headline(e.choice!);
+        // A page that already pinned its evidence keeps it: the hash recorded when the choice was
+        // made is what later reports as drifted, and recomputing it would erase exactly that. Its
+        // name is different - derived content, not identity - so a page written before decisions had
+        // titles, carrying the whole choice as its name, is corrected without being repinned.
+        if (existing && existing.meta.sources.length) {
+          if (existing.meta.title === name) return existing;
+          return { ...existing, meta: { ...existing.meta, title: name, description: name } };
+        }
+        const cited = e.evidence.filter(file => known.has(file));
+        const meta = existing ? { ...existing.meta, title: name, description: name } : metadata('decision', name, uid);
+        meta.sources = cited.map(file => { const { content, ...source } = known.get(file)!; return source; });
+        meta.wikipoke.decision = { actor: e.actor, eventId: e.id, at: e.at };
+        // Two kinds of edge, both observed rather than inferred: the pages that document the same
+        // code this choice was about, and the other choices recorded under the same task.
+        const about = published.filter(page => !['decision', 'query'].includes(page.meta.type) &&
+          page.meta.sources.some(source => cited.includes(source.id)));
+        meta.wikipoke.relations = [
+          ...about.map(page => ({ type: 'related_to' as const, target: '/' + page.path,
+            basis: 'observed' as const,
+            evidence: cited.filter(file => page.meta.sources.some(source => source.id === file)) })),
+          ...named.filter(other => other.event.id !== e.id)
+            .map(other => ({ type: 'related_to' as const, target: '/' + siblings.get(other.event.id)!,
+              evidence: [] as string[], basis: 'observed' as const })),
+        ];
+        const unverified = e.evidence.filter(file => !known.has(file));
+        return { path, meta, raw: '', body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n\n# Alternatives\n\n${e.alternatives.join('\n')}\n\n# Declared evidence not in scope\n\n${unverified.join('\n')}\n` };
+      });
+      // The wiki carries what the task decided, never a transcript of it. The open/close pair is
+      // already durable in .wikipoke/events and counted in the attention signal, and a page
+      // restating "Task opened" buys shelf space with no knowledge in it. The tape is kept; only
+      // the choices are published.
       if (!decisions.length) return { id: event.id, task: event.task, materialized: false, decisions: 0 };
-      this.publish([...decisions, { path: namedPath('watchlogs', event.task, event.task), meta: log, raw: '',
-        body: '# Recorded events\n\n' + events.map(e => `## ${e.at} - ${e.kind}\n\nActor: ${e.actor}\n\n${e.choice ?? e.closure ?? 'Task opened'}\n\n${e.rationale ?? ''}\n`).join('\n') }]);
+      this.publish(decisions);
       return { id: event.id, task: event.task, materialized: true, decisions: decisions.length };
     });
   }

@@ -56,7 +56,7 @@ export function graph(pages: Page[]) {
     };
     visit(tree, 'link', node => link(node.url));
     visit(tree, 'linkReference', node => { const url = definitions.get(node.identifier); if (url) link(url); });
-    for (const s of page.meta.sources) edges.push({ from: page.path, to: s.resource, type: 'source', evidence: [s.id] });
+    for (const s of page.meta.sources) edges.push({ from: page.path, to: s.resource ?? s.id, type: 'source', evidence: [s.id] });
   }
   const normalized = edges.map(e => ['related_to', 'contradicts'].includes(e.type) && e.from > e.to
     ? { ...e, from: e.to, to: e.from } : e);
@@ -73,6 +73,18 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
     for (const r of p.meta.wikipoke.relations) for (const id of r.evidence)
       if (!sources.has(id)) findings.push({ code: 'unknown-evidence', severity: 'error', page: p.path, message: id });
   }
+  // A flow is the page type that cannot be derived from one file: it is the sequence several files
+  // make together, and the reason the order is what it is. Reconciling a diff never asks for one,
+  // because no single source went uncovered by its absence, so the gap has to be named here or the
+  // wiki reads complete while missing the knowledge that justified building it.
+  const described = pages.filter(p => !['query', 'decision', 'flow'].includes(p.meta.type));
+  const flows = pages.filter(p => p.meta.type === 'flow');
+  if (described.length >= 3 && !flows.length)
+    findings.push({ code: 'no-flows', severity: 'warning',
+      message: `${described.length} pages describe code and none describes a flow through it` });
+  for (const flow of flows) if (flow.meta.sources.length < 2)
+    findings.push({ code: 'thin-flow', severity: 'warning', page: flow.path,
+      message: 'A flow crosses files; this one cites fewer than two sources' });
   const { edges } = graph(pages);
   for (const e of edges.filter(e => e.type !== 'source')) {
     if (!paths.has(e.to)) findings.push({ code: 'broken-link', severity: 'warning', page: e.from, message: e.to });
@@ -85,11 +97,9 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   for (const p of pages) if (cycle(p.path, new Set())) findings.push({ code: 'replacement-cycle', severity: 'error', page: p.path, message: 'Cyclic supersession' });
   return findings;
 }
-// The index answers "what does this project know", so it carries knowledge only. A watchlog is the
-// event tape of one task — process, not knowledge — and listing it here means the index degrades in
-// exact proportion to how diligently an agent captures decisions. It stays reachable through the
-// decision pages it records, the graph, and the event store.
+// The index answers "what does this project know", so it carries knowledge only. Process — the event
+// tape of a task, the chronology of what changed — is not knowledge and is not listed here; it lives
+// in .wikipoke/events and in the generated log, reachable through the decision pages and the graph.
 export function index(pages: Page[]): string {
-  const knowledge = pages.filter(p => p.meta.type !== 'watchlog');
-  return '# Knowledge index\n\n' + knowledge.map(p => `- [${p.meta.title.replace(/[\[\]\n]/g, '')}](${p.path}) - ${p.meta.description.replace(/\n/g, ' ')}`).join('\n') + '\n';
+  return '# Knowledge index\n\n' + pages.map(p => `- [${p.meta.title.replace(/[\[\]\n]/g, '')}](${p.path}) - ${p.meta.description.replace(/\n/g, ' ')}`).join('\n') + '\n';
 }

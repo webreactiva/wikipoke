@@ -35,24 +35,54 @@ A source record holds only `id`, `resource`, `revision`, `hash`, and an optional
 `ingest` plan is dropped on publication, so a patch may reuse the plan's
 `sources` array verbatim without spilling code into the wiki.
 
+A source carries `id` and, when it differs from the id, `resource`; with the Git
+adapter they are the same path, so only `id` is written. `hash` and `revision`
+are abbreviated: they answer "same content, same commit" and nothing else, and
+both are compared by prefix, so a wiki written by an earlier release keeps
+validating against a newer one instead of reporting every page as drifted.
+
 `wikipoke.uid` is stable across moves. Standard Markdown links create
 `links_to` navigation edges. Typed relationships are explicit and directional
 where their meaning requires it. Backlinks are derived rather than duplicated.
 Sources create provenance edges.
 
-Generated paths use readable slug segments with a short identity suffix, such as
-`queries/how-are-payments-validated-5a1c2d3e.md`. Every path segment must be a
-lowercase hyphenated slug. Query pages retain their request ID, question,
+Generated paths are readable slugs — `queries/how-are-payments-validated.md` —
+with a numeric suffix only when that name is already taken. A page's identity is
+`wikipoke.uid`, never its path, so a page that is already published keeps the
+name it has and is never renamed underneath the links that point at it. Every
+path segment must be a lowercase hyphenated slug. Query pages retain their request ID, question,
 requested revision, attempts, completion state, response, citations, and gaps in
 `wikipoke.query`. A query's state is exactly one of `pending`, `unsupported`, or
 `answered`; `answered` is terminal and cannot be replaced, while the other two
 still accept a further answer. Every attempt, including a rejected one and its
 reason, stays in `attempts` and in the page body. Decision pages retain declared choice evidence and decision
-lifecycle in `wikipoke.decision`. Watchlogs link their recorded decisions with
-the `records` relationship. Missing rationale is represented as unknown.
+lifecycle in `wikipoke.decision`. Missing rationale is represented as unknown.
 
-`wiki/index.md` is generated on every publication; hand edits to it are
-replaced. `index.md` and `log.md` are reserved at the wiki root only, because
+A decision's declared evidence is resolved against the inventory and becomes
+real provenance in `sources`, pinned at the hash the code had when the choice was
+made — so a decision drifts when the code behind it moves, and evidence naming a
+file outside scope stays in the body as declared and unverified. From that the
+page also gains `related_to` relations, `basis: observed`, to the pages that
+document the same sources and to the other decisions recorded under the same
+task. Without them a decision page is a node with no edges, and a wiki full of
+them has a graph that cannot be read. A decision never counts towards coverage:
+it cites the code it was about, not the code it documents.
+
+An answer may cite a source id or the path of a page. Source ids pin provenance
+in `sources`; a cited page becomes an `asks_about` relation, which is what
+connects an answered question to the knowledge that answered it.
+
+A page whose `type` is `flow` describes an end-to-end sequence rather than a unit
+of code: it cites every source the sequence crosses and explains why the steps
+are ordered as they are. `lint` reports `no-flows` while a wiki describes code
+and no page describes a path through it, and `thin-flow` for a flow resting on
+fewer than two sources. Nothing else raises that gap, because a missing flow
+leaves no source uncovered.
+
+`wiki/index.md` and `wiki/log.md` are generated on every publication; hand edits
+to either are replaced. The index carries knowledge; the log carries chronology —
+one entry per recorded decision, newest first, naming the files the decision
+claims. `index.md` and `log.md` are reserved at the wiki root only, because
 that is where Wikipoke generates them, and a patch claiming either is rejected.
 Deeper in the tree the names carry no meaning: `entities/index.md` is an
 ordinary page that publishes, counts, lints, joins the graph, and appears in the
