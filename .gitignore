@@ -1,6 +1,5 @@
 node_modules/
 dist/
 *.tgz
-.wikipoke/local/
 .env
 .DS_Store

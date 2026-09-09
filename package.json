@@ -14,13 +14,17 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "templates",
     "README.md",
+    "docs/installation.md",
+    "docs/user-guide.md",
+    "docs/architecture.md",
     "docs/format.md",
     "docs/operations.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"process.getBuiltinModule('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc && node -e \"process.getBuiltinModule('node:fs').chmodSync('dist/cli.js', 0o755)\"",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
