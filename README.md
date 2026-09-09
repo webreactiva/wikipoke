@@ -40,6 +40,9 @@ wikipoke graph
 
 Read the full [installation and operation guide](docs/installation.md) for
 configuration, scheduling, hooks, queries, task events, and release captures.
+Use the [user guide](docs/user-guide.md) for everyday workflows and the
+[architecture guide](docs/architecture.md) for skills, hooks, CLI boundaries,
+state, and integration behavior.
 
 `ask` creates a durable query page before the agent researches it; `answer`
 validates citations before closing it. `capture` accepts a task event with an ID, task, actor, ISO

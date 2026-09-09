@@ -45,7 +45,7 @@ CLI is deterministic: it plans work, validates evidence and commits safe wiki
 writes. The installed agent skill reads the plan, reasons over code, and calls
 the CLI to publish its result.
 
-Check deterministic health before invoking a model:
+Check deterministic health before asking an agent to work:
 
 ```sh
 npx --no-install wikipoke --root /work/acme status
@@ -107,12 +107,10 @@ npx --no-install wikipoke --root /work/acme seal
 npx --no-install wikipoke --root /work/acme ask "How are payments validated?"
 ```
 
-Wikipoke first creates a query record under `wiki/queries/`, then retrieves
-current knowledge and versioned source evidence. Answers include citations and
-gaps. If generation fails, the failed query remains. A supplied `--request-id`
-retries the same request; use a new ID for a separate invocation of the same
-question. Use `--ref <commit>` for a historical code-source question. The
-The skill researches and writes the cited response through `wikipoke answer`.
+Wikipoke first creates a query record under `wiki/queries/`. A supplied
+`--request-id` retries the same request; use a new ID for a separate invocation
+of the same question. Use `--ref <commit>` for a historical code-source
+question. The skill researches and writes the cited response through `wikipoke answer`.
 Use `wikipoke schema answer` or `wikipoke schema patch` to obtain the exact
 JSON contract before writing either payload; agents never need to inspect the
 Wikipoke implementation to discover it.
