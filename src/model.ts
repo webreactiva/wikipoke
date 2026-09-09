@@ -23,7 +23,8 @@ export interface Finding { code: string; message: string; page?: string; severit
 export const configSchema = z.object({
   version: z.literal(1), wiki: z.string().default('wiki'), language: z.string().default('en'),
   include: z.array(z.string()).min(1), exclude: z.array(z.string()).default([]),
-  limits: z.object({ batchFiles: z.number().int().positive() }),
+  limits: z.object({ batchFiles: z.number().int().positive(),
+    batchBytes: z.number().int().positive().default(64 * 1024) }),
 });
 export type Config = z.infer<typeof configSchema>;
 export const patchSchema = z.object({ pages: z.array(z.object({

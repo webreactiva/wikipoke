@@ -40,21 +40,26 @@ test('init refuses a repository without commits', () => {
   assert.equal(existsSync(join(root, 'wikipoke.config.yaml')), false);
 });
 
-test('init records a per-installation batch limit and rejects an invalid one', () => {
-  const root = repository(), result = run(root, 'init', '--include', 'src/**', '--batch-files', '3');
+test('init records per-installation batch limits and rejects an invalid one', () => {
+  const root = repository(), result = run(root, 'init', '--include', 'src/**', '--batch-files', '3', '--batch-bytes', '4096');
   assert.equal(result.status, 0);
-  const config = parse(readFileSync(join(root, 'wikipoke.config.yaml'), 'utf8')) as { limits: { batchFiles: number } };
+  const config = parse(readFileSync(join(root, 'wikipoke.config.yaml'), 'utf8')) as { limits: { batchFiles: number; batchBytes: number } };
   assert.equal(config.limits.batchFiles, 3);
+  assert.equal(config.limits.batchBytes, 4096);
   const invalid = run(repository(), 'init', '--include', 'src/**', '--batch-files', '0');
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /positive integer/);
+  const invalidBytes = run(repository(), 'init', '--include', 'src/**', '--batch-bytes', '0');
+  assert.equal(invalidBytes.status, 1);
+  assert.match(invalidBytes.stderr, /positive integer/);
 });
 
-test('init keeps ten source files per pass by default', () => {
+test('init keeps ten source files and sixty-four kilobytes per pass by default', () => {
   const root = repository();
   assert.equal(run(root, 'init', '--include', 'src/**').status, 0);
-  const config = parse(readFileSync(join(root, 'wikipoke.config.yaml'), 'utf8')) as { limits: { batchFiles: number } };
+  const config = parse(readFileSync(join(root, 'wikipoke.config.yaml'), 'utf8')) as { limits: { batchFiles: number; batchBytes: number } };
   assert.equal(config.limits.batchFiles, 10);
+  assert.equal(config.limits.batchBytes, 64 * 1024);
 });
 
 test('doctor diagnoses an unconfigured directory instead of demanding init', () => {

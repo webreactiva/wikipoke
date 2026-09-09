@@ -52,12 +52,19 @@ npx --no-install wikipoke --root /work/acme init \
   --include 'src/**' 'packages/*/src/**' \
   --exclude '**/*.test.ts' 'dist/**' \
   --batch-files 10 \
+  --batch-bytes 65536 \
   --language en
 ```
 
 This writes `wikipoke.config.yaml`, `wiki/index.md`, and `.wikipoke/state.json`.
 `--batch-files` sets `limits.batchFiles`, the number of undocumented sources a
-single `ingest` plan may return; it defaults to 10. When a root-level
+single `ingest` plan may return; it defaults to 10. `--batch-bytes` sets
+`limits.batchBytes`, the source weight one plan may carry, defaulting to 64 KiB.
+Both bound the plan, and the byte budget is the one that matters on a repository
+with large modules: ten files of a UI catalog outweigh an agent's context, and an
+agent that truncates the plan loses the pinned evidence the patch has to carry.
+A single source larger than the budget is still planned on its own, so an
+oversized file never blocks the queue behind it. When a root-level
 `.wikipokeignore` exists, initialization imports its non-comment glob patterns
 into `exclude`. Review `include`, `exclude`, and limits before ingestion. The
 CLI is deterministic: it plans work, validates evidence and commits safe wiki
@@ -121,7 +128,7 @@ npx --no-install wikipoke --root /work/acme ingest
 ```
 
 It returns undocumented sources in bounded batches — at most `limits.batchFiles`
-per pass — plus related wiki context and a catalog of existing pages. The agent
+and `limits.batchBytes` per pass — plus related wiki context and a catalog of existing pages. The agent
 researches that material and publishes a validated patch. Source or wiki changes
 before publication produce a conflict rather than overwriting work; a patch that
 declares the `revision` it was planned against is refused outright once the

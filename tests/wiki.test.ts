@@ -9,7 +9,7 @@ import { hash, read } from '../src/runtime/store.js';
 import type { Config } from '../src/model.js';
 
 const config: Config = { version: 1, wiki: 'wiki', language: 'en', include: ['src/**'], exclude: [],
-  limits: { batchFiles: 5 } };
+  limits: { batchFiles: 5, batchBytes: 64 * 1024 } };
 function git(root: string, ...args: string[]) {
   return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
 }
@@ -248,4 +248,31 @@ test('publishing over an unreadable page names the real cause', async () => {
   await assert.rejects(wiki.publishPatch(patch(plan.sources)),
     /Cannot publish over an unreadable page: concepts\/retries\.md \(missing YAML frontmatter\)/);
   assert.equal(read(notes), 'Human notes without frontmatter\n');
+});
+
+test('a plan is bounded by bytes as well as by file count', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'wikipoke-budget-'));
+  git(root, 'init', '-q'); git(root, 'config', 'user.email', 'test@example.invalid'); git(root, 'config', 'user.name', 'Test');
+  mkdirSync(join(root, 'src'));
+  const line = 'export const value = 1;\n';
+  for (let n = 0; n < 4; n++) writeFileSync(join(root, `src/mod${n}.ts`), line.repeat(200));
+  git(root, 'add', '.'); git(root, 'commit', '-qm', 'initial');
+  await Wiki.init(root, { ...config, limits: { batchFiles: 5, batchBytes: line.length * 300 } });
+  const plan: any = await new Wiki(root).ingest();
+  assert.equal(plan.sources.length, 1, 'the byte budget stops the batch before the file count does');
+  assert.equal(plan.remaining, 3);
+  assert.equal(plan.complete, false);
+});
+
+test('a source larger than the budget is planned instead of blocking the queue', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'wikipoke-oversized-'));
+  git(root, 'init', '-q'); git(root, 'config', 'user.email', 'test@example.invalid'); git(root, 'config', 'user.name', 'Test');
+  mkdirSync(join(root, 'src'));
+  writeFileSync(join(root, 'src/huge.ts'), 'export const value = 1;\n'.repeat(500));
+  writeFileSync(join(root, 'src/small.ts'), 'export const other = 2;\n');
+  git(root, 'add', '.'); git(root, 'commit', '-qm', 'initial');
+  await Wiki.init(root, { ...config, limits: { batchFiles: 5, batchBytes: 16 } });
+  const plan: any = await new Wiki(root).ingest();
+  assert.deepEqual(plan.sources.map((source: any) => source.id), ['src/huge.ts']);
+  assert.equal(plan.remaining, 1);
 });

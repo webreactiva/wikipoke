@@ -9,7 +9,7 @@ import { install, uninstall } from '../src/integrations.js';
 import type { Config } from '../src/model.js';
 
 const config: Config = { version: 1, wiki: 'wiki', language: 'en', include: ['src/**'], exclude: [],
-  limits: { batchFiles: 5 } };
+  limits: { batchFiles: 5, batchBytes: 64 * 1024 } };
 function git(root: string, ...args: string[]) {
   return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
 }

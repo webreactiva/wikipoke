@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { parse, stringify } from 'yaml';
-import { configSchema, patchSchema, answerSchema, type Config, type Metadata, type Page } from './model.js';
+import { configSchema, patchSchema, answerSchema, type Config, type Metadata, type Page, type Source } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
 import { inventory, revision, git } from './sources/git.js';
@@ -25,6 +25,20 @@ function slug(value: string): string {
   const result = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72).replace(/-+$/g, '');
   return result || 'record';
+}
+// A plan is only bounded when both its file count and its byte weight are: ten files of a
+// large module outweigh an agent's context, and a truncated plan loses the pinned evidence
+// the patch has to carry. The first pending source always ships, so a file larger than the
+// budget is still planned rather than blocking the queue behind it forever.
+function budgeted(pending: Source[], limits: Config['limits']): Source[] {
+  const batch: Source[] = [];
+  let bytes = 0;
+  for (const source of pending) {
+    if (batch.length >= limits.batchFiles) break;
+    if (batch.length && bytes + source.content.length > limits.batchBytes) break;
+    batch.push(source); bytes += source.content.length;
+  }
+  return batch;
 }
 function namedPath(directory: string, label: string, identity: string): string {
   return `${directory}/${slug(label)}-${hash(identity).slice(0, 8)}.md`;
@@ -149,11 +163,13 @@ export class Wiki {
       const inv = inventory(this.root, this.config, ref), existing = this.pages();
       const documented = new Set(existing.filter(p => !['query', 'watchlog'].includes(p.meta.type))
         .flatMap(p => p.meta.sources.filter(s => inv.sources.some(c => c.id === s.id && c.hash === s.hash)).map(s => s.id)));
-      const sources = inv.sources.filter(s => !documented.has(s.id)).slice(0, this.config.limits.batchFiles);
+      const pending = inv.sources.filter(s => !documented.has(s.id));
+      const sources = budgeted(pending, this.config.limits);
       const sourceIds = new Set(sources.map(s => s.id));
       const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
       for (const edge of graph(existing).edges) if (['depends_on', 'implements'].includes(edge.type) && direct.has(edge.to)) direct.add(edge.from);
-      return { complete: sources.length === 0, language: this.config.language, revision: inv.revision, sources,
+      return { complete: pending.length === 0, remaining: pending.length - sources.length,
+        language: this.config.language, revision: inv.revision, sources,
         pages: existing.filter(p => direct.has(p.path)), catalog: existing.map(p => ({ path: p.path, title: p.meta.title })) };
     });
   }

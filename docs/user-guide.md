@@ -8,14 +8,15 @@ choose a narrow source scope:
 
 ```sh
 npm install --save-dev /path/to/wikipoke
-npx --no-install wikipoke init --include 'src/**' --exclude '**/*.test.ts' --batch-files 10
+npx --no-install wikipoke init --include 'src/**' --exclude '**/*.test.ts' --batch-files 10 --batch-bytes 65536
 npx --no-install wikipoke install
 ```
 
 `init` creates `wikipoke.config.yaml`, `wiki/index.md`, and `.wikipoke/state.json`.
 It refuses to overwrite an existing wiki index. Put reusable source exclusions in
 `.wikipokeignore` before initialization. `--batch-files` caps how many
-undocumented sources one `ingest` pass plans.
+undocumented sources one `ingest` pass plans, and `--batch-bytes` caps how much
+source it may weigh, so a plan stays readable whole instead of being truncated.
 
 Run `wikipoke doctor` at any time, before or after initialization, to see Node,
 Git, repository, configuration, hook status, pending work, and problems.

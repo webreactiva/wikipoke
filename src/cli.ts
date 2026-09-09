@@ -34,12 +34,13 @@ program.command('init').description('create an explicit configuration and empty 
   .option('--wiki <path>', 'wiki path', 'wiki').option('--language <language>', 'knowledge language', 'en')
   .option('--exclude <glob...>', 'source glob(s) to exclude', [])
   .option('--batch-files <count>', 'source files planned per maintenance pass', count, 10)
+  .option('--batch-bytes <count>', 'source bytes planned per maintenance pass', count, 64 * 1024)
   .action(async options => { try {
     const path = root();
     if (!repository(path)) throw new Error(`Not a Git repository with at least one commit: ${path}; every Wikipoke command reads source from Git, so initialize and commit the repository first`);
     const input = configSchema.parse({ version: 1, wiki: options.wiki, language: options.language,
       include: options.include, exclude: options.exclude,
-      limits: { batchFiles: options.batchFiles } });
+      limits: { batchFiles: options.batchFiles, batchBytes: options.batchBytes } });
     await Wiki.init(path, input); output({ initialized: true, config: 'wikipoke.config.yaml', limits: input.limits });
   } catch (error) { fail(error); } });
 for (const [name, description, action] of [
