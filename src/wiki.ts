@@ -7,7 +7,7 @@ import { configSchema, patchSchema, answerSchema, eventSchema, touchSchema,
   type Config, type Metadata, type Page, type Source, type Touch } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { changed, ignored, inventory, revision, git } from './sources/git.js';
+import { changed, ignored, inventory, revision, uncommitted, git } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
@@ -281,8 +281,13 @@ export class Wiki {
       const sourceIds = new Set(sources.map(s => s.id));
       const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
       for (const edge of graph(existing).edges) if (edge.type === 'depends_on' && direct.has(edge.to)) direct.add(edge.from);
+      const dirty = uncommitted(this.root, this.config);
       return { complete: pending.length === 0, remaining: pending.length - sources.length,
         language: this.config.language, revision: inv.revision,
+        // Sources whose working copy differs from the commit this plan was made against. Documenting
+        // one of these describes code that is already superseded on disk.
+        uncommitted: dirty,
+        ...(dirty.length ? { warning: `${dirty.length} in-scope file(s) have uncommitted changes; this plan describes the committed version. Commit first, or leave those files for a later pass.` } : {}),
         // The plan is what an agent copies into the frontmatter, so it offers no field it would only
         // be repeating: with a Git adapter the resource is the id.
         sources: sources.map(({ resource, ...rest }) => resource === rest.id ? rest : { ...rest, resource }),
@@ -584,8 +589,9 @@ export class Wiki {
       // whole exercise exists to capture. It is the one warning that holds the seal, because a
       // missing flow leaves no source uncovered and would otherwise be certified as complete.
       const flowless = health.findings.some(f => f.code === 'no-flows');
-      if (health.drift.length || health.uncovered.length || errors || flowless)
-        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)${flowless ? ', and no page describes a flow through the code' : ''}`);
+      const thin = health.findings.filter(f => f.code === 'thin-coverage');
+      if (health.drift.length || health.uncovered.length || errors || flowless || thin.length)
+        throw new Error(`Cannot advance checkpoint while wiki health has pending work: ${health.uncovered.length} uncovered source(s), ${health.drift.length} drifted reference(s), ${errors} error finding(s)${flowless ? ', and no page describes a flow through the code' : ''}${thin.length ? `, and ${thin.length} page(s) claim more sources than they describe: ${thin.slice(0, 3).map(f => f.page).join(', ')}` : ''}`);
       const state = { version: 1, lastIndexedCommit: commit, sealedAt: stamp() };
       const path = '.wikipoke/state.json';
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(state) }]);

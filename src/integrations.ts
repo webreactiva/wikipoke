@@ -35,6 +35,9 @@ so it is meant to be read whole — never truncate it. It answers with:
 - \`sources\` — the batch to document, each with \`id\`, \`resource\`, \`revision\`, \`hash\` and \`content\`.
 - \`pages\` and \`catalog\` — the wiki context and every existing page, so you connect rather than duplicate.
 - \`revision\` — the commit the plan was made against.
+- \`uncommitted\` — in-scope files whose working copy differs from that commit. The plan carries the
+  committed version of those files, so documenting one describes code the disk has already moved
+  past. Commit first, or leave those files for a later pass.
 - \`complete\` and \`remaining\` — whether anything is left, and how much.
 
 Read the sources and the related pages yourself, and reason in your own flow. Do not modify source code.

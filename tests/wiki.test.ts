@@ -653,3 +653,34 @@ test('drift names the way out, including when the file is simply gone', async ()
     body: 'The retry module was removed.' }], findings: [] });
   assert.deepEqual((await wiki.status()).drift, []);
 });
+
+test('one sentence citing everything does not buy a covered wiki', async () => {
+  const wiki = await setup();
+  for (const n of [1, 2, 3]) writeFileSync(join(wiki.root, `src/m${n}.ts`), `export const v${n} = ${n};\n`);
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'more');
+  const plan: any = await wiki.ingest();
+  // The whole repository claimed by one page with one sentence: the shape of the shortcut.
+  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/all.md',
+    meta: { type: 'concept', title: 'Everything', description: 'Everything',
+      sources: plan.sources.map(({ content, ...source }: any) => source),
+      wikipoke: { uid: 'all', relations: [] } }, body: 'This project contains source files.' }] });
+  const status: any = await wiki.status();
+  assert.deepEqual(status.uncovered, []);
+  assert.equal(status.findings.some((f: any) => f.code === 'thin-coverage'), true);
+  // Coverage still reads clean, and the checkpoint no longer certifies it.
+  await assert.rejects(wiki.seal(), /claim more sources than they describe/);
+});
+
+test('a plan says when it describes code the working tree has already moved past', async () => {
+  const wiki = await setup();
+  assert.deepEqual((await wiki.ingest() as any).uncommitted, []);
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 4;\n');
+  const plan: any = await wiki.ingest();
+  // The inventory reads the committed tree, so this plan carries retries = 3 while the disk says 4.
+  assert.deepEqual(plan.uncommitted, ['src/main.ts']);
+  assert.match(plan.warning, /uncommitted changes/);
+  assert.match(plan.sources[0].content, /retries = 3/);
+  // A file outside the configured scope is nobody's business here.
+  writeFileSync(join(wiki.root, 'README.md'), '# Notes\n');
+  assert.deepEqual((await wiki.ingest() as any).uncommitted, ['src/main.ts']);
+});

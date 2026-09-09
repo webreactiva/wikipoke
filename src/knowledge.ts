@@ -121,6 +121,17 @@ export function lint(pages: Page[], unreadable: Unreadable[] = []): Finding[] {
   for (const flow of flows) if (flow.meta.sources.length < 2)
     findings.push({ code: 'thin-flow', severity: 'warning', page: flow.path,
       message: 'A flow crosses files; this one cites fewer than two sources' });
+  // Coverage is set membership: citing a source covers it, and citing costs nothing. One page with
+  // one sentence citing every file in a repository reports the wiki as fully covered. This is the
+  // cheapest check that tells that page apart from a real one: how much prose it spends per source
+  // it claims. Calibrated against two real wikis - the thinnest genuine page spends 120 characters
+  // per source and the most extreme index page 32, while the degenerate case spends about one.
+  for (const p of pages) {
+    if (p.meta.sources.length < 3 || ['query', 'decision'].includes(p.meta.type)) continue;
+    const spent = p.body.trim().length / p.meta.sources.length;
+    if (spent < 25) findings.push({ code: 'thin-coverage', severity: 'warning', page: p.path,
+      message: `Claims ${p.meta.sources.length} sources in ${p.body.trim().length} characters; a citation is not a description` });
+  }
   const { edges } = graph(pages);
   for (const e of edges.filter(e => e.type !== 'source')) {
     if (!paths.has(e.to)) findings.push({ code: 'broken-link', severity: 'warning', page: e.from, message: e.to });

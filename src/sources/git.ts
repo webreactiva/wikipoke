@@ -56,6 +56,15 @@ export function changed(root: string, config: Config, from: string, to = 'HEAD')
   const rows = git(root, 'diff', '--name-only', '-z', `${from}..${to}`).split('\0').filter(Boolean);
   return rows.filter(name => !ignored(name, config));
 }
+// In-scope source that differs from what is committed. The inventory reads the committed tree, so
+// an agent documenting code it just wrote would describe the previous version - and a commit later
+// the page it just published is back in the debt list. Reporting it lets the agent commit first
+// rather than discover the loop afterwards.
+export function uncommitted(root: string, config: Config): string[] {
+  const rows = git(root, 'status', '--porcelain', '-z').split('\0').filter(Boolean);
+  const names = rows.map(row => row.slice(3)).filter(Boolean);
+  return [...new Set(names.filter(name => !ignored(name, config)))].sort();
+}
 export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
   const rev = revision(root, ref);
   const rows = git(root, 'ls-tree', '-r', '-z', rev).split('\0').filter(Boolean);

@@ -66,6 +66,14 @@ links, in its body, to the pages documenting that same code and to the other
 choices recorded under the same task. A decision never counts towards coverage:
 it cites the code it was about, not the code it documents.
 
+Coverage is set membership — a source is covered when some page cites it with a
+matching hash — and citing costs nothing, so one page of one sentence citing
+every file reports a fully covered wiki. `lint` reports `thin-coverage` for a
+page claiming three or more sources in less than twenty-five characters of body
+per source, and `seal` refuses while any page does. The threshold is calibrated
+against real wikis: the thinnest genuine page spends 120 characters per source
+and the most source-heavy index page 32, while the degenerate case spends one.
+
 An answer may cite a source id or the path of a page. Source ids pin provenance
 in `sources`; a cited page is linked from the body under "Answered from".
 
