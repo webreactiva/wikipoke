@@ -47,9 +47,17 @@ export function target(from: string, value: string): string {
 // symmetric pair with its ends in a fixed order, so a reader never sees the same fact twice - and
 // declares the list in its output, because "no reciprocal pair exists" is otherwise indistinguishable
 // from "the writer only ever recorded one direction".
-export const symmetric = ['related_to', 'contradicts'];
+export const symmetric = ['related_to'];
 export function graph(pages: Page[]) {
   const edges: Edge[] = [];
+  // Obsidian resolves `[[note]]` by name across the whole vault and `[[folder/note]]` from its root,
+  // never relative to the page holding the link. An ambiguous bare name resolves to nothing rather
+  // than to whichever page happened to be read first.
+  const byName = new Map<string, string | null>();
+  for (const page of pages) {
+    const name = posix.basename(page.path, '.md');
+    byName.set(name, byName.has(name) ? null : page.path);
+  }
   for (const page of pages) {
     for (const relation of page.meta.wikipoke.relations)
       edges.push({ from: page.path, to: target(page.path, relation.target), type: relation.type, evidence: relation.evidence });
@@ -61,6 +69,17 @@ export function graph(pages: Page[]) {
     };
     visit(tree, 'link', node => link(node.url));
     visit(tree, 'linkReference', node => { const url = definitions.get(node.identifier); if (url) link(url); });
+    // Wikipoke writes ordinary Markdown links, which render everywhere. It reads `[[wikilinks]]` too,
+    // because a wiki people browse in Obsidian is a wiki people actually open. Only text nodes are
+    // scanned, so a pair of brackets inside a code block is code, not an edge.
+    visit(tree, 'text', node => {
+      for (const [, name] of node.value.matchAll(/\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]/g)) {
+        const wanted = name.trim().replace(/\.md$/, '');
+        if (!wanted) continue;
+        const resolved = wanted.includes('/') ? `/${wanted}.md` : byName.get(wanted);
+        if (resolved) link(resolved.startsWith('/') ? resolved : `/${resolved}`);
+      }
+    });
     // The evidence for a provenance edge is the source it points at, so it is only worth stating when
     // the resource read differs from the id it is known by - with a Git adapter it never does.
     for (const s of page.meta.sources) {

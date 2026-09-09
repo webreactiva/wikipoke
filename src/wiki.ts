@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { configSchema, patchSchema, answerSchema, eventSchema, touchSchema,
   type Config, type Metadata, type Page, type Source, type Touch } from './model.js';
@@ -91,9 +92,17 @@ function normalize(question: string): string {
   return question.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .match(/[\p{L}\p{N}]+/gu)?.join(' ') ?? '';
 }
-function queryBody(query: Record<string, unknown>, prose?: string): string {
+// A link between two pages belongs in the body, where a reader can follow it and where Obsidian and
+// GitHub both render it. Ordinary Markdown, relative to the page holding it - not a typed relation
+// in frontmatter that only a graph command can see.
+function links(from: string, targets: string[]): string {
+  return targets.map(to => `- [${posix.basename(to, '.md')}](${posix.relative(posix.dirname(from), to) || to})`).join('\n');
+}
+function queryBody(query: Record<string, unknown>, prose?: string, path = ''): string {
+  const cited = (query.pages as string[] | undefined) ?? [];
   return `# Question\n\n${query.question}\n` +
     (prose === undefined ? '' : `${answerHeading}${prose}${gapsHeading}\n${((query.gaps as string[]) ?? []).join('\n')}\n`) +
+    (cited.length ? `\n# Answered from\n\n${links(path, cited)}\n` : '') +
     trace((query.attempts as Attempt[] | undefined) ?? []);
 }
 export class Wiki {
@@ -255,7 +264,7 @@ export class Wiki {
       const sources = budgeted(pending, this.config.limits);
       const sourceIds = new Set(sources.map(s => s.id));
       const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
-      for (const edge of graph(existing).edges) if (['depends_on', 'implements'].includes(edge.type) && direct.has(edge.to)) direct.add(edge.from);
+      for (const edge of graph(existing).edges) if (edge.type === 'depends_on' && direct.has(edge.to)) direct.add(edge.from);
       return { complete: pending.length === 0, remaining: pending.length - sources.length,
         language: this.config.language, revision: inv.revision,
         // The plan is what an agent copies into the frontmatter, so it offers no field it would only
@@ -334,7 +343,7 @@ export class Wiki {
       const at = stamp(), meta = metadata('query', question, `query:${id}`);
       const attempts: Attempt[] = [...(before ? (before.meta.wikipoke.query as any).attempts ?? [] : []), { at, state: 'pending' }];
       meta.wikipoke.query = { requestId, question, ref: ref ?? 'HEAD', at, state: 'pending', attempts };
-      this.publish([{ path, meta, body: queryBody(meta.wikipoke.query as Record<string, unknown>), raw: '' }]);
+      this.publish([{ path, meta, body: queryBody(meta.wikipoke.query as Record<string, unknown>, undefined, path), raw: '' }]);
       const inv = inventory(this.root, this.config, ref), everything = this.pages();
       const pages = everything.filter(p => p.meta.type !== 'query');
       const tokens = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -369,7 +378,7 @@ export class Wiki {
       const written = answerProse(page.body);
       const record = (next: Record<string, unknown>, prose = written) => {
         meta.wikipoke.query = next;
-        this.publish([{ path: page.path, meta, body: queryBody(next, prose), raw: '' }]);
+        this.publish([{ path: page.path, meta, body: queryBody(next, prose, page.path), raw: '' }]);
         return next;
       };
       try {
@@ -392,10 +401,9 @@ export class Wiki {
           throw new Error('Answer needs cited evidence, or declared gaps when no evidence exists');
         const at = stamp(), state = cited.length ? 'answered' : 'unsupported';
         meta.sources = citations;
-        meta.wikipoke.relations = referenced.map(page => ({ type: 'asks_about' as const,
-          target: '/' + page.path, evidence: [] as string[], basis: 'observed' as const }));
         return record({ ...query, citations: answer.citations, gaps: answer.gaps,
-          revision: inv.revision, state, completedAt: at, attempts: [...previous, { at, state }] }, answer.answer);
+          pages: referenced.map(page => page.path), revision: inv.revision, state, completedAt: at,
+          attempts: [...previous, { at, state }] }, answer.answer);
       } catch (error) {
         const reason = (error as Error).message;
         record({ ...query, attempts: [...previous, { at: stamp(), state: 'failed', reason }] });
@@ -469,32 +477,34 @@ export class Wiki {
       const siblings = new Map(named.map(n => [n.event.id, n.path]));
       const decisions = named.map(({ event: e, uid, path, existing }) => {
         const name = e.title ?? headline(e.choice!);
-        // A page that already pinned its evidence keeps it: the hash recorded when the choice was
-        // made is what later reports as drifted, and recomputing it would erase exactly that. Its
-        // name is different - derived content, not identity - so a page written before decisions had
-        // titles, carrying the whole choice as its name, is corrected without being repinned.
-        if (existing && existing.meta.sources.length) {
-          if (existing.meta.title === name) return existing;
-          return { ...existing, meta: { ...existing.meta, title: name, description: name } };
-        }
+        // Evidence is pinned once and never recomputed: the hash recorded when the choice was made is
+        // what later reports as drifted, and recalculating it would erase exactly that. Everything
+        // else on the page - its name, its links - is derived, so it is rebuilt on every capture and
+        // a later choice under the same task shows up on the pages decided beside it.
         const cited = e.evidence.filter(file => known.has(file));
+        const pinned = existing?.meta.sources.length ? existing.meta.sources
+          : cited.map(file => { const { content, ...source } = known.get(file)!; return source; });
         const meta = existing ? { ...existing.meta, title: name, description: name } : metadata('decision', name, uid);
-        meta.sources = cited.map(file => { const { content, ...source } = known.get(file)!; return source; });
+        meta.sources = pinned;
+        // Relations on a decision page are Wikipoke's to write, and Wikipoke no longer writes any:
+        // what connects these pages now lives in the body, so a leftover from an older release goes.
+        meta.wikipoke.relations = [];
         meta.wikipoke.decision = { actor: e.actor, eventId: e.id, at: e.at };
-        // Two kinds of edge, both observed rather than inferred: the pages that document the same
-        // code this choice was about, and the other choices recorded under the same task.
+        // What this choice touches, written as links in the body rather than as typed relations: the
+        // pages documenting the same code, and the other choices recorded under the same task. A
+        // reader following the wiki finds them; so does the graph, which reads the body too.
+        const evidence = new Set(pinned.map(source => source.id));
         const about = published.filter(page => !['decision', 'query'].includes(page.meta.type) &&
-          page.meta.sources.some(source => cited.includes(source.id)));
-        meta.wikipoke.relations = [
-          ...about.map(page => ({ type: 'related_to' as const, target: '/' + page.path,
-            basis: 'observed' as const,
-            evidence: cited.filter(file => page.meta.sources.some(source => source.id === file)) })),
-          ...named.filter(other => other.event.id !== e.id)
-            .map(other => ({ type: 'related_to' as const, target: '/' + siblings.get(other.event.id)!,
-              evidence: [] as string[], basis: 'observed' as const })),
-        ];
+          page.meta.sources.some(source => evidence.has(source.id))).map(page => page.path);
+        const together = named.filter(other => other.event.id !== e.id).map(other => siblings.get(other.event.id)!);
         const unverified = e.evidence.filter(file => !known.has(file));
-        return { path, meta, raw: '', body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n\n# Alternatives\n\n${e.alternatives.join('\n')}\n\n# Declared evidence not in scope\n\n${unverified.join('\n')}\n` };
+        const section = (title: string, content: string) => content ? `\n# ${title}\n\n${content}\n` : '';
+        return { path, meta, raw: '',
+          body: `# Choice\n\n${e.choice}\n\n# Declared rationale\n\n${e.rationale ?? 'Unknown; not declared.'}\n`
+            + section('Alternatives', e.alternatives.join('\n'))
+            + section('Documented here', links(path, about))
+            + section('Decided alongside', links(path, together))
+            + section('Declared evidence not in scope', unverified.join('\n')) };
       });
       // The wiki carries what the task decided, never a transcript of it. The open/close pair is
       // already durable in .wikipoke/events and counted in the attention signal, and a page

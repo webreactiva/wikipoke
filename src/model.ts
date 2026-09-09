@@ -1,8 +1,11 @@
 import { z } from 'zod';
 
+// Three types, and each one earns its place by being read somewhere: `depends_on` widens the
+// planning context and is checked for cycles, `supersedes` orders replacements, `related_to` is the
+// symmetric catch-all. The other eight were vocabulary nothing wrote and nothing read. Everything
+// else that connects two pages is a link in the body, where a reader can follow it.
 export const relationSchema = z.object({
-  type: z.enum(['part_of', 'depends_on', 'implements', 'motivated_by', 'supersedes',
-    'contradicts', 'related_to', 'asks_about', 'answers', 'records', 'prompted_by']),
+  type: z.enum(['depends_on', 'supersedes', 'related_to']),
   target: z.string().min(1), evidence: z.array(z.string()).default([]),
   basis: z.enum(['observed', 'inferred']).default('inferred'),
 });

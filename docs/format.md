@@ -61,16 +61,28 @@ lifecycle in `wikipoke.decision`. Missing rationale is represented as unknown.
 A decision's declared evidence is resolved against the inventory and becomes
 real provenance in `sources`, pinned at the hash the code had when the choice was
 made — so a decision drifts when the code behind it moves, and evidence naming a
-file outside scope stays in the body as declared and unverified. From that the
-page also gains `related_to` relations, `basis: observed`, to the pages that
-document the same sources and to the other decisions recorded under the same
-task. Without them a decision page is a node with no edges, and a wiki full of
-them has a graph that cannot be read. A decision never counts towards coverage:
+file outside scope stays in the body as declared and unverified. The page then
+links, in its body, to the pages documenting that same code and to the other
+choices recorded under the same task. A decision never counts towards coverage:
 it cites the code it was about, not the code it documents.
 
 An answer may cite a source id or the path of a page. Source ids pin provenance
-in `sources`; a cited page becomes an `asks_about` relation, which is what
-connects an answered question to the knowledge that answered it.
+in `sources`; a cited page is linked from the body under "Answered from".
+
+**Connections between pages are links in the body, not typed relations.** A link
+is something a reader can follow and something Obsidian, GitHub and the graph all
+understand, while a relation in frontmatter is visible only to `graph`. Wikipoke
+writes ordinary relative Markdown links and reads `[[wikilinks]]` as well,
+resolved the way Obsidian resolves them: `[[folder/note]]` from the wiki root and
+`[[note]]` by name across the wiki, with an ambiguous name resolving to nothing.
+Brackets inside code are code.
+
+`wikipoke.relations` remains for the three relationships a link cannot express,
+each one read by something: `depends_on` widens the planning context and is
+checked for cycles, `supersedes` orders replacements and is checked for cycles,
+and `related_to` is the symmetric catch-all — the graph stores one edge per
+symmetric pair and names those types in its `symmetric` field. Wikipoke itself
+writes none of them.
 
 A page whose `type` is `flow` describes an end-to-end sequence rather than a unit
 of code: it cites every source the sequence crosses and explains why the steps

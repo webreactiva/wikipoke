@@ -479,16 +479,17 @@ test('a decision joins the graph through the code it was about', async () => {
   assert.match(page.body, /Declared evidence not in scope[\s\S]*src\/deleted\.ts/);
   const edges = (await wiki.graph()).edges;
   assert.equal(edges.some(e => e.type === 'source' && e.from === page.path && e.to === 'src/main.ts'), true);
-  // `related_to` is symmetric, so the graph stores one edge with its ends in a fixed order.
-  assert.equal(edges.some(e => e.type === 'related_to' &&
-    [e.from, e.to].sort().join(' ') === ['concepts/retries.md', page.path].sort().join(' ')), true);
+  // The connection is a link a reader can follow, not a typed relation only a graph command sees.
+  assert.deepEqual(page.meta.wikipoke.relations, []);
+  assert.match(page.body, /# Documented here\n\n- \[retries\]\(\.\.\/concepts\/retries\.md\)/);
+  assert.equal(edges.some(e => e.type === 'links_to' && e.from === page.path && e.to === 'concepts/retries.md'), true);
 
-  // A second choice under the same task links to the first, in both directions.
+  // A second choice under the same task links to the first, and the first back to it.
   await wiki.capture({ id: 'g2', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T11:00:00Z',
     kind: 'decision', title: 'Jitter the backoff', choice: 'Jitter it.', evidence: ['src/main.ts'] });
-  const both = (await wiki.graph()).edges.filter(e => e.type === 'related_to'
+  const both = (await wiki.graph()).edges.filter(e => e.type === 'links_to'
     && e.from.startsWith('decisions/') && e.to.startsWith('decisions/'));
-  assert.equal(both.length, 1);
+  assert.equal(both.length, 2);
   assert.equal((await wiki.status()).uncovered.length, 0);
 });
 
@@ -499,8 +500,9 @@ test('an answer can cite a page, and the query is connected to what answered it'
   await wiki.answer('cited', { answer: 'Three.', citations: ['src/main.ts', 'concepts/retries.md'], gaps: [] });
   const query = wiki.pages().find(p => p.meta.type === 'query')!;
   assert.deepEqual(query.meta.sources.map(s => s.id), ['src/main.ts']);
+  assert.match(query.body, /# Answered from\n\n- \[retries\]\(\.\.\/concepts\/retries\.md\)/);
   const edges = (await wiki.graph()).edges.filter(e => e.from === query.path);
-  assert.equal(edges.some(e => e.type === 'asks_about' && e.to === 'concepts/retries.md'), true);
+  assert.equal(edges.some(e => e.type === 'links_to' && e.to === 'concepts/retries.md'), true);
   await wiki.ask('Anything else?', 'bad');
   await assert.rejects(wiki.answer('bad', { answer: 'x', citations: ['concepts/nope.md'], gaps: [] }),
     /Unknown citation: concepts\/nope\.md/);
@@ -518,7 +520,7 @@ test('the graph says which relations are symmetric and stops repeating itself', 
   ] });
   const result: any = await wiki.graph();
   // Declared, so a reader can tell "no reciprocal pair" from "recorded in one direction only".
-  assert.deepEqual(result.symmetric, ['related_to', 'contradicts']);
+  assert.deepEqual(result.symmetric, ['related_to']);
   assert.equal(result.edges.filter((e: any) => e.type === 'related_to').length, 1);
   // A provenance edge points at its own evidence, so it no longer restates it.
   assert.deepEqual(result.edges.find((e: any) => e.type === 'source').evidence, []);
@@ -526,4 +528,21 @@ test('the graph says which relations are symmetric and stops repeating itself', 
   const findings = await wiki.lint();
   assert.equal(findings.filter(f => f.code === 'dependency-cycle').length, 2);
   assert.equal(findings.every(f => f.code !== 'replacement-cycle'), true);
+});
+
+test('a wikilink in the body is an edge, and brackets in code are not', async () => {
+  const wiki = await setup();
+  const plan: any = await wiki.ingest();
+  const sources = plan.sources.map(({ content, ...source }: any) => source);
+  const page = (path: string, body: string) => ({ path, meta: { type: 'entity', title: path,
+    description: path, sources, wikipoke: { uid: path, relations: [] } }, body });
+  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [
+    page('concepts/retries.md', 'Bounded, see [[concepts/backoff]] and [[concepts/backoff|the backoff]].\n\n`const x = a[[0]]`\n'),
+    page('concepts/backoff.md', 'Jittered.'),
+  ] });
+  const edges = (await wiki.graph()).edges.filter(e => e.type === 'links_to');
+  assert.deepEqual(edges.map(e => e.to), ['concepts/backoff.md']);
+  // The bracket pair inside inline code is code, not a link to a page called "0".
+  assert.equal(edges.some(e => /0/.test(e.to)), false);
+  assert.deepEqual((await wiki.lint()).filter(f => f.code === 'broken-link'), []);
 });
