@@ -162,19 +162,22 @@ Open one when you expect to record a decision under it.
   graph next to the code and the pages describing it, and what later reports the choice as drifted
   when that code moves. Evidence naming a file outside scope is kept in the body, unverified.
 - A \`decision\` event requires the \`choice\` that was made, and \`evidence\` naming the source files the
-  choice is about. That is what ties a decision to code: source that moved since the sealed checkpoint
-  and appears in no decision's evidence is reported as changed with no reason on record. Capture the
-  decision when you make the change, not in a later documentation pass — a backdated tape explains nothing.
+  choice is about. That is what ties a decision to code, and what later reports the choice as drifted
+  when that code moves. Capture the decision when you make the change, not in a later documentation
+  pass — a backdated tape explains nothing, and by then the reason is gone.
 - Record \`alternatives\` when they were stated.
 - Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`,
   name in that closure's \`evidence\` the source files it covers, and explain in \`rationale\` why no
   reason is on record. That is a real answer and it settles those files: Wikipoke keeps absent
-  rationale as unknown rather than guessing, and that is the point. Never invent a decision to get
-  past a blocked stop — a fabricated reason is worse than a recorded absence.
+  rationale as unknown rather than guessing, and that is the point. Never invent one — a fabricated
+  reason is worse than a recorded absence.
 - A task that records no decision publishes no page: the events are kept, and \`capture\` answers
   \`materialized: false\`. Do not open and close empty tasks to look thorough — it writes nothing
-  and only shows up as incomplete capture.
-- An \`open\` event without a matching \`close\` shows up as incomplete capture in the attention signal.
+  and only shows up as incomplete capture in \`status\`.
+- An \`open\` event without a matching \`close\` shows up there the same way.
+- Nothing asks you for this. Wikipoke records a decision when you have one and never nags for one you
+  do not: a reason invented to satisfy a reminder is the failure this command exists to avoid. A
+  project that does want to be asked attaches its own script — see \`docs/extensions.md\`.
 `,
 };
 
@@ -217,9 +220,6 @@ if [ -d "$root/.wikipoke/write.lock" ]; then
   echo "Wikipoke: the writer lock is held, so every Wikipoke command will fail. If no other agent is running, release it with: wikipoke recover --unlock"
   exit 0
 fi
-case "$(cat "$root/wikipoke.config.yaml" 2>/dev/null)" in
-  *"capture: off"*) echo "Wikipoke: decision capture is off in wikipoke.config.yaml, so nothing will record why the code changes." ;;
-esac
 $cli --root "$root" maintain --once >/dev/null 2>&1 || exit 0
 node -e '
 const fs = require("node:fs");
@@ -229,103 +229,10 @@ try {
   if (s.uncovered?.count) owed.push(s.uncovered.count + " undocumented source(s)");
   if (s.drift?.count) owed.push(s.drift.count + " page(s) citing moved code");
   if (s.findings?.error) owed.push(s.findings.error + " error finding(s)");
-  if (s.unexplained?.count) owed.push(s.unexplained.count + " changed source(s) with no decision recorded");
-  if (s.tasks?.incomplete) owed.push(s.tasks.incomplete + " task(s) without a recorded decision");
   if (s.flows?.missing) owed.push("no flow page describing how the code runs end to end");
   if (owed.length) process.stdout.write("Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile; the full signal is in .wikipoke/attention.json.\\n");
 } catch { /* no signal yet is not a problem worth reporting */ }
 ' "$root/.wikipoke/attention.json" 2>/dev/null
-exit 0
-`;
-// Two halves of the same job. This one runs on every edit, so it does the least work that is still
-// useful: no config parse, no Git, no writer lock, no wikipoke import - one appended line naming the
-// file a tool touched. Scope and meaning are resolved later, by whoever reads the journal.
-const journalScript = `#!/bin/sh
-# ${marker}; records which files a tool touched. Never runs an LLM and never fails a tool.
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -f "$root/wikipoke.config.yaml" ] || exit 0
-command -v node >/dev/null 2>&1 || exit 0
-node -e '
-let raw = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", chunk => { raw += chunk; });
-process.stdin.on("end", () => {
-  try {
-    const fs = require("node:fs"), path = require("node:path");
-    const event = JSON.parse(raw), input = event.tool_input || {};
-    const file = input.file_path || input.notebook_path || input.path;
-    if (!file) return;
-    // A repository reached through a symlinked parent - /tmp on macOS, a linked checkout anywhere -
-    // answers rev-parse with the real path while the harness reports the one the user typed. Compared
-    // as written, every edit in such a tree looks like it happened outside the project.
-    const real = target => { try { return fs.realpathSync(target); } catch { return path.resolve(target); } };
-    const root = real(process.argv[1]);
-    const rel = path.relative(root, real(path.resolve(root, file)));
-    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return;
-    const id = String(event.session_id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 96) || "unknown";
-    const directory = path.join(root, ".wikipoke", "journal");
-    fs.mkdirSync(directory, { recursive: true });
-    fs.appendFileSync(path.join(directory, id + ".jsonl"), JSON.stringify({
-      at: new Date().toISOString(), file: rel.split(path.sep).join("/"),
-      tool: event.tool_name || "edit", actor: "agent/claude-code", session: id,
-    }) + "\\n");
-  } catch { /* a journal line is never worth failing an edit over */ }
-});
-' "$root" 2>/dev/null
-exit 0
-`;
-// The other half, and the whole point of the pair: it runs once, when the agent tries to stop, which
-// is the last moment the reason for a change still exists anywhere. \`block\` sends the agent back to
-// record it; \`remind\` only tells the human. Reconstructing the same rationale tomorrow from a diff
-// is exactly the fiction Wikipoke refuses to write.
-const stopScript = `#!/bin/sh
-# ${marker}; asks for the reason while the agent that made the change is still running.
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -f "$root/wikipoke.config.yaml" ] || exit 0
-command -v node >/dev/null 2>&1 || exit 0
-node -e '
-let raw = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", chunk => { raw += chunk; });
-process.stdin.on("end", () => {
-  try {
-    const cp = require("node:child_process"), fs = require("node:fs"), path = require("node:path");
-    const root = process.argv[1];
-    let event = {};
-    try { event = JSON.parse(raw); } catch { return; }
-    // A stop that was already blocked once has had its chance; asking again is how a hook loops.
-    if (event.stop_hook_active) return;
-    const id = String(event.session_id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 96);
-    if (!id) return;
-    // Never block against a command that cannot run. capture takes the writer lock and journal does
-    // not, so with the lock held the agent would be ordered to record a decision by a tool that
-    // answers "Wiki writer locked" - trapped between an instruction and a broken command.
-    if (fs.existsSync(path.join(root, ".wikipoke", "write.lock"))) {
-      process.stdout.write(JSON.stringify({ systemMessage: "Wikipoke: the writer lock is held, so this turn was not checked for unrecorded decisions." }) + "\\n");
-      return;
-    }
-    const local = path.join(root, "node_modules", ".bin", "wikipoke");
-    const bin = fs.existsSync(local) ? local : "npx";
-    const head = bin === "npx" ? ["--no-install", "wikipoke"] : [];
-    let out = "";
-    try {
-      out = cp.execFileSync(bin, head.concat(["--root", root, "journal", "--session", id]),
-        { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"] });
-    } catch { return; }
-    let report = {};
-    try { report = JSON.parse(out); } catch { return; }
-    const pending = report.unexplained || [];
-    if (report.mode === "off" || !pending.length) return;
-    const reason = "Wikipoke: this session changed " + pending.length +
-      " source file(s) with no decision recorded: " + pending.slice(0, 10).join(", ") +
-      ". Capture the choice with the wikipoke-decision skill, naming those files as evidence." +
-      " If nobody stated a reason, close the task with none_declared, name those same files in the" +
-      " evidence of that closure, and say why no reason is on record. Do not invent one.";
-    if (report.mode === "block") process.stdout.write(JSON.stringify({ decision: "block", reason }) + "\\n");
-    else process.stdout.write(JSON.stringify({ systemMessage: reason }) + "\\n");
-  } catch { /* a missing journal is not a reason to trap an agent in its turn */ }
-});
-' "$root" 2>/dev/null
 exit 0
 `;
 const briefingCommand = `sh ${briefing}`;
@@ -333,10 +240,10 @@ const briefingCommand = `sh ${briefing}`;
 // real lifecycle hook there instead of an instruction a human has to remember to paste. The plugin
 // runs the same no-LLM script, once per session: refreshing on every turn would take the writer lock
 // out from under the agent's own Wikipoke commands.
-const pluginScript = `// ${marker}; briefs the agent and records which sources it edits.
+const pluginScript = `// ${marker}; briefs the agent with what the wiki owes.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // The briefing runs the maintenance pass, which takes the writer lock, so it runs once per session.
 // But debt appears mid-session - the first page published is what makes a missing flow reportable -
@@ -363,8 +270,6 @@ function brief(key, directory) {
     if (signal.uncovered && signal.uncovered.count) owed.push(signal.uncovered.count + " undocumented source(s)");
     if (signal.drift && signal.drift.count) owed.push(signal.drift.count + " page(s) citing moved code");
     if (signal.findings && signal.findings.error) owed.push(signal.findings.error + " error finding(s)");
-    if (signal.unexplained && signal.unexplained.count) owed.push(signal.unexplained.count + " changed source(s) with no decision recorded");
-    if (signal.tasks && signal.tasks.incomplete) owed.push(signal.tasks.incomplete + " task(s) without a recorded decision");
     if (signal.flows && signal.flows.missing) owed.push("no flow page describing how the code runs end to end");
     line = owed.length ? "Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile;" +
       " the full signal is in .wikipoke/attention.json." : "";
@@ -372,65 +277,10 @@ function brief(key, directory) {
   refreshed.set(key, { at: now, line });
   return line;
 }
-// OpenCode exposes no hook that can refuse a stop, so the debt is put where the agent cannot miss it
-// instead: its own system prompt, refreshed at most once a minute. \`journal\` takes no writer lock,
-// which is what makes asking this repeatedly while the agent works safe.
-const owed = new Map();
-function debt(directory, sessionID) {
-  const now = Date.now(), cached = owed.get(sessionID);
-  if (cached && now - cached.at < 60000) return cached.line;
-  let line = "";
-  try {
-    const local = join(directory, "node_modules", ".bin", "wikipoke");
-    const bin = existsSync(local) ? local : "npx";
-    const head = bin === "npx" ? ["--no-install", "wikipoke"] : [];
-    const out = execFileSync(bin, head.concat(["--root", directory, "journal", "--session", sessionID]),
-      { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"] });
-    const report = JSON.parse(out), pending = report.unexplained || [];
-    if (report.mode !== "off" && pending.length)
-      line = "Wikipoke: this session has changed " + pending.length + " source file(s) with no decision recorded: " +
-        pending.slice(0, 10).join(", ") + ". Capture the choice with the wikipoke-decision skill, naming those" +
-        " files as evidence, before you finish. If there is no decision worth keeping, close the task with" +
-        " none_declared and say why.";
-  } catch { line = ""; }
-  owed.set(sessionID, { at: now, line });
-  return line;
-}
-const editing = new Set(["edit", "write", "patch", "multiedit", "notebookedit"]);
-function record(directory, sessionID, tool, args) {
-  try {
-    // Tool argument names are not part of the plugin contract, so every plausible spelling is tried
-    // and an unrecognised shape is simply not journalled. A missed line is cheaper than a thrown hook.
-    const file = args && (args.filePath || args.file_path || args.path || args.file || args.notebookPath);
-    if (typeof file !== "string" || !file) return;
-    const root = realpathSync(directory);
-    let target;
-    try { target = realpathSync(resolve(root, file)); } catch { target = resolve(root, file); }
-    const rel = relative(root, target);
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return;
-    const id = String(sessionID || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 96) || "unknown";
-    const directory_ = join(root, ".wikipoke", "journal");
-    mkdirSync(directory_, { recursive: true });
-    appendFileSync(join(directory_, id + ".jsonl"), JSON.stringify({
-      at: new Date().toISOString(), file: rel.split(sep).join("/"),
-      tool: String(tool || "edit"), actor: "agent/opencode", session: id,
-    }) + "\\n");
-  } catch { /* a journal line is never worth failing an edit over */ }
-}
-
 export const wikipoke = async ({ directory }) => ({
   "experimental.chat.system.transform": async (input, output) => {
-    const session = input?.sessionID;
-    const signal = brief(session ?? directory, directory);
+    const signal = brief(input?.sessionID ?? directory, directory);
     if (signal) output.system.push(signal);
-    if (session) {
-      const pending = debt(directory, session);
-      if (pending) output.system.push(pending);
-    }
-  },
-  "tool.execute.after": async (input) => {
-    if (!editing.has(String(input?.tool ?? "").toLowerCase())) return;
-    record(directory, input.sessionID, input.tool, input.args);
   },
 });
 export default wikipoke;
@@ -448,6 +298,14 @@ never runs a model, and stays silent when the wiki owes no work.
 const settingsScript = (command: string) => `${JSON.stringify({
   hooks: {
     SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command, timeout: 20 }] }],
+  },
+}, null, 2)}\n`;
+// What an older release wrote into the same file: the briefing plus a hook on every edit and a hook
+// that refused every stop. Recognised by exact content and only there, so an upgrade can take its own
+// automation back out of a file it wrote, and leave a file it did not write alone.
+const legacySettings = `${JSON.stringify({
+  hooks: {
+    SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command: `sh ${briefing}`, timeout: 20 }] }],
     PostToolUse: [{ matcher: 'Edit|Write|MultiEdit|NotebookEdit', hooks: [{ type: 'command', command: `sh ${journal}`, timeout: 10 }] }],
     Stop: [{ hooks: [{ type: 'command', command: `sh ${stop}`, timeout: 30 }] }],
   },
@@ -480,12 +338,6 @@ export function hookActive(root: string): boolean {
 }
 export function briefingActive(root: string): boolean {
   return read(resolve(root, settings))?.includes(briefing) ?? false;
-}
-// The pair only works together: a journal nobody reads at the end of a turn records edits into a
-// file, and a stop hook with no journal has nothing to confront the agent with.
-export function captureActive(root: string): boolean {
-  const configured = read(resolve(root, settings));
-  return !!configured && configured.includes(journal) && configured.includes(stop);
 }
 // A commit carrying the writer lock clones into a repository that is locked from birth: every
 // command fails and the session briefing - the one channel anyone reads - stays silent, because
@@ -527,12 +379,14 @@ export function install(root: string): InstallReport {
     activeHook = true;
   } else if (hookActive(root)) activeHook = true;
   else manual.push(`Compose ${relative(root, hook)} from the project's existing post-commit hook manager.`);
-  for (const [path, content] of [[briefing, briefingScript], [journal, journalScript], [stop, stopScript]] as const) {
-    const target = store.path(path);
-    atomic(target, content);
-    chmodSync(target, 0o755);
-  }
   const brief = store.path(briefing);
+  atomic(brief, briefingScript);
+  chmodSync(brief, 0o755);
+  // Upgrading from a release that wrote a hook on every edit and a hook on every stop. Leaving those
+  // scripts on disk would leave them running: the harness config still points at them, and a file
+  // Wikipoke wrote and no longer installs is Wikipoke's to take away.
+  const retired = [journal, stop].filter(path => read(store.path(path)) !== null);
+  for (const path of retired) { rmSync(store.path(path)); }
   // Composition, not adoption: a harness config the project already owns is never rewritten,
   // because a settings file carries permissions and hooks that are none of Wikipoke's business.
   let activeBriefing = briefingActive(root);
@@ -541,8 +395,17 @@ export function install(root: string): InstallReport {
     atomic(configured, settingsScript(briefingCommand));
     activeBriefing = true;
   } else if (!activeBriefing) {
-    manual.push(`Claude Code: ${settings} already exists and was left unchanged. Add three hooks to it by hand: SessionStart running \`${briefingCommand}\`, PostToolUse on Edit|Write|MultiEdit|NotebookEdit running \`sh ${journal}\`, and Stop running \`sh ${stop}\`. Without the last two, a decision is only captured when somebody remembers to, which is after the reason is gone.`);
+    manual.push(`Claude Code: ${settings} already exists and was left unchanged. Add one hook to it by hand: SessionStart running \`${briefingCommand}\`.`);
   }
+  // The same upgrade, in the file the hooks were wired from. Rewritten only when its content is
+  // exactly what an older Wikipoke wrote - anything a human has since touched is theirs, and gets a
+  // named step instead of an edit.
+  const previous = read(configured);
+  if (previous === legacySettings) atomic(configured, settingsScript(briefingCommand));
+  else if (previous !== null && (previous.includes(journal) || previous.includes(stop))) {
+    manual.push(`Claude Code: ${settings} still runs \`${journal}\` and \`${stop}\`, which Wikipoke no longer installs. Remove those two hooks by hand; the file carries settings Wikipoke did not write, so it was left unchanged.`);
+  }
+  if (retired.length) manual.push(`Removed ${retired.join(' and ')}: automatic decision capture is no longer built in. Attach your own script instead - see docs/extensions.md.`);
   // These two harnesses auto-discover a file of their own, so the briefing pushes itself rather than
   // waiting for a human to paste an instruction that, unpasted, means nothing happens at all.
   for (const [path, content] of [[opencodePlugin, pluginScript], [cursorRule, cursorScript]] as const) {
@@ -578,6 +441,8 @@ export function uninstall(root: string): UninstallReport {
   for (const home of ['.agents/skills', '.agents', '.claude/skills']) prune(store.path(home));
   const hook = store.path(notifier);
   if (read(hook) !== null) { rmSync(hook); removed.push(relative(root, hook)); prune(dirname(hook)); }
+  // `journal` and `stop` are no longer installed; they stay in this list so a project that still
+  // carries them from an older release is left clean rather than half-uninstalled.
   for (const path of [briefing, journal, stop]) {
     const target = store.path(path);
     if (read(target) !== null) { rmSync(target); removed.push(relative(root, target)); prune(dirname(target)); }
@@ -590,7 +455,7 @@ export function uninstall(root: string): UninstallReport {
   }
   const configured = store.path(settings);
   const old_ = read(configured);
-  if (old_ !== null && old_ === settingsScript(briefingCommand)) { rmSync(configured); removed.push(settings); prune(dirname(configured)); }
+  if (old_ !== null && (old_ === settingsScript(briefingCommand) || old_ === legacySettings)) { rmSync(configured); removed.push(settings); prune(dirname(configured)); }
   else if (old_ !== null && old_.includes(briefing)) { preserved.push(settings); manual.push(`Remove the ${briefing} session hook from ${settings} by hand: the file carries settings Wikipoke did not write.`); }
   try {
     const target = `${hookPath(root)}/post-commit`, old = read(target);

@@ -8,7 +8,7 @@ import { Wiki } from './wiki.js';
 import { configSchema } from './model.js';
 import { answerSchema, eventSchema, extensionSchema, patchSchema } from './model.js';
 import { z } from 'zod';
-import { briefingActive, captureActive, hookActive, install, uninstall } from './integrations.js';
+import { briefingActive, hookActive, install, uninstall } from './integrations.js';
 import { dispatch } from './extensions.js';
 import type { ExtensionEvent } from './model.js';
 import { Store } from './runtime/store.js';
@@ -120,17 +120,6 @@ program.command('schema <kind>').description('emit the JSON schema for an agent-
     else if (kind === 'event') output(z.toJSONSchema(eventSchema));
     else throw new Error('Schema kind must be patch, answer or event');
   } catch (error) { fail(error); } });
-program.command('note').description('record one observed file edit in the journal, without an LLM')
-  .requiredOption('--file <path>', 'source file the agent touched')
-  .option('--session <id>', 'harness session identity').option('--tool <name>', 'tool that made the edit', 'edit')
-  .option('--actor <name>', 'who made the edit', 'unknown')
-  .action(options => { try {
-    output(new Wiki(root()).note({ at: new Date().toISOString(), file: options.file,
-      tool: options.tool, actor: options.actor, session: options.session }));
-  } catch (error) { fail(error); } });
-program.command('journal').description('report which touched sources still carry no recorded decision')
-  .option('--session <id>', 'limit to one harness session')
-  .action(async options => { try { output(await new Wiki(root()).touched(options.session)); } catch (error) { fail(error); } });
 program.command('capture').description('persist and materialize a task event')
   .requiredOption('--event <file>', 'event JSON file')
   .action(async options => { try {
@@ -177,7 +166,6 @@ program.command('doctor').description('report environment and configured capabil
       config: configured ? 'wikipoke.config.yaml' : null, wiki: null,
       hook: '.wikipoke/hooks/post-commit', hookComposed: hookActive(path),
       briefing: '.wikipoke/hooks/session-start', briefingComposed: briefingActive(path),
-      capture: ['.wikipoke/hooks/tool-journal', '.wikipoke/hooks/session-stop'], captureComposed: captureActive(path),
       extensions: [] as unknown[], pending: null, problems };
     if (Number(process.versions.node.split('.')[0]) < 22) problems.push(`Node 22 or later is required; running ${process.version}.`);
     if (!version) problems.push('Git is not on PATH; Wikipoke reads every source from Git.');
@@ -185,7 +173,6 @@ program.command('doctor').description('report environment and configured capabil
     if (!configured) problems.push('No wikipoke.config.yaml; run init to configure the wiki.');
     if (!report.hookComposed) problems.push('No post-commit hook composes .wikipoke/hooks/post-commit; the attention signal will not refresh on commit.');
     if (!report.briefingComposed) problems.push('No agent harness runs .wikipoke/hooks/session-start; an agent will open a session without the attention signal.');
-    if (!report.captureComposed) problems.push('No agent harness runs .wikipoke/hooks/tool-journal and .wikipoke/hooks/session-stop; decisions will only be captured when somebody remembers to, which is after the reason is gone.');
     if (configured) {
       try {
         const raw = parse(readFileSync(configPath, 'utf8')) as { wiki?: string; extensions?: unknown };

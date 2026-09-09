@@ -20,7 +20,7 @@ export function revision(root: string, ref = 'HEAD'): string {
   return git(root, 'rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`).trim();
 }
 function matches(path: string, pattern: string): boolean { return minimatch(path, pattern, { dot: true }); }
-export function ignored(name: string, config: Config): boolean {
+function ignored(name: string, config: Config): boolean {
   return name === config.wiki || name.startsWith(config.wiki + '/') || name.startsWith('.wikipoke/') ||
     name.startsWith('.git/') || name === 'wikipoke.config.yaml' ||
     !config.include.some(p => matches(name, p)) || config.exclude.some(p => matches(name, p)) ||
@@ -52,12 +52,6 @@ function contents(root: string, group: Blob[]): Buffer {
   const bytes = group.reduce((total, blob) => total + blob.size, 0);
   return execFileSync('git', ['-C', root, 'cat-file', '--batch'],
     { input: group.map(blob => blob.oid).join('\n') + '\n', maxBuffer: bytes + group.length * 128 + 4096 });
-}
-// Which included sources moved between two commits. Deterministic and cheap: one `git diff`, no
-// blob reads, because the caller only needs the names to match against what was explained.
-export function changed(root: string, config: Config, from: string, to = 'HEAD'): string[] {
-  const rows = git(root, 'diff', '--name-only', '-z', `${from}..${to}`).split('\0').filter(Boolean);
-  return rows.filter(name => !ignored(name, config));
 }
 // In-scope source that differs from what is committed. The inventory reads the committed tree, so
 // an agent documenting code it just wrote would describe the previous version - and a commit later

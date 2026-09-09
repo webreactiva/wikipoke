@@ -56,13 +56,6 @@ export type Extension = z.infer<typeof extensionSchema>;
 export const configSchema = z.object({
   version: z.literal(1), wiki: z.string().default('wiki'), language: z.string().default('en'),
   include: z.array(z.string()).min(1), exclude: z.array(z.string()).default([]),
-  // What happens when an agent stops having touched source it never explained. `block` is the default
-  // because a reminder demonstrably is not enough: given a correct notice naming all ten files it had
-  // just changed, an agent finished the turn anyway and, asked why, answered "no valid excuse - I
-  // focused on implementing and let the notice pass". Rationale is not skipped on purpose; it is
-  // skipped because finishing the task is what has the agent's attention. `remind` tells the human
-  // instead, and `off` says nothing.
-  capture: z.enum(['off', 'remind', 'block']).default('block'),
   // Empty by default and empty in most projects: Wikipoke does the deterministic work itself, and
   // whatever a particular team wants to happen around it is theirs to attach, not the tool's to guess.
   extensions: z.array(extensionSchema).default([]),
@@ -73,13 +66,6 @@ export type Config = z.infer<typeof configSchema>;
 export const patchSchema = z.object({ pages: z.array(z.object({
   path: z.string(), meta: pageSchema, body: z.string(),
 })), revision: z.string().optional(), findings: z.array(z.string()).default([]) });
-// One observed edit. Written by a harness hook the moment a tool touches a file, so it carries what
-// the hook can see — never a reason, which only the agent has and only while it is still working.
-export const touchSchema = z.object({
-  at: z.string().min(1), file: z.string().min(1), tool: z.string().default('edit'),
-  actor: z.string().default('unknown'), session: z.string().optional(),
-});
-export type Touch = z.infer<typeof touchSchema>;
 export const answerSchema = z.object({ answer: z.string().min(1),
   citations: z.array(z.string()), gaps: z.array(z.string()).default([]) });
 export const eventSchema = z.object({

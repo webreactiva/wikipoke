@@ -190,3 +190,65 @@ Written the same day as the work, from the trials it came out of. No gate moved.
   `unexplained: 0`, and a query answered and retained citing both a page and
   three files. The wiki it produced was shaped like the file tree, which is why
   `mirrors-the-tree` exists.
+
+## 2026-09-09 — automatic decision capture removed; extension points added
+
+Daniel's decision, taken today: making the system manage the agent's decisions
+through a journal was too much complexity, and putting it on automatic loaded
+every execution for something that should be opt-in. The instruction was to
+remove it, and — before that — to open Wikipoke so an interested party can
+attach their own scripts at the critical action points.
+
+- **Extensions first, removal second.** The order was Daniel's and it is the
+  right one: the thing being removed becomes the first thing the new surface has
+  to be able to carry. A project declares a script in `wikipoke.config.yaml`
+  under `extensions` — an `event`, a `run` command, an optional `timeout`, and
+  `blocking` on a `.before` event only. Twelve events, on either side of the
+  actions that write something.
+
+- **Declared, not discovered.** A directory whose contents run is a directory
+  anything can be dropped into, and `doctor` could never say which of those files
+  was meant to be there. As configuration, the attached set is listed by `doctor`
+  and an entry it cannot read is named as a problem.
+
+- **The payload is a summary, never the command's output.** An `ingest` plan
+  carries the full text of every source in its batch. Piping that into every
+  extension on every pass would rebuild, in the new surface, exactly the cost
+  that got the old one removed.
+
+- **Dispatch happens outside the writer lock**, in the CLI rather than inside
+  `Wiki`. A script called with the lock held would be handed a lifecycle event
+  and a tool that answers `Wiki writer locked` — an instruction it cannot carry
+  out. That is the same trap the old stop hook had to work around, and it is
+  designed out here rather than worked around again.
+
+- **What was removed**, in three layers. Observation: the `tool-journal` hook,
+  the OpenCode plugin's `tool.execute.after` recorder, `.wikipoke/journal/`,
+  `note`, `Wiki.note`, `Wiki.journal`, `touchSchema`. Pressure: the
+  `session-stop` hook and its `decision: block`, the plugin's system-prompt debt
+  line, the `capture: off | remind | block` setting, the `journal` command,
+  `Wiki.touched`, `captureActive`, and `doctor`'s capture rows. Accounting:
+  `health().unexplained` and the `git diff` against the checkpoint that ran on
+  every commit, plus the `unexplained` and `tasks` fields of `attention.json`
+  and the briefing lines reading them.
+
+- **What was kept, and why.** `capture`, the event tape, decision pages and the
+  generated `log.md` all stay. They cost nothing when unused: they run when an
+  agent invokes them and never otherwise. The `wikipoke-decision` skill stays
+  too, with the sentences that leaned on a blocked stop rewritten — it now says
+  plainly that nothing will ask, and points at `docs/extensions.md` for a project
+  that wants to be asked. `status` still reports incomplete task capture; the
+  attention signal, refreshed on every commit, no longer does.
+
+- **The `block` default was right on its own evidence and is still being
+  removed.** The trial that justified it stands: an agent given a correct notice
+  naming all ten files it had just changed finished the turn anyway, twice. What
+  the trial never established is that every project should pay a hook on every
+  edit and a hook on every turn end for it. That is a product decision, and it
+  went the other way.
+
+- **Upgrades are handled rather than left.** `install` deletes the two retired
+  hook scripts when it finds them, and rewrites `.claude/settings.json` when that
+  file is still byte-for-byte what an older Wikipoke wrote. A settings file
+  anyone has since edited is left untouched and named as a manual step: Wikipoke
+  takes back what it wrote and nothing else.

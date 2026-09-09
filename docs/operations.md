@@ -40,46 +40,28 @@ except by `snapshot` itself, and a label can only be captured once.
 
 Historical external sources remain subject to their own retention/access rules.
 
-## Changes nobody explained
+## Nothing asks for a decision
 
-A decision event's `evidence` names the source files the choice was about. Once
-`seal` has recorded a checkpoint, Wikipoke compares the source that moved since
-that commit against the evidence of every decision event, and reports what is
-left as changed with no reason on record — in `status`, in the attention signal,
-and in the session briefing.
+Wikipoke records a choice when an agent has one and never asks for one it does
+not. It used to: a hook on every file edit kept a journal of what was touched, a
+hook on every turn end read that journal back and refused to let the agent stop
+while anything in it was unexplained, and the attention signal carried the running
+total. It was correct and it was paid for on every execution by every project,
+whether or not that project wanted it.
 
-The comparison stays silent until a checkpoint exists. Capture explains work done
-with the wiki in place; code that predates it cannot be explained after the fact,
-and a backdated event tape is bookkeeping, not knowledge.
+That machinery is gone. `capture` is unchanged: a decision event still pins its
+`evidence` into the page's `sources`, still joins the graph next to the code it is
+about, and still drifts when that code moves. What no longer happens is anybody
+being made to write one.
 
-## What an agent touched, before any commit
-
-That comparison needs a commit and a sealed checkpoint, which is too late to ask
-anyone why. The journal answers the same question earlier and from observation
-rather than declaration:
-
-```sh
-wikipoke journal --session ses_01H...
-```
-
-It reports the in-scope files a session edited, and which of them no decision
-claims. Entries come from the `tool-journal` hook, which appends one unfiltered
-line per edit; `include`, `exclude` and the wiki path are applied when the
-journal is read, so a hook that runs on every keystroke of an agent's work never
-parses a configuration file.
-
-Omit `--session` for every session on record. `capture` in
-`wikipoke.config.yaml` — `off`, `remind` or `block` — decides what
-`session-stop` does with the answer.
+A project that does want to be asked builds it: its harness's own edit and stop
+hooks, and Wikipoke's `capture.after` event to know when a decision landed. See
+[extensions](./extensions.md).
 
 ## Growth, and what maintenance does about it
 
-Both durable inputs only ever grow, so `maintain --once` — which already runs
-after every commit — keeps them in check and reports what it did as `pruned`.
-
-A session's journal is observation, not knowledge: once every in-scope file it
-recorded is explained by a decision or by a closure declaring none, it has done
-its job and is removed. The tape of decisions survives it.
+The event tape only ever grows, so `maintain --once` — which already runs after
+every commit — keeps it in check and reports what it did as `pruned`.
 
 Events are knowledge and are never deleted. The events of a task that is closed
 are folded into `.wikipoke/events/archive/<year-month>.jsonl`, one file per

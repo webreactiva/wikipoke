@@ -84,14 +84,11 @@ transcribed into a page: a task's open and close events are process, not
 knowledge. Open and close events make incomplete capture visible in
 `wikipoke status`.
 
-The `tool-journal` hook records which files an agent edited, and the
-`session-stop` hook reads that journal when the agent tries to finish. Under
-OpenCode the plugin does both halves, except that nothing there can refuse a
-stop, so `block` degrades to a line in the agent's system prompt. What it
-does then is `capture` in the configuration: `remind` states the debt to the
-human, `block` sends the agent back to record the reason while it still has one,
-and `off` disables the prompt. `wikipoke journal` reports the same thing on
-demand, for one session or for all of them.
+Nothing asks for a decision. Wikipoke records one when an agent has one and never
+nags for one it does not: a reason invented to satisfy a reminder is worse than a
+recorded absence. If your project wants to be asked — at the end of a turn, before
+a release, wherever it makes sense — attach a script of your own; see
+[extensions](./extensions.md).
 
 ## Maintain and release
 

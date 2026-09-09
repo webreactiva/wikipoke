@@ -84,3 +84,19 @@ cannot carry out. That trap is the reason this surface exists rather than more b
 
 One consequence worth stating: a `blocking` extension holds up the command for as long as it runs,
 bounded by its `timeout`. Attach slow work to an `.after` event and let it detach itself.
+
+## What this replaces
+
+Automatic decision capture used to be built in: a hook on every file edit wrote a journal, a hook on
+every turn end read it back and refused to let the agent stop, and the attention signal carried the
+running total. It was a correct idea paid for on every single execution by every project, whether or
+not that project wanted it.
+
+It is now something a project attaches. The pieces Wikipoke keeps are the ones that are pure gain when
+unused: `wikipoke capture` still records a decision when an agent has one, decision pages still join
+the graph next to the code they are about, and `log.md` is still generated from the tape. What is gone
+is the machinery that made all of that happen whether anyone asked for it or not.
+
+A project that wants the old behaviour back builds it on the harness's own hooks — Claude Code's
+`PostToolUse` and `Stop`, an OpenCode plugin — and on `capture.after` here, which is where Wikipoke can
+tell it that a decision landed.

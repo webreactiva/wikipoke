@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { rmSync } from 'node:fs';
 import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { configSchema, patchSchema, answerSchema, eventSchema, touchSchema,
-  type Config, type Metadata, type Page, type SourceMeta, type Touch } from './model.js';
+import { configSchema, patchSchema, answerSchema, eventSchema,
+  type Config, type Metadata, type Page, type SourceMeta } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { changed, ignored, manifest, sourcesFor, revision, uncommitted, git } from './sources/git.js';
+import { manifest, sourcesFor, revision, uncommitted, git } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
@@ -24,7 +23,6 @@ function sameDigest(mine?: string, theirs?: string): boolean {
   if (mine.length < 8 || theirs.length < 8) return mine === theirs;
   return mine.startsWith(theirs) || theirs.startsWith(mine);
 }
-const sessionFile = (session?: string) => (session ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 96) || 'unknown';
 const SAMPLE = 10;
 function slug(value: string): string {
   const result = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -214,25 +212,12 @@ export class Wiki {
       return lint(pages, unreadable, manifest(this.root, this.config).sources.length);
     });
   }
-  // Both durable inputs only ever grow. The journal is observation, not knowledge: once every file a
-  // session touched is explained, its entries have done their job and the tape of decisions is what
-  // survives. Events are knowledge and are never deleted - they are folded into one file per month,
-  // because ten thousand files in a flat directory is what makes reading them expensive, not their
-  // content. Only tasks that are closed and materialized are folded, so nothing in flight moves.
-  private prune(): { journals: number; archived: number } {
-    const directory = this.store.path('.wikipoke/journal');
-    const events = this.events();
-    const explained = new Set(events.filter(e => e.kind === 'decision' ||
-      (e.kind === 'close' && e.closure === 'none_declared')).flatMap(e => e.evidence));
-    let journals = 0;
-    for (const file of files(directory).filter(f => f.endsWith('.jsonl'))) {
-      const entries = (read(file) ?? '').split('\n').filter(Boolean).flatMap(line => {
-        try { return [touchSchema.parse(JSON.parse(line))]; } catch { return []; }
-      });
-      const owed = entries.some(t => !ignored(t.file, this.config) && !explained.has(t.file));
-      if (!owed && entries.length) { rmSync(file); journals += 1; }
-    }
-    return { journals, archived: this.archive(events) };
+  // The event tape only ever grows, and it is knowledge: nothing here is deleted. Events are folded
+  // into one file per month, because ten thousand files in a flat directory is what makes reading
+  // them expensive, not their content. Only tasks that are closed are folded, so nothing in flight
+  // moves.
+  private prune(): { archived: number } {
+    return { archived: this.archive(this.events()) };
   }
   private archive(events: Event[]): number {
     const closed = new Set(events.filter(e => e.kind === 'close').map(e => e.task));
@@ -263,16 +248,13 @@ export class Wiki {
       const pruned = this.prune();
       const health = this.health(), path = '.wikipoke/attention.json';
       const count = (severity: string) => health.findings.filter(f => f.severity === severity).length;
-      const incomplete = health.tasks.filter(t => t.closure === 'incomplete').map(t => t.task);
       // Flows are counted, not sampled: their absence is one fact, and it is the one kind of pending
       // work a diff can never raise, because nothing goes uncovered when a flow is missing.
       const flows = { count: health.flows, missing: health.findings.some(f => f.code === 'no-flows') };
       const signal = { at: stamp(), revision: health.revision, checkpoint: health.checkpoint.lastIndexedCommit,
         pages: health.pages, flows, findings: { error: count('error'), warning: count('warning') },
         drift: { count: health.drift.length, sample: health.drift.slice(0, SAMPLE) },
-        uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) },
-        unexplained: { count: health.unexplained.length, sample: health.unexplained.slice(0, SAMPLE) },
-        tasks: { incomplete: incomplete.length, sample: incomplete.slice(0, SAMPLE) } };
+        uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) } };
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(signal) }]);
       return { ...signal, pruned };
     });
@@ -309,21 +291,11 @@ export class Wiki {
     return { revision: inv.revision, checkpoint, pages: pages.length,
       flows: pages.filter(p => p.meta.type === 'flow').length, findings, drift,
       uncovered: inv.sources.filter(s => !covered.has(s.id)).map(s => s.id), tasks,
-      unexplained: reachable ? this.unexplained(checkpoint.lastIndexedCommit, events) : [],
       graph: graph(pages) };
   }
-  // Source that moved since the sealed checkpoint and that no decision event claims as its evidence:
-  // the change happened and nobody recorded why. It stays silent until a checkpoint exists, because
-  // capture is for work done with the wiki in place — code that predates it cannot be explained now.
-  private unexplained(checkpoint: string | null, events: Event[]): string[] {
-    if (!checkpoint) return [];
-    const explained = new Set(events.filter(e => e.kind === 'decision' ||
-      (e.kind === 'close' && e.closure === 'none_declared')).flatMap(e => e.evidence));
-    return changed(this.root, this.config, checkpoint).filter(id => !explained.has(id));
-  }
   // A squash-merge, a deleted branch or a fresh clone can leave the sealed commit unreachable. The
-  // comparison then cannot run at all, and answering "nothing unexplained" would be a green light
-  // meaning the opposite: the signal is gone, not clean.
+  // checkpoint then certifies a commit nobody can look at, so it is reported as an error finding
+  // rather than left standing as a claim that the wiki is level with the code.
   private reachable(checkpoint: string | null): boolean {
     if (!checkpoint) return true;
     try { revision(this.root, checkpoint); return true; } catch { return false; }
@@ -504,48 +476,6 @@ export class Wiki {
         throw error;
       }
     });
-  }
-  // What an agent actually touched, as observed by a harness hook rather than declared afterwards.
-  // The journal is append-only and unfiltered on write, because a hook that parses the config on
-  // every edit is a hook nobody keeps installed; scope is resolved here, on read. It records the
-  // file and never a reason: a hook cannot see one, and inventing it is the failure this avoids.
-  note(input: unknown): Touch {
-    const touch = touchSchema.parse(input);
-    const path = this.store.path(`.wikipoke/journal/${sessionFile(touch.session)}.jsonl`);
-    mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, JSON.stringify(touch) + '\n');
-    return touch;
-  }
-  journal(session?: string): Touch[] {
-    const directory = this.store.path('.wikipoke/journal');
-    const wanted = session ? [`${directory}/${sessionFile(session)}.jsonl`]
-      : files(directory).filter(f => f.endsWith('.jsonl'));
-    return wanted.flatMap(file => (read(file) ?? '').split('\n').filter(Boolean).flatMap(line => {
-      try { return [touchSchema.parse(JSON.parse(line))]; } catch { return []; }
-    })).filter(touch => !ignored(touch.file, this.config))
-      .sort((a, b) => a.at.localeCompare(b.at));
-  }
-  // The debt a turn is about to leave behind: source this session touched that no decision claims.
-  // Unlike the checkpoint-based signal, it needs no commit and no seal, so it can be answered while
-  // the agent is still in the turn that made the change — which is the only moment the why exists.
-  // Deliberately outside the writer lock. This is asked while the agent is mid-turn - by a stop hook,
-  // or by a plugin composing a system prompt - and taking the lock there would block the very agent
-  // whose work is being described. Both inputs are append-only files, so the worst a concurrent
-  // write can cost is one line that the next call will see.
-  async touched(session?: string) {
-    const entries = this.journal(session), events = this.events();
-    const decided = new Set(events.filter(e => e.kind === 'decision').flatMap(e => e.evidence));
-    // Saying "this code changed and nobody stated a reason" is an answer, and the product's whole
-    // position is that it is a better answer than an invented one. So a close that declares none
-    // settles its files too - otherwise the only way past a blocked stop is to make a decision up,
-    // which is the exact fiction the block exists to prevent.
-    const undeclared = new Set(events.filter(e => e.kind === 'close' && e.closure === 'none_declared')
-      .flatMap(e => e.evidence).filter(file => !decided.has(file)));
-    const files = [...new Set(entries.map(e => e.file))].sort();
-    return { session: session ?? null, mode: this.config.capture, entries: entries.length, files,
-      unexplained: files.filter(file => !decided.has(file) && !undeclared.has(file)),
-      undeclared: files.filter(file => undeclared.has(file)),
-      since: entries[0]?.at ?? null, until: entries[entries.length - 1]?.at ?? null };
   }
   events(): Event[] {
     const directory = this.store.path('.wikipoke/events');

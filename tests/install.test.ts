@@ -195,13 +195,13 @@ test('the session briefing reports what the wiki owes and stays silent when clea
   fakeCli(wiki.root, 'exit 0');
   mkdirSync(join(wiki.root, '.wikipoke'), { recursive: true });
   writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
-    uncovered: { count: 244 }, drift: { count: 2 }, findings: { error: 1 }, tasks: { incomplete: 0 } }));
+    uncovered: { count: 244 }, drift: { count: 2 }, findings: { error: 1 } }));
   const owed = spawnSync(join(wiki.root, '.wikipoke/hooks/session-start'), [], { cwd: wiki.root, encoding: 'utf8' });
   assert.match(owed.stdout, /244 undocumented source\(s\)/);
   assert.match(owed.stdout, /2 page\(s\) citing moved code/);
   assert.match(owed.stdout, /1 error finding\(s\)/);
   writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
-    uncovered: { count: 0 }, drift: { count: 0 }, findings: { error: 0 }, tasks: { incomplete: 0 } }));
+    uncovered: { count: 0 }, drift: { count: 0 }, findings: { error: 0 } }));
   const clean = spawnSync(join(wiki.root, '.wikipoke/hooks/session-start'), [], { cwd: wiki.root, encoding: 'utf8' });
   assert.equal(clean.stdout, '');
   assert.equal(clean.status, 0);
@@ -240,60 +240,6 @@ test('a foreign plugin or rule of the same name is left alone', async () => {
   assert.ok(removal.preserved.includes('.opencode/plugin/wikipoke.js'));
 });
 
-test('the tool hook journals a real edit payload and skips what never named a file', async () => {
-  const wiki = await setup();
-  install(wiki.root);
-  const hook = join(wiki.root, '.wikipoke/hooks/tool-journal');
-  const send = (payload: unknown) => execFileSync('sh', [hook], { cwd: wiki.root, encoding: 'utf8',
-    input: JSON.stringify(payload) });
-  // A session id names a file, so it is reduced to what a file name can carry: no traversal survives.
-  send({ session_id: 'ses/../../evil', tool_name: 'Edit', tool_input: { file_path: join(wiki.root, 'src/main.ts') } });
-  send({ session_id: 'ses/../../evil', tool_name: 'Bash', tool_input: { command: 'ls' } });
-  assert.deepEqual(readdirSync(join(wiki.root, '.wikipoke/journal')), ['sesevil.jsonl']);
-  const written = readFileSync(join(wiki.root, '.wikipoke/journal/sesevil.jsonl'), 'utf8').trim().split('\n');
-  assert.equal(written.length, 1);
-  assert.equal(JSON.parse(written[0]).file, 'src/main.ts');
-});
-
-test('the stop hook asks for the reason while the agent that changed the code is still running', async () => {
-  const wiki = await setup();
-  install(wiki.root);
-  // The hook resolves the project-local CLI; the tests run from source, so that is what it gets.
-  fakeCli(wiki.root, `cd "${repoRoot}" && exec "${process.execPath}" --import tsx "${cliSource}" "$@"`);
-  const hook = join(wiki.root, '.wikipoke/hooks/session-stop');
-  const stop = (payload: unknown) => execFileSync('sh', [hook], { cwd: wiki.root, encoding: 'utf8',
-    input: JSON.stringify(payload) }).trim();
-  assert.equal(stop({ session_id: 'ses1' }), '');
-  new Wiki(wiki.root).note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses1' });
-  const blocked = JSON.parse(stop({ session_id: 'ses1' }));
-  assert.equal(blocked.decision, 'block');
-  assert.match(blocked.reason, /src\/main\.ts/);
-  // A stop already blocked once has had its chance; asking again is how a hook loops forever.
-  assert.equal(stop({ session_id: 'ses1', stop_hook_active: true }), '');
-  writeFileSync(join(wiki.root, 'wikipoke.config.yaml'),
-    readFileSync(join(wiki.root, 'wikipoke.config.yaml'), 'utf8').replace('capture: block', 'capture: remind'));
-  const reminded = JSON.parse(stop({ session_id: 'ses1' }));
-  assert.equal(reminded.decision, undefined);
-  assert.match(reminded.systemMessage, /src\/main\.ts/);
-  await new Wiki(wiki.root).capture({ id: 's1', task: 'retries', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
-    kind: 'decision', choice: 'Three retries', rationale: 'Measured.', evidence: ['src/main.ts'] });
-  assert.equal(stop({ session_id: 'ses1' }), '');
-});
-
-test('the OpenCode plugin journals its own edits and carries the debt into the prompt', async () => {
-  const wiki = await setup();
-  install(wiki.root);
-  const plugin = await import(join(wiki.root, '.opencode/plugin/wikipoke.js'));
-  const hooks = await plugin.wikipoke({ directory: wiki.root });
-  await hooks['tool.execute.after']({ tool: 'edit', sessionID: 'oc-1', args: { filePath: 'src/main.ts' } });
-  await hooks['tool.execute.after']({ tool: 'edit', sessionID: 'oc-1', args: { filePath: 'wiki/index.md' } });
-  // Only edits are journalled, and the journal is written unfiltered: scope is applied on read.
-  await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'oc-1', args: { command: 'ls' } });
-  const written = readFileSync(join(wiki.root, '.wikipoke/journal/oc-1.jsonl'), 'utf8').trim().split('\n');
-  assert.deepEqual(written.map(line => JSON.parse(line).file), ['src/main.ts', 'wiki/index.md']);
-  assert.deepEqual(await new Wiki(wiki.root).touched('oc-1').then(t => t.unexplained), ['src/main.ts']);
-});
-
 test('the OpenCode briefing refreshes from the signal instead of freezing at startup', async () => {
   const wiki = await setup();
   install(wiki.root);
@@ -317,14 +263,14 @@ test('every generated hook is a syntactically valid shell script', async () => {
   install(wiki.root);
   // A backtick in a message is valid shell that runs a command; `sh -n` accepts it happily and the
   // text arrives mangled, or worse, executed. Neither belongs in a message.
-  for (const hook of ['post-commit', 'session-start', 'tool-journal', 'session-stop']) {
+  for (const hook of ['post-commit', 'session-start']) {
     const script = readFileSync(join(wiki.root, '.wikipoke/hooks', hook), 'utf8');
     for (const line of script.split('\n').filter(l => /^\s*echo /.test(l)))
       assert.equal(/[`$]\(/.test(line) || line.includes('`'), false, `${hook}: ${line}`);
   }
   // These scripts embed a node program inside single quotes, so one apostrophe in a message ends the
   // quoting and the hook dies at run time with a syntax error nobody would see until it mattered.
-  for (const hook of ['post-commit', 'session-start', 'tool-journal', 'session-stop']) {
+  for (const hook of ['post-commit', 'session-start']) {
     const checked = spawnSync('sh', ['-n', join(wiki.root, '.wikipoke/hooks', hook)], { encoding: 'utf8' });
     assert.equal(checked.status, 0, `${hook}: ${checked.stderr}`);
   }
@@ -362,19 +308,54 @@ test('a broken wiki says so, instead of printing what a healthy one prints', asy
   fakeCli(wiki.root, 'exit 0');
   const brief = () => execFileSync('sh', [join(wiki.root, '.wikipoke/hooks/session-start')],
     { cwd: wiki.root, encoding: 'utf8' }).trim();
-  const stop = () => execFileSync('sh', [join(wiki.root, '.wikipoke/hooks/session-stop')],
-    { cwd: wiki.root, encoding: 'utf8', input: JSON.stringify({ session_id: 'ses1' }) }).trim();
 
   mkdirSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });
   // Silence used to mean both "nothing owed" and "nothing works". Now it means only the first.
   assert.match(brief(), /writer lock is held/);
   assert.match(brief(), /recover --unlock/);
-  // And the stop hook never orders a capture that the lock would refuse to perform.
-  assert.match(stop(), /writer lock is held/);
-  assert.equal(JSON.parse(stop()).decision, undefined);
 
   rmSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });
-  writeFileSync(join(wiki.root, 'wikipoke.config.yaml'),
-    readFileSync(join(wiki.root, 'wikipoke.config.yaml'), 'utf8').replace('capture: block', 'capture: off'));
-  assert.match(brief(), /decision capture is off/);
+  assert.equal(brief(), '');
+});
+
+// Upgrading a project that still carries the edit hook and the stop hook from an older release. Both
+// were written by Wikipoke and are no longer installed, so leaving them on disk would leave them
+// running against a CLI that no longer has the command they call.
+test('install retires the automatic capture hooks an older release left behind', async () => {
+  const wiki = await setup();
+  const legacy = `${JSON.stringify({
+    hooks: {
+      SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command: 'sh .wikipoke/hooks/session-start', timeout: 20 }] }],
+      PostToolUse: [{ matcher: 'Edit|Write|MultiEdit|NotebookEdit', hooks: [{ type: 'command', command: 'sh .wikipoke/hooks/tool-journal', timeout: 10 }] }],
+      Stop: [{ hooks: [{ type: 'command', command: 'sh .wikipoke/hooks/session-stop', timeout: 30 }] }],
+    },
+  }, null, 2)}\n`;
+  mkdirSync(join(wiki.root, '.wikipoke/hooks'), { recursive: true });
+  mkdirSync(join(wiki.root, '.claude'), { recursive: true });
+  writeFileSync(join(wiki.root, '.wikipoke/hooks/tool-journal'), '#!/bin/sh\nexit 0\n');
+  writeFileSync(join(wiki.root, '.wikipoke/hooks/session-stop'), '#!/bin/sh\nexit 0\n');
+  writeFileSync(join(wiki.root, '.claude/settings.json'), legacy);
+
+  const report = install(wiki.root);
+  assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/tool-journal')), false);
+  assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/session-stop')), false);
+  assert.ok(report.manual.some(step => step.includes('docs/extensions.md')));
+  const settings = JSON.parse(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'));
+  assert.deepEqual(Object.keys(settings.hooks), ['SessionStart']);
+  assert.equal(report.activeBriefing, true);
+});
+
+// The same file, once a human has touched it. Wikipoke wrote the hooks but no longer owns the file,
+// so it says what to remove instead of editing around whatever else is in there.
+test('a settings file Wikipoke no longer recognises is named, not rewritten', async () => {
+  const wiki = await setup();
+  const theirs = JSON.stringify({ permissions: { allow: ['Bash(ls:*)'] }, hooks: {
+    SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command: 'sh .wikipoke/hooks/session-start' }] }],
+    Stop: [{ hooks: [{ type: 'command', command: 'sh .wikipoke/hooks/session-stop' }] }],
+  } }, null, 2);
+  mkdirSync(join(wiki.root, '.claude'), { recursive: true });
+  writeFileSync(join(wiki.root, '.claude/settings.json'), theirs);
+  const report = install(wiki.root);
+  assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), theirs);
+  assert.ok(report.manual.some(step => step.includes('session-stop') && step.includes('by hand')));
 });

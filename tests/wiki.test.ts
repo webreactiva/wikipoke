@@ -282,7 +282,11 @@ test('attention writes a bounded signal instead of the whole graph', async () =>
   assert.equal('graph' in signal, false);
   // What the pass pruned is about this run, not part of the signal a session reads back.
   const { pruned, ...written } = signal as any;
-  assert.deepEqual(pruned, { journals: 0, archived: 0 });
+  assert.deepEqual(pruned, { archived: 0 });
+  // The signal is what a session reads at startup, so it stays the bounded health of the wiki and
+  // nothing about what an agent did during a turn.
+  assert.deepEqual(Object.keys(written).sort(),
+    ['at', 'checkpoint', 'drift', 'findings', 'flows', 'pages', 'revision', 'uncovered']);
   assert.deepEqual(JSON.parse(read(join(wiki.root, '.wikipoke/attention.json'))!), written);
   await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
   assert.deepEqual((await wiki.graph()).nodes.map(n => n.id), wiki.pages().map(p => p.path));
@@ -388,54 +392,6 @@ test('asking again offers the answers already given instead of hiding them', asy
   // A question still pending is not an answer, so it is never offered as one.
   const pending: any = await wiki.ask('How many retries are configured now?', 'fourth');
   assert.deepEqual(pending.priorAnswers.map((prior: any) => prior.requestId), ['first']);
-});
-
-test('a change with no decision behind it is reported, but only once a checkpoint exists', async () => {
-  const wiki = await setup();
-  writeFileSync(join(wiki.root, 'src/added.ts'), 'export const added = true;\n');
-  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'add a module');
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
-  // Nothing is sealed yet, so there is no baseline to explain anything against.
-  assert.deepEqual((await wiki.status()).unexplained, []);
-
-  git(wiki.root, 'add', '-A'); git(wiki.root, 'commit', '-qm', 'wiki');
-  await wiki.seal();
-  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 9;\n');
-  writeFileSync(join(wiki.root, 'src/added.ts'), 'export const added = false;\n');
-  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change both');
-  assert.deepEqual((await wiki.status()).unexplained.sort(), ['src/added.ts', 'src/main.ts']);
-
-  await wiki.capture({ id: 'why', task: 'raise the retry budget', actor: 'agent/test',
-    at: '2026-09-09T10:00:00Z', kind: 'decision', choice: 'Nine retries',
-    rationale: 'The upstream timeout moved.', evidence: ['src/main.ts'] });
-  assert.deepEqual((await wiki.status()).unexplained, ['src/added.ts']);
-  const signal: any = await wiki.attention();
-  assert.equal(signal.unexplained.count, 1);
-  assert.deepEqual(signal.unexplained.sample, ['src/added.ts']);
-});
-
-test('the journal records what a hook observed and forgets what is out of scope', async () => {
-  const wiki = await setup();
-  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-1' });
-  wiki.note({ at: '2026-09-09T10:01:00Z', file: 'wiki/index.md', tool: 'Write', session: 'ses-1' });
-  wiki.note({ at: '2026-09-09T10:02:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-2' });
-  // The hook appends without parsing the config; scope is resolved on read, so the wiki edit drops out.
-  assert.deepEqual((await wiki.touched('ses-1')).files, ['src/main.ts']);
-  assert.equal((await wiki.touched('ses-1')).entries, 1);
-  assert.deepEqual((await wiki.touched()).files, ['src/main.ts']);
-  assert.equal((await wiki.touched()).entries, 2);
-});
-
-test('a touched source stops being debt once a decision claims it', async () => {
-  const wiki = await setup();
-  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'ses-1' });
-  assert.deepEqual((await wiki.touched('ses-1')).unexplained, ['src/main.ts']);
-  assert.equal((await wiki.touched('ses-1')).mode, 'block');
-  await wiki.capture({ id: 'j1', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
-    kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.', evidence: ['src/main.ts'] });
-  assert.deepEqual((await wiki.touched('ses-1')).unexplained, []);
-  // Unlike the checkpoint signal, this needed no commit and no seal: the turn is still running.
-  assert.deepEqual((await wiki.status()).unexplained, []);
 });
 
 test('the generated log carries the chronology of the code, newest first', async () => {
@@ -573,23 +529,6 @@ test('a wikilink in the body is an edge, and brackets in code are not', async ()
   assert.deepEqual((await wiki.lint()).filter(f => f.code === 'broken-link'), []);
 });
 
-test('closing with no decision declared settles the debt it names', async () => {
-  const wiki = await setup();
-  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 's1' });
-  assert.deepEqual((await wiki.touched('s1')).unexplained, ['src/main.ts']);
-  await wiki.capture({ id: 'o1', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:00:00Z', kind: 'open' });
-  // A closure has to name what it covers: a blank one would settle the whole session by saying nothing.
-  await assert.rejects(wiki.capture({ id: 'c0', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:04:00Z',
-    kind: 'close', closure: 'none_declared', rationale: 'Nobody said why.' }), /name in evidence/);
-  await wiki.capture({ id: 'c1', task: 'rename', actor: 'agent/test', at: '2026-09-09T10:05:00Z',
-    kind: 'close', closure: 'none_declared', rationale: 'Rename only; nobody stated a choice.',
-    evidence: ['src/main.ts'] });
-  const after = await wiki.touched('s1');
-  // The honest answer clears the block, and stays visible as what it is rather than disappearing.
-  assert.deepEqual(after.unexplained, []);
-  assert.deepEqual(after.undeclared, ['src/main.ts']);
-});
-
 test('a wiki with no flow through it cannot be sealed as complete', async () => {
   const wiki = await setup();
   writeFileSync(join(wiki.root, 'src/other.ts'), 'export const backoff = 250;\n');
@@ -619,7 +558,6 @@ test('a checkpoint that is no longer in the repository is reported, not read as 
     JSON.stringify({ version: 1, lastIndexedCommit: '0'.repeat(40), sealedAt: '2026-09-09T10:00:00Z' }));
   const status: any = await wiki.status();
   assert.equal(status.findings.some((f: any) => f.code === 'lost-checkpoint'), true);
-  assert.deepEqual(status.unexplained, []);
   // And it holds the next seal instead of certifying over a comparison that never ran.
   await assert.rejects(wiki.seal(), /error finding/);
 });
@@ -743,8 +681,6 @@ test('maintenance keeps the tape from growing without bound, and loses nothing',
   const base = { task: 'retry policy', actor: 'agent/test' };
   writeFileSync(join(wiki.root, 'src/other.ts'), 'export const backoff = 250;\n');
   git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'second source');
-  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/main.ts', tool: 'Edit', session: 'done' });
-  wiki.note({ at: '2026-09-09T10:00:00Z', file: 'src/other.ts', tool: 'Edit', session: 'owing' });
   await wiki.capture({ ...base, id: 'p1', kind: 'open', at: '2026-09-09T09:00:00Z' });
   await wiki.capture({ ...base, id: 'p2', kind: 'decision', at: '2026-09-09T10:00:00Z',
     title: 'Three retries', choice: 'Bound them.', evidence: ['src/main.ts'] });
@@ -758,10 +694,6 @@ test('maintenance keeps the tape from growing without bound, and loses nothing',
   assert.equal(existsSync(join(wiki.root, '.wikipoke/events/archive/2026-09.jsonl')), true);
   assert.equal(wiki.events().length, before);
   assert.deepEqual(wiki.events().map(e => e.id), ['p1', 'p2', 'p3', 'p4']);
-  // The journal of a session whose files are all explained has done its job; one still owing stays.
-  assert.equal(pruned.journals, 1);
-  assert.deepEqual((await wiki.touched()).files, ['src/other.ts']);
-  assert.deepEqual((await wiki.touched()).unexplained, ['src/other.ts']);
 });
 
 test('a plan carries the content of its batch and nothing else', async () => {

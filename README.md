@@ -60,7 +60,7 @@ the trigger you want.
 A fresh signal nobody reads changes nothing. `install` also writes
 `.wikipoke/hooks/session-start`, a no-LLM script that refreshes the signal and
 prints one line when the wiki owes work — undocumented sources, pages citing
-moved code, error findings, tasks with no recorded decision — and stays silent
+moved code, error findings, no flow page — and stays silent
 when it owes none. Run it where the agent will see it.
 
 Wikipoke composes this for Claude Code only when the project has no
@@ -96,47 +96,30 @@ per session.
 **Cursor** has no session hook either: put the same line in a `.cursor/rules/`
 rule file.
 
-## Ask for the reason while it still exists
+## Attach your own scripts
 
-A diff proves a file changed and can never say why. The reason exists in one
-place and for one moment: the agent making the change, while it is still making
-it. So `install` writes two more hooks and composes them for Claude Code
-alongside the briefing.
+Wikipoke does the deterministic work and stops there. Whatever a project wants to
+happen around it — a notification when pages land, a review before a checkpoint
+advances, a reminder to record why the code changed — is attached rather than
+built in, by declaring a script in `wikipoke.config.yaml`:
 
-`.wikipoke/hooks/tool-journal` runs after every edit and appends one line to
-`.wikipoke/journal/<session>.jsonl` naming the file a tool touched. It parses no
-configuration, reads no Git, takes no writer lock and imports nothing of
-Wikipoke, because a hook on that path has to cost nothing. Scope is applied later,
-on read.
+```yaml
+extensions:
+  - event: publish.after
+    run: ./scripts/notify-the-team.sh
+  - event: seal.before
+    run: ./scripts/require-a-review.sh
+    blocking: true
+```
 
-`.wikipoke/hooks/session-stop` runs once, when the agent tries to finish, and
-compares that journal against the evidence of every recorded decision. The
-`capture` setting decides what happens next:
+The script gets the event as JSON on stdin, runs from the project root, and
+answers with its exit status. Twelve events cover the actions that write
+something. An observer that fails is reported and never fails the command it was
+watching; only a `.before` extension can refuse, and it refuses before anything
+is written. Extensions are dispatched outside the writer lock, so a script can
+run Wikipoke commands of its own. `doctor` lists what is attached.
 
-| `capture` | At the end of a turn that changed unexplained source |
-| --- | --- |
-| `off` | nothing |
-| `remind` | the human is told what went unrecorded |
-| `block` (default) | the agent is sent back to record the reason before it can stop |
-
-`block` is the default because a reminder is demonstrably not enough. In a trial on a clean
-repository, an OpenCode agent was given a correct notice naming all ten source files it had just
-changed — it confirmed afterwards that it had read it, quoted it back in full, and had finished the
-turn anyway: *"no valid excuse — I focused on implementing the variant and let the notice pass"*.
-Rationale does not go unrecorded because an agent decides to skip it. It goes unrecorded because
-finishing the task is what has the agent's attention, and only a stop it cannot walk past competes
-with that.
-
-**OpenCode** gets the same pair through its plugin, with one honest difference:
-`tool.execute.after` journals the edit, but OpenCode exposes no hook that can
-refuse a stop, so there is nowhere to enforce `block`. The debt goes into the
-agent's own system prompt instead, refreshed at most once a minute — it is put
-where the agent cannot miss it rather than made impossible to walk past.
-
-`wikipoke journal [--session <id>]` answers the same question on demand. Unlike
-the checkpoint signal it needs no commit and no `seal`, so it works inside the
-turn that made the change. It takes no writer lock, which is what makes asking it
-repeatedly while an agent works safe.
+Full contract and event table: [extensions](docs/extensions.md).
 
 ## Operations
 
@@ -148,7 +131,6 @@ wikipoke ask "How are payments validated?" --request-id payment-validation
 wikipoke answer --request-id payment-validation --response answer.json
 wikipoke publish --patch .wikipoke/tmp/patch.json
 wikipoke capture --event .wikipoke/tmp/decision.json
-wikipoke journal --session ses_01H...
 wikipoke snapshot v1.0.0
 wikipoke seal
 wikipoke lint
@@ -176,9 +158,10 @@ short `title` — without one the page is named after the first sentence of the
 choice, which is derived rather than chosen. Its `evidence` is resolved against
 the inventory and becomes pinned provenance, so the decision drifts when the code
 behind it moves. A `none_declared` closure requires a rationale and must name in
-`evidence` the files it covers: that is what settles them, and it is the honest
-alternative to inventing a reason. `journal` reports what a session changed and
-what nothing explains yet. See [operations](docs/operations.md).
+`evidence` the files it covers, which is the honest alternative to inventing a
+reason. Nothing asks an agent for any of this: `capture` records a decision when
+there is one to record, and a project that wants to be asked attaches its own
+script. See [operations](docs/operations.md) and [extensions](docs/extensions.md).
 
 ## Agent workflow
 

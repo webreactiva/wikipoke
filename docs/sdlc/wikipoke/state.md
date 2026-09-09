@@ -89,6 +89,26 @@ the executor within it does not.
   what activates is the deterministic attention signal, not maintenance
   performed by the product.
 
+- 2026-09-09, Daniel: automatic decision capture removed from the product. Having
+  the system manage the agent's decisions through a journal was judged too much
+  complexity, and running it automatically loaded every execution with work that
+  should be opt-in. Removed: the edit hook, the stop hook and its block, the
+  OpenCode plugin's recorder and debt line, the `capture` setting, the `note` and
+  `journal` commands, and the `unexplained` and `tasks` accounting in the
+  attention signal. Kept, because it costs nothing when unused: `capture`, the
+  event tape, decision pages, `log.md`, and the `wikipoke-decision` skill.
+  Superseded in part: the 2026-09-09 entries recording `capture: block` as the
+  evidence-backed default. That evidence is not withdrawn — it showed the notice
+  alone does not work — but whether every project should pay for the enforcement
+  is a product question, and it is answered no.
+
+- 2026-09-09, Daniel: extension points added, at his request and ahead of the
+  removal above. A project declares its own scripts in `wikipoke.config.yaml`
+  against twelve lifecycle events; observers cannot fail the command they watch,
+  and only a `.before` extension can refuse an action. This is where behaviour
+  the product no longer builds in is meant to live, decision capture included.
+  Contract in [extensions](../../extensions.md).
+
 ## Open
 
 - Implement and verify the accepted plan. Test and deploy gates remain human and

@@ -77,14 +77,9 @@ oversized file never blocks the queue behind it. When a root-level
 `.wikipokeignore` exists, initialization imports its non-comment glob patterns
 into `exclude`. Review `include`, `exclude`, and limits before ingestion.
 
-`capture` decides what happens when an agent stops having changed source it never
-explained: `block` (the default) refuses the stop until it records a decision or
-declares that none was stated, `remind` tells the human and lets the turn end, and
-`off` says nothing. `block` is the default because a reminder is demonstrably not
-enough — in a trial, an agent that had read a correct notice naming all ten files
-it had just changed finished the turn anyway. Only Claude Code exposes a hook that
-can refuse a stop; under OpenCode `block` degrades to a line in the agent's own
-system prompt. The
+`extensions` attaches this project's own scripts to points in Wikipoke's
+lifecycle — see [extensions](./extensions.md) for the contract and the event
+table. It is empty by default and empty in most projects. The
 CLI is deterministic: it plans work, validates evidence and commits safe wiki
 writes. The installed agent skill reads the plan, reasons over code, and calls
 the CLI to publish its result.
@@ -96,8 +91,8 @@ npx --no-install wikipoke --root /work/acme status
 npx --no-install wikipoke --root /work/acme lint
 ```
 
-`status` lists uncovered sources, changed evidence, source that moved with no
-decision behind it, incomplete task capture, and pending work. `lint` validates page structure and graph integrity without an
+`status` lists uncovered sources, changed evidence, incomplete task capture, and
+pending work. `lint` validates page structure and graph integrity without an
 LLM. Both take the writer lock, as does `graph`, so run one Wikipoke command at
 a time against a repository; a second concurrent command fails with a lock
 error. If a process dies while holding the lock, inspect the repository, then:
@@ -132,7 +127,12 @@ Code, Codex, OpenCode and Cursor it reports the manual step instead. The README
 section "Brief the agent at session start" carries the snippet for each.
 
 Re-run `install` after an upgrade. It updates only files bearing its managed
-marker and reports foreign files it leaves unchanged.
+marker and reports foreign files it leaves unchanged. Upgrading from a release
+that installed automatic decision capture, it removes the two hooks it wrote for
+that — `.wikipoke/hooks/tool-journal` and `.wikipoke/hooks/session-stop` — and
+rewrites `.claude/settings.json` when that file is still exactly what Wikipoke
+put there. A settings file anyone has since edited is left alone and named as a
+manual step instead.
 
 To remove the integration without losing knowledge:
 
@@ -168,9 +168,9 @@ npx --no-install wikipoke --root /work/acme maintain --once
 
 `maintain --once` recomputes health and writes `.wikipoke/attention.json`
 itself. The signal is compact by design: revision, checkpoint, page count,
-finding counts by severity, and a count plus a bounded sample for drift,
-uncovered sources, and incomplete tasks. Use `status` when the full report is
-needed. The installed `post-commit` notifier runs exactly this command, so
+finding counts by severity, whether any page describes a flow, and a count plus a
+bounded sample for drift and uncovered sources. Use `status` when the full report
+is needed, including the state of every task on the tape. The installed `post-commit` notifier runs exactly this command, so
 commits refresh the signal; use the project's scheduler for the same command
 when commits are not the trigger you want. Wikipoke does not install a scheduler
 or deploy a service.
@@ -228,26 +228,12 @@ npx --no-install wikipoke --root /work/acme capture --event decision.json
 
 Decision events materialize as decision pages and an entry in the generated
 `wiki/log.md`. Wikipoke records absent rationale as unknown and never infers it
-from a diff, which is why the `session-stop` hook asks for the reason during the
-turn that made the change rather than in a later documentation pass. Open and
-close task events make incomplete capture visible. See [operations](./operations.md)
-for the event form.
-
-## See what an agent touched
-
-The `tool-journal` hook appends one line per edit to
-`.wikipoke/journal/<session>.jsonl`, naming the file a tool wrote to. It parses no
-configuration and takes no lock, so scope is applied when the journal is read:
-
-```sh
-npx --no-install wikipoke --root /work/acme journal --session ses_01H...
-```
-
-It reports the in-scope files that session changed, which of them no decision
-claims (`unexplained`), and which were closed with no reason declared
-(`undeclared`). Unlike the checkpoint signal it needs no commit and no `seal`, so
-it answers inside the turn that made the change. `note --file <path>` writes a
-journal entry by hand, for a harness with no hook of its own.
+from a diff, so capture the decision during the turn that made the change rather
+than in a later documentation pass — by then the reason is gone. Open and close
+task events make incomplete capture visible in `status`. Nothing prompts for any
+of this; a project that wants to be prompted attaches its own script, see
+[extensions](./extensions.md). See [operations](./operations.md) for the event
+form.
 
 ## Capture a release
 
