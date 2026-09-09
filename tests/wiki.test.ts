@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, symlinkSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -613,4 +613,15 @@ test('a checkpoint that is no longer in the repository is reported, not read as 
   assert.deepEqual(status.unexplained, []);
   // And it holds the next seal instead of certifying over a comparison that never ran.
   await assert.rejects(wiki.seal(), /error finding/);
+});
+
+test('what the wiki writes is readable by anyone who can read the repository', async () => {
+  const wiki = await setup();
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  for (const file of ['wikipoke.config.yaml', 'wiki/index.md', 'wiki/concepts/retries.md']) {
+    const mode = statSync(join(wiki.root, file)).mode & 0o777;
+    // Owner-only made the wiki unreadable to CI, or to anyone in a container under another uid,
+    // for content whose whole purpose is to be shared and versioned.
+    assert.equal((mode & 0o044) !== 0, true, `${file} is ${mode.toString(8)}`);
+  }
 });

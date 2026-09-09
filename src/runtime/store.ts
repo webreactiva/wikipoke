@@ -23,7 +23,10 @@ export function safePath(root: string, name: string): string {
 export function atomic(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${randomUUID()}.tmp`;
-  const fd = openSync(temp, 'wx', 0o600);
+  // 0644, not 0600. Everything written here is versioned knowledge that a wiki is meant to share:
+  // owner-only left the pages, and the configuration itself, unreadable to CI or to anyone else in
+  // a container running under a different uid. The process umask still narrows this.
+  const fd = openSync(temp, 'wx', 0o644);
   try { writeFileSync(fd, content); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(temp, path);
 }

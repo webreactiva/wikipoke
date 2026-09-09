@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, chmodSync, readdirSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, chmodSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -299,6 +299,13 @@ test('the OpenCode briefing refreshes from the signal instead of freezing at sta
 test('every generated hook is a syntactically valid shell script', async () => {
   const wiki = await setup();
   install(wiki.root);
+  // A backtick in a message is valid shell that runs a command; `sh -n` accepts it happily and the
+  // text arrives mangled, or worse, executed. Neither belongs in a message.
+  for (const hook of ['post-commit', 'session-start', 'tool-journal', 'session-stop']) {
+    const script = readFileSync(join(wiki.root, '.wikipoke/hooks', hook), 'utf8');
+    for (const line of script.split('\n').filter(l => /^\s*echo /.test(l)))
+      assert.equal(/[`$]\(/.test(line) || line.includes('`'), false, `${hook}: ${line}`);
+  }
   // These scripts embed a node program inside single quotes, so one apostrophe in a message ends the
   // quoting and the hook dies at run time with a syntax error nobody would see until it mattered.
   for (const hook of ['post-commit', 'session-start', 'tool-journal', 'session-stop']) {
@@ -324,4 +331,27 @@ test('install keeps the writer lock out of every commit', async () => {
   assert.match(staged, /\.wikipoke\/state\.json/);
   install(wiki.root);
   assert.equal(readFileSync(join(wiki.root, '.gitignore'), 'utf8'), ignored);
+});
+
+test('a broken wiki says so, instead of printing what a healthy one prints', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  fakeCli(wiki.root, 'exit 0');
+  const brief = () => execFileSync('sh', [join(wiki.root, '.wikipoke/hooks/session-start')],
+    { cwd: wiki.root, encoding: 'utf8' }).trim();
+  const stop = () => execFileSync('sh', [join(wiki.root, '.wikipoke/hooks/session-stop')],
+    { cwd: wiki.root, encoding: 'utf8', input: JSON.stringify({ session_id: 'ses1' }) }).trim();
+
+  mkdirSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });
+  // Silence used to mean both "nothing owed" and "nothing works". Now it means only the first.
+  assert.match(brief(), /writer lock is held/);
+  assert.match(brief(), /recover --unlock/);
+  // And the stop hook never orders a capture that the lock would refuse to perform.
+  assert.match(stop(), /writer lock is held/);
+  assert.equal(JSON.parse(stop()).decision, undefined);
+
+  rmSync(join(wiki.root, '.wikipoke/write.lock'), { recursive: true });
+  writeFileSync(join(wiki.root, 'wikipoke.config.yaml'),
+    readFileSync(join(wiki.root, 'wikipoke.config.yaml'), 'utf8').replace('capture: block', 'capture: off'));
+  assert.match(brief(), /decision capture is off/);
 });

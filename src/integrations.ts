@@ -177,6 +177,15 @@ elif command -v npx >/dev/null 2>&1; then
 else
   exit 0
 fi
+# A wiki that cannot run and a wiki with nothing to report both printed nothing. Silence has to mean
+# one thing only, so the two states that produce it on purpose say so before anything else.
+if [ -d "$root/.wikipoke/write.lock" ]; then
+  echo "Wikipoke: the writer lock is held, so every Wikipoke command will fail. If no other agent is running, release it with: wikipoke recover --unlock"
+  exit 0
+fi
+case "$(cat "$root/wikipoke.config.yaml" 2>/dev/null)" in
+  *"capture: off"*) echo "Wikipoke: decision capture is off in wikipoke.config.yaml, so nothing will record why the code changes." ;;
+esac
 $cli --root "$root" maintain --once >/dev/null 2>&1 || exit 0
 node -e '
 const fs = require("node:fs");
@@ -254,6 +263,13 @@ process.stdin.on("end", () => {
     if (event.stop_hook_active) return;
     const id = String(event.session_id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 96);
     if (!id) return;
+    // Never block against a command that cannot run. capture takes the writer lock and journal does
+    // not, so with the lock held the agent would be ordered to record a decision by a tool that
+    // answers "Wiki writer locked" - trapped between an instruction and a broken command.
+    if (fs.existsSync(path.join(root, ".wikipoke", "write.lock"))) {
+      process.stdout.write(JSON.stringify({ systemMessage: "Wikipoke: the writer lock is held, so this turn was not checked for unrecorded decisions." }) + "\\n");
+      return;
+    }
     const local = path.join(root, "node_modules", ".bin", "wikipoke");
     const bin = fs.existsSync(local) ? local : "npx";
     const head = bin === "npx" ? ["--no-install", "wikipoke"] : [];
