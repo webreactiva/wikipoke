@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync,
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync,
   writeFileSync, unlinkSync, openSync, closeSync, fsyncSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
@@ -31,10 +31,16 @@ export const json = (value: unknown) => JSON.stringify(value, null, 2) + '\n';
 export function files(root: string): string[] {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
-    if (entry.isSymbolicLink()) throw new Error(`Symlink in knowledge: ${entry.name}`);
+    if (entry.isSymbolicLink()) return [];
     const full = resolve(root, entry.name);
-    return entry.isDirectory() ? files(full) : [full];
+    return entry.isDirectory() ? files(full) : entry.isFile() ? [full] : [];
   }).sort();
+}
+function release(lock: string): boolean {
+  // A failed unlink is not swallowed: it leaves owner.json behind and the rmdir below reports ENOTEMPTY.
+  try { unlinkSync(resolve(lock, 'owner.json')); } catch { }
+  try { rmdirSync(lock); return true; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
 }
 interface Write { path: string; before: string | null; after: string }
 export class Store {
@@ -46,16 +52,26 @@ export class Store {
   }
   async locked<T>(run: () => T | Promise<T>): Promise<T> {
     mkdirSync(this.control, { recursive: true });
+    // rmdir never recursively deletes another writer's data.
     const lock = this.path('.wikipoke/write.lock');
     try { mkdirSync(lock); }
-    catch { throw new Error('Wiki writer locked. If its process died, inspect then use recover --unlock.'); }
-    atomic(resolve(lock, 'owner.json'), json({ pid: process.pid, at: new Date().toISOString() }));
-    try { this.recover(); return await run(); }
-    finally {
-      unlinkSync(resolve(lock, 'owner.json'));
-      // rmdir never recursively deletes another writer's data.
-      const { rmdirSync } = await import('node:fs'); rmdirSync(lock);
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      throw new Error('Wiki writer locked. If its process died, inspect then use recover --unlock.');
     }
+    try { atomic(resolve(lock, 'owner.json'), json({ pid: process.pid, at: new Date().toISOString() })); }
+    catch (error) { try { release(lock); } catch { } throw error; }
+    let result: T;
+    try { this.recover(); result = await run(); }
+    catch (error) { try { release(lock); } catch { } throw error; }
+    release(lock);
+    return result;
+  }
+  unlock(): { released: boolean; owner: unknown } {
+    const lock = this.path('.wikipoke/write.lock'), record = read(resolve(lock, 'owner.json'));
+    let owner: unknown = record;
+    if (record !== null) try { owner = JSON.parse(record); } catch { }
+    return { released: release(lock), owner };
   }
   recover(): void {
     const journal = this.load<{ writes: Write[] } | null>('.wikipoke/transaction.json', null);
