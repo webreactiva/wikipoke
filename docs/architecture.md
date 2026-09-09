@@ -26,6 +26,7 @@ wiki/                      editable Markdown knowledge
   hooks/session-stop       generated end-of-turn decision prompt
   releases/                release manifests
 .agents/skills/            generated host-neutral instructions
+.claude/skills/            the same skills, where Claude Code looks for them
 ```
 
 ## CLI contract
@@ -44,7 +45,7 @@ A Markdown file the parser cannot read — malformed frontmatter, or none — is
 
 ## Skills and hook
 
-`install` creates ingestion, query, and decision skills under `.agents/skills/`. They are provider-neutral instructions, not runtime integrations with a particular agent. A host must support the project skill convention or be configured to read those files.
+`install` creates ingestion, query, and decision skills under `.agents/skills/`. They are provider-neutral instructions, not runtime integrations with a particular agent. A host must support the project skill convention or be configured to read those files — OpenCode reads that location, Claude Code does not, so the same files are written under `.claude/skills/` as well. Intermediate JSON that the skills tell an agent to write goes under `.wikipoke/tmp/`, which is git-ignored and inside the project, because anywhere outside it is a sandbox boundary in most harnesses.
 
 The installer activates a delegating Git `post-commit` hook only when no hook exists. That delegator resolves the repository root at run time instead of embedding an absolute path, so a clone or a moved checkout keeps working. When a hook already exists the installer preserves it and reports the manual composition step instead.
 

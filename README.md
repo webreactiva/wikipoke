@@ -43,7 +43,10 @@ to that exact file.
 `init` refuses to run unless the root is a Git repository with at least one
 commit. Do not use a broad glob until excluded/generated paths are understood.
 
-`install` writes agent-neutral skills under `.agents/skills/` and a hook at
+`install` writes agent-neutral skills under `.agents/skills/`, and the same files
+under `.claude/skills/` because Claude Code does not read the neutral location —
+a hook that tells an agent to use a skill it cannot invoke is worse than saying
+nothing. It also writes a hook at
 `.wikipoke/hooks/post-commit`, then activates it through a delegating
 `post-commit` hook when the repository has none. The hook runs
 `maintain --once`, which refreshes `.wikipoke/attention.json`. It resolves the

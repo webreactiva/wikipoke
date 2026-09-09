@@ -106,7 +106,8 @@ the lock — and whether a lock was actually released.
 npx --no-install wikipoke --root /work/acme install
 ```
 
-The installer writes agent-neutral skills under `.agents/skills/` and a no-LLM
+The installer writes agent-neutral skills under `.agents/skills/`, copies them to
+`.claude/skills/` for Claude Code, which does not read the neutral location, and writes a no-LLM
 notifier at `.wikipoke/hooks/post-commit`. When no `post-commit` hook exists,
 it installs a small delegating hook in Git's configured hook directory; that
 delegator resolves the repository root at run time rather than embedding an
