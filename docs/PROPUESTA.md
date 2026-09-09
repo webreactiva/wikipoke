@@ -4,6 +4,12 @@ Status: product and architecture proposal; not implemented.
 Date: 2026-09-08. Commands and contracts below are proposed interfaces.
 This is the English edition of the proposal developed in the project conversation.
 
+> Architecture update, 2026-09-09: provider-specific executors are superseded.
+> Wikipoke is agent-first: hooks and deterministic CLI commands provide context,
+> validation, and durable writes; the host agent performs research and reasoning
+> through its own native flow. Historical executor references below are not the
+> implementation contract.
+
 ## 1. Objective
 
 Build a library that turns changing sources into a persistent, verifiable,
@@ -78,7 +84,7 @@ compatibility checks.
 
 Each page has a type, title, description, sources, and body. The code profile
 offers `architecture`, `entity`, `flow`, `concept`, `decision`, `query`, and
-`implementation-log`. Other profiles can introduce types without changing the
+`watchlog`. Other profiles can introduce types without changing the
 engine.
 
 Public identity is the concept's path within its bundle. A proposed immutable
@@ -250,7 +256,7 @@ details such as retries or validation, not just architecture.
 
 Keep two connected levels:
 
-- `implementation-log`: chronological task/session record of choices, attempts,
+- `watchlog`: chronological task/session record of choices, attempts,
   discarded approaches, and reported results, including provisional choices.
 - `decision`: an independently identifiable choice affecting behavior,
   constraints, interfaces, or maintenance. It can begin as a proposal and does
@@ -419,7 +425,7 @@ project/
     flows/
     decisions/
     queries/                # question, responses, evidence per request
-    implementation-logs/    # task/session activity and choices
+    watchlogs/               # task/session activity and choices
   .wikipoke/
     conventions.md          # instructions outside the concept bundle
     state.json              # portable reconciliation checkpoint
@@ -530,7 +536,7 @@ is a subsequent evidence-backed pass.
 First functional delivery: core/CLI, code profile, Git adapter, one LLM executor,
 resumable bootstrap, incremental updates, typed graph, cited queries, checks,
 installer, and scheduler-invocable automatic maintenance. Include all-query
-persistence, manual/automatic decision capture, implementation logs, both wiki
+persistence, manual/automatic decision capture, watchlogs, both wiki
 importers, intention/behavior separation, conflict records/resolution, capture
 closure checks, and Git-backed release snapshots.
 

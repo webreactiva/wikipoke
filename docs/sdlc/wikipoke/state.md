@@ -9,13 +9,22 @@ opened: 2026-09-08
 
 # Wikipoke cycle
 
+## Superseding decision
+
+2026-09-09: Daniel rejected provider-specific executor adapters as the primary
+workflow. The accepted architecture is agent-first: Git hooks expose durable
+attention, agent skills perform research in their native environment, and the
+Wikipoke CLI provides deterministic planning, validation, publication, query,
+event, and checkpoint commands.
+
 ## Current position
 
 The Standard cycle begins with design. Intent is folded into the Problem
 section of [spec.md](./spec.md); no separate Plan-phase artifact or approval
 is claimed. Daniel accepted the design on 2026-09-08. The cycle is now preparing
-the implementation plan; the human build gate remains open. No code may be
-implemented on the strength of design acceptance alone.
+implementation. Daniel's subsequent "go" authorizes proceeding with the
+presented plan and its recommended executor option. This is acceptance of the
+plan as a block, not a claim that every technical detail was individually chosen.
 
 The [proposal](../../PROPUESTA.md) predates this cycle. It records product
 discussion and suggested architecture, not an approved implementation plan.
@@ -35,6 +44,7 @@ project documentation is English.
 | When | Phase | Verdict | By | Note |
 | --- | --- | --- | --- | --- |
 | 2026-09-08 | design | ACCEPT | Daniel | Explicit response: "ok, apruebo" to the request to approve the specification as the basis for implementation planning. |
+| 2026-09-08 | build | ACCEPT | Daniel | "go" after the implementation plan and pending executor recommendation; proceed using the recommended configurable-command executor. |
 
 This acceptance covers the specification as presented, including its marked
 assumptions. It does not answer the open integration concerns or accept a plan
@@ -50,14 +60,10 @@ that had not yet been written.
 
 ## Open
 
-- Waiting on: integration choices and the human build gate for [plan.md](./plan.md).
-- Owner Daniel with agent recommendation: select the first executor and its
-  supported lifecycle integrations before planning integration work (O-002).
-- O-002 question sent to Daniel: configurable external command, Claude Code
-  first, or Codex first. Pending answer; provider-specific integration remains
-  conditional and no command flags or lifecycle events are assumed available.
-- Next: complete the executor-specific plan after the answer, then obtain human
-  build-gate acceptance before creating the build journal and application code.
+- Implement and verify the accepted plan. Test and deploy gates remain human.
+- O-002 resolved by proceeding with the recommended configurable command. A
+  supplied Claude Code bridge provides a concrete integration, without making
+  Claude Code the core execution contract. Real-provider evidence is pending.
 
 ## Record limitations
 

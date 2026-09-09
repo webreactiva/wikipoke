@@ -1,8 +1,8 @@
 # Implementation plan: Wikipoke
 
-Status: draft; common implementation planned, executor selection pending.
+Status: accepted as a block following Daniel's "go" on 2026-09-08.
 From: [accepted specification](./spec.md), 2026-09-08.
-Gate: human build approval required before application changes.
+Gate: build accepted; test and deploy remain human.
 
 ## Scope and decisions
 
@@ -28,7 +28,7 @@ skill remain tooling for this cycle, not product runtime dependencies.
 | Bucket | Item |
 | --- | --- |
 | Decided | The design is accepted; every query is retained; implementation choices are captured; history uses Git; the build gate remains human. |
-| Open, O-002 | Daniel must select the first execution integration. Until then, the execution contract can be planned but concrete provider wiring cannot be finalized. |
+| Resolved, O-002 | Proceed with the recommended configurable-command executor. Supply a Claude Code bridge as the first concrete command implementation. |
 | Decided, O-001 | Daniel selected automatic activation. Completing executor, allowed scope, limits, and execution-environment configuration activates maintenance without an additional opt-in. Missing prerequisites remain visible. |
 | Proposed | One package, local files as canonical knowledge, rebuildable indexes, and one writer per target wiki. |
 | Investigation required | Verify the selected executor's supported invocation, output, cancellation, and lifecycle hooks before fixing its concrete integration plan. No installed CLI or credentials have been assumed. |
@@ -250,5 +250,14 @@ threshold or substitute a fake model result for real-model evidence.
 
 ## Departures
 
-None: implementation has not started. Update this section alongside code when
-an accepted implementation step changes, linking the contemporaneous journal entry.
+2026-09-08: selected a JSON stdin/stdout command executor and a Claude Code bridge
+after Daniel's "go". The bridge supplies context explicitly, disables tools and
+project hooks, and accepts structured output. Verified invocation options against
+the installed CLI help and https://code.claude.com/docs/en/headless.
+Related decisions are recorded in journal.md as implementation proceeds.
+
+2026-09-09: Widgetron scratch validation used a deterministic executor because
+no provider credential was configured. This demonstrates protocol integration,
+not real-model quality. Its concurrent read/write lock behavior is documented in
+the journal and evidence; a shared-reader lock is deferred rather than added
+without a tested concurrency design.
