@@ -46,6 +46,12 @@ function contents(root: string, group: Blob[]): Buffer {
   return execFileSync('git', ['-C', root, 'cat-file', '--batch'],
     { input: group.map(blob => blob.oid).join('\n') + '\n', maxBuffer: bytes + group.length * 128 + 4096 });
 }
+// Which included sources moved between two commits. Deterministic and cheap: one `git diff`, no
+// blob reads, because the caller only needs the names to match against what was explained.
+export function changed(root: string, config: Config, from: string, to = 'HEAD'): string[] {
+  const rows = git(root, 'diff', '--name-only', '-z', `${from}..${to}`).split('\0').filter(Boolean);
+  return rows.filter(name => !ignored(name, config));
+}
 export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
   const rev = revision(root, ref);
   const rows = git(root, 'ls-tree', '-r', '-z', rev).split('\0').filter(Boolean);

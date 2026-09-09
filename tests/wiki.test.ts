@@ -325,3 +325,27 @@ test('asking again offers the answers already given instead of hiding them', asy
   const pending: any = await wiki.ask('How many retries are configured now?', 'fourth');
   assert.deepEqual(pending.priorAnswers.map((prior: any) => prior.requestId), ['first']);
 });
+
+test('a change with no decision behind it is reported, but only once a checkpoint exists', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/added.ts'), 'export const added = true;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'add a module');
+  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  // Nothing is sealed yet, so there is no baseline to explain anything against.
+  assert.deepEqual((await wiki.status()).unexplained, []);
+
+  git(wiki.root, 'add', '-A'); git(wiki.root, 'commit', '-qm', 'wiki');
+  await wiki.seal();
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 9;\n');
+  writeFileSync(join(wiki.root, 'src/added.ts'), 'export const added = false;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change both');
+  assert.deepEqual((await wiki.status()).unexplained.sort(), ['src/added.ts', 'src/main.ts']);
+
+  await wiki.capture({ id: 'why', task: 'raise the retry budget', actor: 'agent/test',
+    at: '2026-09-09T10:00:00Z', kind: 'decision', choice: 'Nine retries',
+    rationale: 'The upstream timeout moved.', evidence: ['src/main.ts'] });
+  assert.deepEqual((await wiki.status()).unexplained, ['src/added.ts']);
+  const signal: any = await wiki.attention();
+  assert.equal(signal.unexplained.count, 1);
+  assert.deepEqual(signal.unexplained.sample, ['src/added.ts']);
+});

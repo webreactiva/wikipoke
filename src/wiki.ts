@@ -3,7 +3,7 @@ import { parse, stringify } from 'yaml';
 import { configSchema, patchSchema, answerSchema, eventSchema, type Config, type Metadata, type Page, type Source } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { inventory, revision, git } from './sources/git.js';
+import { changed, inventory, revision, git } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
@@ -129,6 +129,7 @@ export class Wiki {
         pages: health.pages, findings: { error: count('error'), warning: count('warning') },
         drift: { count: health.drift.length, sample: health.drift.slice(0, SAMPLE) },
         uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) },
+        unexplained: { count: health.unexplained.length, sample: health.unexplained.slice(0, SAMPLE) },
         tasks: { incomplete: incomplete.length, sample: incomplete.slice(0, SAMPLE) } };
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(signal) }]);
       return signal;
@@ -150,11 +151,22 @@ export class Wiki {
         ? 'incomplete' : closed.closure;
       return { task, closure };
     });
-    return { revision: inv.revision, checkpoint: this.store.load<{ version: number; lastIndexedCommit: string | null }>(
-      '.wikipoke/state.json', { version: 1, lastIndexedCommit: null }), pages: pages.length,
+    const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
+      '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
+    return { revision: inv.revision, checkpoint, pages: pages.length,
       findings: lint(pages, unreadable), drift,
       uncovered: inv.sources.filter(s => !covered.has(s.id)).map(s => s.id), tasks,
+      unexplained: this.unexplained(checkpoint.lastIndexedCommit, events),
       graph: graph(pages) };
+  }
+  // Source that moved since the sealed checkpoint and that no decision event claims as its evidence:
+  // the change happened and nobody recorded why. It stays silent until a checkpoint exists, because
+  // capture is for work done with the wiki in place — code that predates it cannot be explained now.
+  private unexplained(checkpoint: string | null, events: Event[]): string[] {
+    if (!checkpoint) return [];
+    const explained = new Set(events.filter(e => e.kind === 'decision').flatMap(e => e.evidence));
+    try { return changed(this.root, this.config, checkpoint).filter(id => !explained.has(id)); }
+    catch { return []; }
   }
   async ingest(ref = 'HEAD') {
     return this.store.locked(() => {

@@ -39,3 +39,14 @@ Record the code commit the manifest names, and ask historical questions with
 except by `snapshot` itself, and a label can only be captured once.
 
 Historical external sources remain subject to their own retention/access rules.
+## Changes nobody explained
+
+A decision event's `evidence` names the source files the choice was about. Once
+`seal` has recorded a checkpoint, Wikipoke compares the source that moved since
+that commit against the evidence of every decision event, and reports what is
+left as changed with no reason on record — in `status`, in the attention signal,
+and in the session briefing.
+
+The comparison stays silent until a checkpoint exists. Capture explains work done
+with the wiki in place; code that predates it cannot be explained after the fact,
+and a backdated event tape is bookkeeping, not knowledge.

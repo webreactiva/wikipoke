@@ -49,7 +49,7 @@ The notifier runs `maintain --once`, which writes `.wikipoke/attention.json` its
 
 ## State and freshness
 
-Each page cites a resource, Git revision, and content hash; source text itself is never stored in a page. `status` compares those records with the current inventory to report drift and uncovered sources. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump.
+Each page cites a resource, Git revision, and content hash; source text itself is never stored in a page. `status` compares those records with the current inventory to report drift and uncovered sources. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump. Beyond coverage and drift, the report names source that moved since the sealed checkpoint and appears in no decision's `evidence`: the change happened and nobody recorded why. It reports nothing before a checkpoint exists, because capture explains work done with the wiki in place.
 
 `seal` records `lastIndexedCommit` only when the configured scope has no uncovered source, no drifted reference, and no error finding.
 

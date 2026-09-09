@@ -100,7 +100,11 @@ relevant decision is made, and before closing a task.
 A task is a piece of work that reached a choice worth remembering — not every file you document.
 Open one when you expect to record a decision under it.
 
-- A \`decision\` event requires the \`choice\` that was made; record \`alternatives\` and \`evidence\` when they were stated.
+- A \`decision\` event requires the \`choice\` that was made, and \`evidence\` naming the source files the
+  choice is about. That is what ties a decision to code: source that moved since the sealed checkpoint
+  and appears in no decision's evidence is reported as changed with no reason on record. Capture the
+  decision when you make the change, not in a later documentation pass — a backdated tape explains nothing.
+- Record \`alternatives\` when they were stated.
 - Do not reconstruct undisclosed rationale from a diff. If nobody said why, close with \`none_declared\`
   and explain in \`rationale\` why no reason is on record. Wikipoke keeps absent rationale as unknown
   rather than guessing, and that is the point.
@@ -147,6 +151,7 @@ try {
   if (s.uncovered?.count) owed.push(s.uncovered.count + " undocumented source(s)");
   if (s.drift?.count) owed.push(s.drift.count + " page(s) citing moved code");
   if (s.findings?.error) owed.push(s.findings.error + " error finding(s)");
+  if (s.unexplained?.count) owed.push(s.unexplained.count + " changed source(s) with no decision recorded");
   if (s.tasks?.incomplete) owed.push(s.tasks.incomplete + " task(s) without a recorded decision");
   if (owed.length) process.stdout.write("Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile; the full signal is in .wikipoke/attention.json.\\n");
 } catch { /* no signal yet is not a problem worth reporting */ }

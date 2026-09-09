@@ -87,8 +87,8 @@ npx --no-install wikipoke --root /work/acme status
 npx --no-install wikipoke --root /work/acme lint
 ```
 
-`status` lists uncovered sources, changed evidence, incomplete task capture, and
-pending work. `lint` validates page structure and graph integrity without an
+`status` lists uncovered sources, changed evidence, source that moved with no
+decision behind it, incomplete task capture, and pending work. `lint` validates page structure and graph integrity without an
 LLM. Both take the writer lock, as does `graph`, so run one Wikipoke command at
 a time against a repository; a second concurrent command fails with a lock
 error. If a process dies while holding the lock, inspect the repository, then:
