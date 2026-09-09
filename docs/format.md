@@ -13,8 +13,7 @@ title: Payment gateway
 description: Sends validated payment requests to the configured provider.
 sources:
   - id: src/payments/gateway.ts
-    resource: src/payments/gateway.ts
-    revision: 0123456789abcdef
+    revision: 0123456789ab
     hash: 0123456789abcdef
 wikipoke:
   uid: payment-gateway
@@ -27,7 +26,8 @@ wikipoke:
 
 # Behavior
 
-The gateway sends validated payment requests.
+The gateway sends validated payment requests through
+[the HTTP client](./http-client.md), retrying under [[concepts/backoff]].
 ```
 
 A source record holds only `id`, `resource`, `revision`, `hash`, and an optional
@@ -109,6 +109,19 @@ ordinary page that publishes, counts, lints, joins the graph, and appears in the
 generated index like any other. A nested file with one of those names and no
 valid frontmatter is therefore an `invalid-page` error, not a silently ignored
 file.
+
+`lint` reports, beyond the structural errors below: `no-flows` and `thin-flow`
+for the flow pages a wiki is missing or leaning on one source;
+`thin-coverage` for a page claiming more sources than it describes;
+`mirrors-the-tree` for a wiki with about one page per source file;
+`dependency-cycle` for circular `depends_on`; `replacement-cycle` for circular
+`supersedes`; `broken-link` for a link to a page that is not there;
+`unknown-evidence` for a relation citing evidence outside the page's own sources;
+`duplicate-id` for two pages sharing a `wikipoke.uid`; `conflict-markers` for a
+page a merge left unresolved; and `lost-checkpoint` when the sealed commit is no
+longer in the repository. `seal` is held by every error, and by `no-flows`,
+`thin-coverage` and `mirrors-the-tree` — the three warnings that describe a wiki
+which looks complete and is not.
 
 The validator preserves unrecognized frontmatter fields and Markdown body text.
 It rejects duplicate UIDs, evidence IDs that do not belong to the page's sources,

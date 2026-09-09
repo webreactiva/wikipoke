@@ -93,17 +93,30 @@ the executor within it does not.
 
 - Implement and verify the accepted plan. Test and deploy gates remain human and
   neither has been requested.
-- FR-008, FR-009 and FR-014 are unimplemented; FR-011 has no read path; no
-  external agent has completed the loop on a real repository. Whether the plan
-  is delivered in full or its scope is reduced is Daniel's decision, not the
-  agents'. Nothing has been narrowed unilaterally.
+- FR-008, FR-009 and FR-014 are unimplemented; FR-011 has no read path. Whether
+  the plan is delivered in full or its scope is reduced is Daniel's decision, not
+  the agents'. Nothing has been narrowed unilaterally.
+- Resolved 2026-09-09: an external agent has now completed the loop on a real
+  repository — install, ingest to full coverage with flow pages, a sealed
+  checkpoint, a code change with its decisions captured unprompted, and a query
+  answered and retained. Recorded in [journal.md](./journal.md).
 - O-002 is void as posed: its 2026-09-08 resolution selected an executor that
   the 2026-09-09 decision removed. No replacement question has been put to
   Daniel.
 - Two concerns raised during implementation await him: O-004, whether `seal`
   should keep requiring complete coverage before advancing the checkpoint, and
   O-005, how a wiki page is retired when its source disappears. Both are in
-  [spec.md](./spec.md#open-concerns). Neither was changed while waiting.
+  [spec.md](./spec.md#open-concerns).
+  - O-004 moved on 2026-09-09, in the opposite direction to relaxing it: `seal`
+    now also refuses while no page describes a flow, while any page claims more
+    sources than it describes, while the wiki is shaped like the file tree, and
+    while the sealed commit is unreachable. The question of whether complete
+    coverage should be required at all is still Daniel's.
+  - O-005 is narrower than recorded. A page whose source disappears is not stuck:
+    republishing it without that source clears the drift and keeps the page as
+    the record that the thing existed, which is knowledge a diff cannot carry.
+    Every drift entry now names that remedy. What remains open is only whether a
+    retired page should stop counting towards coverage and sink in the index.
 - Assumption in force: `phase` stays `build` because the accepted plan is not
   delivered. If Daniel would rather close a Test gate over the delivered subset
   and open a new cycle for the rest, that is a different and legitimate reading

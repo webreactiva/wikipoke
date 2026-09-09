@@ -135,3 +135,58 @@ manual runs could not surface.
   the workspace-root requirement is now written down.
 
 No gate moved. This is build work recorded against the accepted plan.
+
+## 2026-09-09 — capture, shape, and the first complete external loop
+
+Written the same day as the work, from the trials it came out of. No gate moved.
+
+- Watchlogs are gone. A page transcribing a task's open and close events is
+  process, not knowledge: 44 of the 67 in the validation wiki said nothing but
+  "Task opened". The tape stays in `.wikipoke/events/`; only choices publish.
+
+- The reason for a change exists in one place and for one moment — the agent
+  making it, while it is still making it. A `PostToolUse` hook journals the files
+  each edit touches, doing the least work that is still useful: no config parse,
+  no Git, no writer lock, no import. A `Stop` hook confronts the agent with what
+  it changed and never explained, under `capture: off | remind | block`.
+
+- `block` is the default, decided on evidence rather than taste. Given a correct
+  notice naming all ten files it had just changed, an agent finished the turn
+  anyway and, asked why, answered "no valid excuse — I focused on implementing
+  and let the notice pass". Twice. Only Claude Code exposes a hook that can
+  refuse a stop, so elsewhere this degrades to a notice and that limit is now
+  written in the README rather than discovered.
+
+- A block with no honest way out manufactures the fiction the block exists to
+  prevent. The message offered `none_declared` and it did not settle anything, so
+  the only exit was to invent a decision — which then publishes as a first-class
+  page, pinned to code and in the graph, indistinguishable from a real one. A
+  closure that names its files now settles them and reports as `undeclared`.
+
+- Connections between pages moved into the body as ordinary Markdown links, read
+  as `[[wikilinks]]` too. The relation vocabulary went from eleven types to
+  three; eight were written by nothing and read by nothing. Decisions gained
+  pinned provenance from their declared evidence, which took them from 23
+  isolated nodes out of 58 to 23 connected ones.
+
+- Two ways to reach a green wiki without writing one, both reproduced and both
+  now reported: one page citing every file (`thin-coverage`), and one page per
+  file named after its path (`mirrors-the-tree`). Thresholds are calibrated
+  against real wikis, not chosen: the same prompt on the same repository produced
+  0.36 pages per source from one agent and 1.01 from another.
+
+- A premortem found five ways the wiki quietly stops being true, each reproduced
+  before it was fixed: skills installed where Claude Code cannot see them, an
+  answer citing only pages that never expires, a planning revision that threw
+  away a batch whenever anyone committed anything, a writer lock traveling in
+  commits so a clone is locked from birth, and a squash-merge leaving the
+  checkpoint unreachable while the signal reads clean. The common shape is a
+  system turning "I don't know" into "it's fine".
+
+- **An external agent completed the whole loop on a real repository**, which the
+  record previously listed as never done. From a clean clone of Widgetron with no
+  wiki: install, 254 pages and 3 flows covering 251 of 251 sources, a sealed
+  checkpoint, a code change with both decisions captured unprompted and
+  `unexplained: 0`, and a query answered and retained citing both a page and
+  three files. The wiki it produced was shaped like the file tree, which is why
+  `mirrors-the-tree` exists.

@@ -75,7 +75,16 @@ agent that truncates the plan loses the pinned evidence the patch has to carry.
 A single source larger than the budget is still planned on its own, so an
 oversized file never blocks the queue behind it. When a root-level
 `.wikipokeignore` exists, initialization imports its non-comment glob patterns
-into `exclude`. Review `include`, `exclude`, and limits before ingestion. The
+into `exclude`. Review `include`, `exclude`, and limits before ingestion.
+
+`capture` decides what happens when an agent stops having changed source it never
+explained: `block` (the default) refuses the stop until it records a decision or
+declares that none was stated, `remind` tells the human and lets the turn end, and
+`off` says nothing. `block` is the default because a reminder is demonstrably not
+enough — in a trial, an agent that had read a correct notice naming all ten files
+it had just changed finished the turn anyway. Only Claude Code exposes a hook that
+can refuse a stop; under OpenCode `block` degrades to a line in the agent's own
+system prompt. The
 CLI is deterministic: it plans work, validates evidence and commits safe wiki
 writes. The installed agent skill reads the plan, reasons over code, and calls
 the CLI to publish its result.
@@ -223,6 +232,22 @@ from a diff, which is why the `session-stop` hook asks for the reason during the
 turn that made the change rather than in a later documentation pass. Open and
 close task events make incomplete capture visible. See [operations](./operations.md)
 for the event form.
+
+## See what an agent touched
+
+The `tool-journal` hook appends one line per edit to
+`.wikipoke/journal/<session>.jsonl`, naming the file a tool wrote to. It parses no
+configuration and takes no lock, so scope is applied when the journal is read:
+
+```sh
+npx --no-install wikipoke --root /work/acme journal --session ses_01H...
+```
+
+It reports the in-scope files that session changed, which of them no decision
+claims (`unexplained`), and which were closed with no reason declared
+(`undeclared`). Unlike the checkpoint signal it needs no commit and no `seal`, so
+it answers inside the turn that made the change. `note --file <path>` writes a
+journal entry by hand, for a harness with no hook of its own.
 
 ## Capture a release
 

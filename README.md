@@ -146,8 +146,9 @@ wikipoke status
 wikipoke ingest
 wikipoke ask "How are payments validated?" --request-id payment-validation
 wikipoke answer --request-id payment-validation --response answer.json
-wikipoke publish --patch patch.json
-wikipoke capture --event decision.json
+wikipoke publish --patch .wikipoke/tmp/patch.json
+wikipoke capture --event .wikipoke/tmp/decision.json
+wikipoke journal --session ses_01H...
 wikipoke snapshot v1.0.0
 wikipoke seal
 wikipoke lint
@@ -167,9 +168,15 @@ state, and integration behavior.
 validates citations before closing it, and will not overwrite an answer already
 closed — revise one by asking again under a new `--request-id`. `wikipoke schema event` emits the task-event
 contract, so an agent never reads the implementation to discover it. `capture`
-accepts a task event with an ID, task, actor, ISO
-timestamp, and `open`, `decision`, or `close` kind. A decision requires `choice`;
-a `none_declared` closure requires a rationale. See [operations](docs/operations.md).
+accepts a task event with an ID, task, actor, ISO timestamp, and `open`,
+`decision`, or `close` kind. A decision requires `choice`, and should carry a
+short `title` — without one the page is named after the first sentence of the
+choice, which is derived rather than chosen. Its `evidence` is resolved against
+the inventory and becomes pinned provenance, so the decision drifts when the code
+behind it moves. A `none_declared` closure requires a rationale and must name in
+`evidence` the files it covers: that is what settles them, and it is the honest
+alternative to inventing a reason. `journal` reports what a session changed and
+what nothing explains yet. See [operations](docs/operations.md).
 
 ## Agent workflow
 
@@ -181,10 +188,13 @@ structured patch to `publish`. No provider-specific CLI is part of Wikipoke.
 
 The library rejects out-of-scope paths, symlink traversal in the wiki, unpinned
 source evidence, unknown citations, duplicate event identities, and concurrent
-edits. A patch may declare the `revision` it was planned against and is refused
-when the sources have moved since. An unreadable page is reported as an
-`invalid-page` finding instead of failing every command, and `publish` will not
-overwrite it. File publication uses a recovery journal. A snapshot requires
+edits. Evidence is verified by content: a page is refused when a source it cites
+has moved, and accepted when somebody else committed something unrelated during
+the turn. An unreadable page is reported as an `invalid-page` finding instead of
+failing every command, and `publish` will not overwrite it — except for the one
+case of unresolved merge conflict markers, which git wrote and nobody is midway
+through editing. File publication uses a recovery journal, and neither that
+journal nor the writer lock is ever committed. A snapshot requires
 committed wiki content and retains exact Git refs for code and wiki. It does not
 archive external source revisions automatically.
 
@@ -198,6 +208,14 @@ These are absent from the product today, not merely undocumented.
   FR-008 and FR-009 are unimplemented.
 - **No importers for the existing wikis.** There is no migration path for the
   Widgetron or Web Reactiva wikis (FR-014 unimplemented).
+- **Capture cannot be enforced outside Claude Code.** Only Claude Code exposes a
+  hook that can refuse a stop. Everywhere else `block` degrades to a notice, and
+  a notice is not enough: given a correct one naming every file it had just
+  changed, an agent read it and finished the turn anyway.
+- **The reason is declared, never observed.** The hooks can prove a file changed
+  and never why. Wikipoke records an absent reason as absent rather than
+  reconstructing one from a diff, which is the point, but it means an agent that
+  declares nothing leaves nothing.
 - **Snapshots are write-only.** `snapshot` stores Git refs and a manifest under
   `.wikipoke/releases/`, but no command lists, reads, or queries one. Historical
   questions are asked by passing a commit to `ask --ref`, never a release label.
