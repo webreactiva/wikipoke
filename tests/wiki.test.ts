@@ -235,11 +235,10 @@ test('publishing never copies source content into the frontmatter', async () => 
   // With a Git adapter the resource is the id, so the plan never offers a field that only repeats
   // one - and publish drops it even when an agent fills it in from the schema anyway.
   assert.deepEqual(Object.keys(wiki.pages()[0].meta.sources[0]).sort(), ['hash', 'id', 'revision']);
-  const plan: any = await wiki.ingest();
+  const echoed_ = wiki.pages()[0].meta.sources.map(source => ({ ...source, resource: source.id }));
   await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/echo.md',
     meta: { type: 'concept', title: 'Echo', description: 'Echo', wikipoke: { uid: 'echo', relations: [] },
-      sources: plan.sources.map(({ content, ...source }: any) => ({ ...source, resource: source.id })) },
-    body: 'Body.' }] });
+      sources: echoed_ }, body: 'Body.' }] });
   const echoed = wiki.pages().find(page => page.path === 'concepts/echo.md')!;
   assert.deepEqual(Object.keys(echoed.meta.sources[0] ?? {}).sort(), ['hash', 'id', 'revision']);
 });
