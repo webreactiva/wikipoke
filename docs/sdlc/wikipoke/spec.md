@@ -36,6 +36,11 @@ user decisions. Daniel accepted this specification as a whole on 2026-09-08;
 the marks retain provenance rather than indicating an unaccepted requirement.
 The proposal remains context; this specification defines reviewable behavior.
 
+`⛔` marks text superseded by a later decision recorded in
+[state.md](./state.md). Superseded wording is kept verbatim rather than edited:
+Daniel accepted these sentences on 2026-09-08 and has not accepted a
+replacement. See [Superseded requirements](#superseded-requirements).
+
 ## Behavior
 
 **FR-001 — Portable connected knowledge.** The system MUST maintain a wiki
@@ -44,7 +49,7 @@ and review workflow. It MUST integrate with projects independently of their
 implementation language and allow source kinds beyond code without redefining
 the meaning of existing knowledge. (U1)
 
-**FR-002 — Autonomous lifecycle.** After its required executor and execution
+**FR-002 — Autonomous lifecycle.** ⛔ After its required executor and execution
 environment are configured, the system MUST bootstrap an absent wiki, discover
 source changes, and reconcile affected knowledge without a fresh user prompt
 for each pass. It MUST expose incomplete work and missing execution capabilities
@@ -119,7 +124,7 @@ product MUST NOT require a separate human-correction subsystem. (U5)
 
 **FR-013 — Reusable integration.** A project MUST be able to install the system's
 maintenance and query entry points, including the required hooks/skills, and
-identify which capabilities are active. Unattended execution MUST work outside
+identify which capabilities are active. ⛔ Unattended execution MUST work outside
 interactive sessions when its executor and scheduling environment are present.
 (U1, U2)
 
@@ -136,6 +141,31 @@ loops. Budgets and missing providers MUST leave visible pending work. Installati
 MUST preserve prior project integrations; removal MUST preserve knowledge.
 Queries and derived outputs MUST respect configured source restrictions.
 ⚠ (P1: operational and installation safeguards)
+
+## Superseded requirements
+
+On 2026-09-09 Daniel rejected provider-specific executor adapters as the primary
+workflow and accepted an agent-first architecture: Git hooks expose a durable
+attention signal, agent skills perform the research in their own environment,
+and the CLI provides deterministic planning, validation, publication, query,
+event and checkpoint commands. The decision is recorded in
+[state.md](./state.md#superseding-decision). It removes the executor from the
+product, and with it the premise of the clauses below.
+
+No replacement wording has been put to Daniel and none is claimed here. The
+original text stays as accepted; this table records what it no longer describes.
+
+| Where | Superseded clause | What survives | Superseded by |
+| --- | --- | --- | --- |
+| FR-002 | "After its required executor and execution environment are configured" and "Completing the executor, scope, limits, and execution-environment configuration MUST activate unattended maintenance without a separate activation step" | The obligation to expose incomplete work instead of declaring success. Bootstrap, discovery and reconciliation now belong to an external agent driving `ingest`/`publish`; the CLI never invokes a model. | Daniel, 2026-09-09 |
+| FR-013 | "Unattended execution MUST work outside interactive sessions when its executor and scheduling environment are present" | Installable entry points, and reporting which capabilities are active. What runs outside a session is the deterministic `maintain --once` refresh, not knowledge generation. | Daniel, 2026-09-09 |
+| S16 | "A provider or budget becomes unavailable: generation stays visibly pending" | Mechanical health checks remain usable, and uncovered scope stays visible. There is no provider or budget inside the product to become unavailable. | Daniel, 2026-09-09 |
+| O-001 (resolved) | Automatic activation of unattended maintenance once executor and execution-environment configuration is complete | The product still has no separate opt-in: `init` plus `install` is the whole activation. What activates is the attention signal, not maintenance performed by the product. | Daniel, 2026-09-09 |
+| O-002 (open) | "Which executor and agent integration should be supported first?" and its 2026-09-08 resolution in favour of a configurable-command executor with a Claude Code bridge | The question is void as posed: the architecture has no executor to select. The installed skills are agent-neutral Markdown, so the residual question is which agent runtimes read `.agents/skills/`. | Daniel, 2026-09-09 |
+
+FR-001, FR-003 to FR-012, FR-014 and FR-015 are unaffected by this decision.
+Their implementation status is a separate matter, tracked in
+[plan.md](./plan.md#delivered-and-not-delivered).
 
 ## Scenarios
 
@@ -156,7 +186,7 @@ Queries and derived outputs MUST respect configured source restrictions.
 | S13 | A unit is renamed: relationships and historical identity remain traceable after graph reconstruction. | FR-004 |
 | S14 | Existing wiki input cannot be parsed completely: adoption reports the missing material and preserves originals rather than silently dropping evidence. | FR-014 |
 | S15 | A project already has hooks: install twice and remove Wikipoke; prior hooks and generated knowledge remain, with no duplicated managed integration. | FR-013, FR-015 |
-| S16 | A provider or budget becomes unavailable: generation stays visibly pending and mechanical health checks remain usable. | FR-002, FR-015 |
+| S16 | ⛔ A provider or budget becomes unavailable: generation stays visibly pending and mechanical health checks remain usable. | FR-002, FR-015 |
 
 ## Out of scope
 
@@ -186,14 +216,21 @@ for this design gate. Their absence must not prevent the behaviors above. (P1)
 
 | ID | Concern | Owner | Impact and current handling |
 | --- | --- | --- | --- |
-| O-002 | Which executor and agent integration should be supported first? | Daniel, with agent feasibility assessment | Blocks concrete integration planning for FR-007/FR-013, not the behavioral specification. The proposal's generic adapter is not a promise that every agent exposes every hook. |
-| O-003 | What source restrictions and numeric budgets apply to a particular installation? | Installing project owner | Needed when configuring an installation under FR-015. The library must expose configuration; this specification does not invent token limits or declare all source content public. |
+| O-002 | ⛔ Which executor and agent integration should be supported first? | Daniel, with agent feasibility assessment | Void as posed since 2026-09-09: the product has no executor. Installed skills are agent-neutral Markdown under `.agents/skills/`; which runtimes read that directory is the residual question. |
+| O-003 | What source restrictions and numeric budgets apply to a particular installation? | Installing project owner | Needed when configuring an installation under FR-015. `init` requires `--include` and records a `batchFiles` limit; no other budget exists, because the product no longer spends provider resources. |
+| O-004 | Should `seal` require complete coverage before advancing the checkpoint? | Daniel | Raised 2026-09-09, after design acceptance. `seal` currently refuses while any source is uncovered, any reference has drifted, or any error finding stands. On a real repository with a broad `include`, that means the checkpoint can never advance until the whole codebase is documented. This is a product choice, not a defect; nothing was changed pending the decision. |
+| O-005 | How is a wiki page retired? | Daniel | Raised 2026-09-09, after design acceptance. `publish` only creates and replaces pages; there is no deletion and no deprecation state. Source files that disappear leave their pages behind as drift. FR-003 and FR-004 assume pages track reality, so a retirement path is missing rather than out of scope. |
+
+O-004 and O-005 were raised during implementation and are not part of the set
+Daniel accepted on 2026-09-08.
 
 ## Resolved concerns
 
 - O-001: Daniel selected automatic activation after design acceptance on
   2026-09-08. FR-002 now records the default. Required configuration and checks
   still apply; there is no additional activation gate for product maintenance.
+  ⛔ Superseded in part on 2026-09-09: what activates without an opt-in is the
+  deterministic attention signal, not maintenance performed by the product.
 
 ## Policy and coverage
 
@@ -204,9 +241,16 @@ file-level implementation and verification steps belong in the later plan.
 
 Coverage read: problem and behavior are covered by user requests and precedents;
 scenarios make their edge cases observable; non-goals reflect explicit exclusions
-or labeled proposals. Three provenance-marked assumptions, two open concerns,
+or labeled proposals. Three provenance-marked assumptions, four open concerns,
 and one resolved concern are visible above.
 This specification contains 15 requirements, three retaining assumption
 provenance. Daniel accepted the design; the listed open concerns remain explicit
 and must be settled where they block planning. Implementation still requires
 acceptance of the implementation plan at the human build gate.
+
+Revision note, 2026-09-09: two clauses, one scenario and two concerns carry a
+`⛔` mark after Daniel's rejection of executor adapters. No accepted requirement
+text was edited, and no new requirement was accepted. O-004 and O-005 were added
+as concerns raised during implementation. What is implemented, partially
+implemented or absent is recorded in
+[plan.md](./plan.md#delivered-and-not-delivered), not here.
