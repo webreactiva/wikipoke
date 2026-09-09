@@ -56,9 +56,16 @@ function unique(directory: string, label: string, taken: Set<string>): string {
 // A choice is a paragraph; a title is a name. When an event declares no title, the first sentence is
 // the closest thing to one it has - better than the whole paragraph, and honest about being derived.
 function headline(value: string): string {
+  const trim = (text: string) => text.replace(/[\s.,:;-]+$/, '');
   const first = value.split('\n')[0].trim();
   const sentence = first.split(/(?<=[.:;])\s/)[0] || first;
-  return sentence.length > 90 ? sentence.slice(0, 90).replace(/\s+\S*$/, '') : sentence;
+  if (sentence.length <= 90) return trim(sentence);
+  // A hard cut at the character limit ends a name mid-phrase - "...can be surfaced to the". Falling
+  // back to the last clause boundary inside the budget ends it somewhere a reader would have paused.
+  const budget = sentence.slice(0, 90);
+  const clause = Math.max(budget.lastIndexOf(', '), budget.lastIndexOf(' - '),
+    budget.lastIndexOf(' ('), budget.lastIndexOf(' so '), budget.lastIndexOf(' because '));
+  return trim(clause > 40 ? budget.slice(0, clause) : budget.replace(/\s+\S*$/, ''));
 }
 function metadata(type: string, title: string, uid: string): Metadata {
   return { type, title, description: title, sources: [], wikipoke: { uid, relations: [] } };
