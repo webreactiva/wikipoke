@@ -157,8 +157,15 @@ export class Wiki {
     }
     const errors = lint([...byPath.values()]).filter(f => f.severity === 'error');
     if (errors.length) throw new Error(json(errors));
-    const writes = pages.map(p => ({ path: this.pagePath(p.path), before: read(this.store.path(this.pagePath(p.path))),
-      after: render(p.meta, p.body) }));
+    // Normalized at the single point everything written passes through, rather than in one caller.
+    // An agent fills in fields it knows the schema has even when the plan stopped offering them, and
+    // Wikipoke's own generated pages carried the same duplication in from the inventory.
+    const writes = pages.map(p => {
+      const meta = { ...p.meta, sources: p.meta.sources.map(source =>
+        source.resource === source.id ? (({ resource, ...rest }) => rest)(source) : source) };
+      return { path: this.pagePath(p.path), before: read(this.store.path(this.pagePath(p.path))),
+        after: render(meta, p.body) };
+    });
     const idx = `${this.config.wiki}/index.md`;
     writes.push({ path: idx, before: read(this.store.path(idx)), after: index([...byPath.values()]) });
     const chronology = this.changelog([...byPath.values()]);
@@ -337,11 +344,7 @@ export class Wiki {
           if (!sameDigest(source.hash, known.hash))
             throw new Error(`Unverified source: ${source.id} declares hash ${source.hash ?? 'nothing'}, sources have ${known.hash}; re-plan with ingest`);
         }
-        // An agent fills in fields it knows the schema has, even ones the plan stopped offering. The
-        // frontmatter is normalized here so the file on disk never repeats a path twice.
-        const meta = { ...p.meta, sources: p.meta.sources.map(source =>
-          source.resource === source.id ? (({ resource, ...rest }) => rest)(source) : source) };
-        return { ...p, meta, raw: render(meta, p.body) };
+        return { ...p, raw: render(p.meta, p.body) };
       });
       if (!updated.length) throw new Error('Patch contains no pages');
       this.publish(updated);

@@ -241,6 +241,12 @@ test('publishing never copies source content into the frontmatter', async () => 
       sources: echoed_ }, body: 'Body.' }] });
   const echoed = wiki.pages().find(page => page.path === 'concepts/echo.md')!;
   assert.deepEqual(Object.keys(echoed.meta.sources[0] ?? {}).sort(), ['hash', 'id', 'revision']);
+  // Including the pages Wikipoke generates itself, which took their sources straight from the
+  // inventory and so carried the same duplication in through a different door.
+  await wiki.ask('How many retries?', 'norm');
+  await wiki.answer('norm', { answer: 'Three.', citations: ['src/main.ts'], gaps: [] });
+  const query = wiki.pages().find(page => page.meta.type === 'query')!;
+  assert.deepEqual(Object.keys(query.meta.sources[0]).sort(), ['hash', 'id', 'revision']);
 });
 
 test('publish refuses a patch whose evidence moved, and only that', async () => {
