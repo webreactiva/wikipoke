@@ -301,7 +301,11 @@ export class Wiki {
             if (!sameDigest(mine, theirs)) throw new Error(`Unverified source: ${source.id} declares ${field} ${mine ?? 'nothing'}, sources have ${theirs}; re-plan with ingest`);
           }
         }
-        return { ...p, raw: render(p.meta, p.body) };
+        // An agent fills in fields it knows the schema has, even ones the plan stopped offering. The
+        // frontmatter is normalized here so the file on disk never repeats a path twice.
+        const meta = { ...p.meta, sources: p.meta.sources.map(source =>
+          source.resource === source.id ? (({ resource, ...rest }) => rest)(source) : source) };
+        return { ...p, meta, raw: render(meta, p.body) };
       });
       if (!updated.length) throw new Error('Patch contains no pages');
       this.publish(updated);
