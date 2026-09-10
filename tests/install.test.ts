@@ -84,11 +84,16 @@ test('the delegated hook resolves the notifier at run time, not from a baked pat
 test('the notifier refreshes the signal through maintain --once', async () => {
   const wiki = await setup();
   install(wiki.root);
-  fakeCli(wiki.root, 'printf "%s\\n" "$*" > "$2/.wikipoke/invocation"\nprintf "{\\"refreshed\\":true}\\n" > "$2/.wikipoke/attention.json"');
+  // The refresh is made deliberately slow, because the property under test is that the hook does not
+  // wait for it - not that a particular machine can fork a shell inside some number of milliseconds.
+  // A wall-clock budget measured the second thing and failed wherever the first one still held.
+  const refresh = 3000;
+  fakeCli(wiki.root, `sleep ${refresh / 1000}\nprintf "%s\\n" "$*" > "$2/.wikipoke/invocation"\nprintf "{\\"refreshed\\":true}\\n" > "$2/.wikipoke/attention.json"`);
   const started = Date.now();
   const result = notify(wiki.root);
+  const waited = Date.now() - started;
   // The commit must not wait for a pass that reads every source in the repository.
-  assert.ok(Date.now() - started < 400, `hook took ${Date.now() - started}ms`);
+  assert.ok(waited < refresh, `hook waited ${waited}ms for a ${refresh}ms refresh`);
   assert.equal(result.status, 0);
   assert.equal((await settled(join(wiki.root, '.wikipoke/invocation')))?.trim(),
     `--root ${realpathSync(wiki.root)} maintain --once`);

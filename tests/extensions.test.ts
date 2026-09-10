@@ -96,8 +96,10 @@ test('an extension can run a Wikipoke command, because it is called outside the 
   const root = repository();
   // `--import tsx` resolves against the working directory, and the extension's is the project under
   // test; the sources being run live here, so the nested call is made from here.
+  // Every path here is quoted: node lives under "Application Support" on a normal macOS install,
+  // and an unquoted interpreter path fails on the machine of whoever happens to have one.
   attach(root, { event: 'ingest.after', run: script(root, 'nested.sh',
-    `cd ${resolve(import.meta.dirname, '..')} && ${process.execPath} --import tsx ${cli} --root "$WIKIPOKE_ROOT" lint > "$WIKIPOKE_ROOT/lint.json" 2>"$WIKIPOKE_ROOT/lint.err"`) });
+    `cd "${resolve(import.meta.dirname, '..')}" && "${process.execPath}" --import tsx "${cli}" --root "$WIKIPOKE_ROOT" lint > "$WIKIPOKE_ROOT/lint.json" 2>"$WIKIPOKE_ROOT/lint.err"`) });
   const result = run(root, 'ingest');
   assert.equal(result.status, 0);
   assert.equal(readFileSync(join(root, 'lint.err'), 'utf8').trim(), '');
