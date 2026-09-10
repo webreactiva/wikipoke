@@ -76,6 +76,26 @@ then the prose. Get the exact contract with \`${cli} schema page\`:
     Prose. Ordinary Markdown links, or [[retry-limit]] — both are read as edges. A wikilink
     resolves by file name, not by title: [[retry-limit]], never [[The retry limit]].
 
+## Where a page goes
+
+Wikipoke validates paths and, until you read this, proposed none - which is how a wiki comes out flat,
+with whatever folder the first page happened to invent. The taxonomy is:
+
+- \`entities/\` - a module, a subsystem, a thing the code has.
+- \`flows/\` - a path through the code that crosses files.
+- \`concepts/\` - a convention or an idea that no single file owns.
+- \`queries/\` and \`decisions/\` - written by Wikipoke itself. Never publish into them.
+
+So a page with \`type: entity\` goes at \`entities/http.md\`, and \`type: flow\` at
+\`flows/one-request.md\`. A project can remap this under \`layout:\` in \`wikipoke.config.yaml\`;
+read it before you invent a folder. \`lint\` reports \`unplaced-page\` for a page sitting at the wiki
+root when its type has a home.
+
+It is a suggestion, not a rule: a page's identity is its \`uid\`, never its path, so a page can be
+moved later and every link to it still resolves. Group by domain instead when the project already
+does - the warning only fires on a page with no folder at all, which is nearly always a page nobody
+chose a place for.
+
 **\`sources\` are patterns, not a file list.** A directory claims everything under it, a glob claims
 what it matches, and a path claims that one file. Claim the module you actually described: \`src/http\`
 is one line that covers forty files, and it keeps covering them when a forty-first appears. Wikipoke

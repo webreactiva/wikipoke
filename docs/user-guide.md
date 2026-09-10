@@ -43,6 +43,12 @@ hand. It verifies patterns, paths, graph integrity, page identity, and concurren
 edits before publishing, and refuses the publication when any file matching those
 patterns moved between the plan and now. Source text never reaches a page.
 
+Pages are filed by type — `entities/`, `flows/`, `concepts/`, with `queries/` and
+`decisions/` written by Wikipoke itself. The map lives under `layout` in the
+configuration and a project can remap it. It is a suggestion: `lint` warns with
+`unplaced-page` only for a page left at the wiki root when its type has a home,
+because a page's identity is its `uid` and never its path.
+
 `publish` creates and replaces pages. It cannot delete a page or mark one
 obsolete — that stays a manual Git edit.
 

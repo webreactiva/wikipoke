@@ -121,7 +121,8 @@ export function graph(pages: Page[]) {
   return { nodes: pages.map(p => ({ id: p.path, uid: p.meta.wikipoke.uid, type: p.meta.type, title: p.meta.title })),
     edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()], symmetric };
 }
-export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount = 0): Finding[] {
+export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount = 0,
+  layout: Record<string, string> = {}): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
   for (const u of unreadable) findings.push({ code: u.code, severity: 'error', page: u.path, message: u.reason });
   for (const p of pages) {
@@ -170,6 +171,14 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   if (sourceCount >= 30 && described_.length >= sourceCount * 0.8 && single >= described_.length * 0.7)
     findings.push({ code: 'mirrors-the-tree', severity: 'warning',
       message: `${described_.length} pages for ${sourceCount} sources, ${single} of them citing a single file: a wiki shaped like the file tree restates the code instead of carrying what the code cannot say` });
+  // A page at the wiki root when its type has a home is almost always a page nobody chose a place
+  // for. Only the flat case is reported: a project that put a page under a folder of its own made a
+  // decision, and second-guessing it would be the tool imposing a taxonomy rather than proposing one.
+  for (const p of pages) {
+    const home = layout[p.meta.type];
+    if (home && !p.path.includes('/')) findings.push({ code: 'unplaced-page', severity: 'warning', page: p.path,
+      message: `${p.meta.type} pages read better under ${home}/, so ${home}/${p.path}; a path is not identity, so moving it keeps every link to this page` });
+  }
   const { edges } = graph(pages);
   for (const e of edges.filter(e => e.type !== 'source')) {
     // Both ends, not just the target. A symmetric relation is stored with its ends in a fixed order,

@@ -78,9 +78,17 @@ export const commandSchema = z.object({
   timeout: z.number().int().positive().max(3600).default(120),
 });
 export type ProjectCommand = z.infer<typeof commandSchema>;
+// Where a page of each type lives. Wikipoke validated paths and proposed none, so the only taxonomy
+// it ever imposed was the one it generated for itself - and a wiki written without one comes out
+// flat, with whatever folder the first page happened to invent. This is the proposal, in one place a
+// project can read and override. It is not identity: `wikipoke.uid` is, so a page can be moved and
+// every link to it survives, which is exactly why a suggestion is enough and a rule would be wrong.
+export const defaultLayout = { entity: 'entities', flow: 'flows', concept: 'concepts',
+  query: 'queries', decision: 'decisions' } as const;
 export const configSchema = z.object({
   version: z.literal(1), wiki: z.string().default('wiki'), language: z.string().default('en'),
   include: z.array(z.string()).min(1), exclude: z.array(z.string()).default([]),
+  layout: z.record(z.string().min(1), z.string().min(1)).default(defaultLayout),
   // Empty by default and empty in most projects: Wikipoke does the deterministic work itself, and
   // whatever a particular team wants to happen around it is theirs to attach, not the tool's to guess.
   // A malformed extension fails the whole configuration on purpose: a project that believes

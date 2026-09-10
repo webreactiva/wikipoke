@@ -30,6 +30,28 @@ The gateway sends validated payment requests through
 [the HTTP client](./http-client.md), retrying under [[concepts/backoff]].
 ```
 
+## Where a page goes
+
+`layout` in `wikipoke.config.yaml` maps a page type to the folder it belongs in, and ships with a
+taxonomy rather than leaving every wiki to invent one:
+
+```yaml
+layout:
+  entity: entities      # a module, a subsystem, a thing the code has
+  flow: flows           # a path through the code that crosses files
+  concept: concepts     # a convention or an idea no single file owns
+  query: queries        # written by Wikipoke, from ask/answer
+  decision: decisions   # written by Wikipoke, from capture
+```
+
+Remap it, add types of your own, or drop entries. The pages Wikipoke generates read the same map, so
+the taxonomy has one definition.
+
+It is a suggestion. `lint` reports `unplaced-page` — a warning, never an error — for a page sitting
+at the wiki root when its type has a home, and says nothing about a page filed under a folder the
+project chose. A page's identity is its `uid` and never its path, so a page can be moved afterwards
+and every link to it still resolves; that is what makes a suggestion enough and a rule wrong.
+
 A source record holds only `id`, `resource`, `revision`, `hash`, and an optional
 `title`. Source text is never part of a page: the `content` field carried by an
 `ingest` plan is never written.

@@ -32,8 +32,10 @@ function notify(root: string) {
   return spawnSync(join(root, '.wikipoke/hooks/post-commit'), [], { cwd: root, encoding: 'utf8' });
 }
 // The refresh is detached so the commit does not wait for it, which is the whole point; a test that
-// wants to see its effect has to wait where the commit does not.
-async function settled(path: string, within = 5000): Promise<string | null> {
+// wants to see its effect has to wait where the commit does not. The budget is generous on purpose:
+// it returns the moment the file appears, so a large one costs nothing when the machine is idle and
+// is the difference between asserting "this eventually runs" and "this machine is fast today".
+async function settled(path: string, within = 30000): Promise<string | null> {
   for (const started = Date.now(); Date.now() - started < within;) {
     const seen = readFileSyncOrNull(path);
     if (seen !== null) return seen;

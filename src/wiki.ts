@@ -146,6 +146,9 @@ export class Wiki {
   }
   library(): Library { return loadPages(this.store.path(this.config.wiki)); }
   pages(): Page[] { return this.library().pages; }
+  // The taxonomy is one map, read by the pages Wikipoke generates and proposed to the pages an agent
+  // writes. A type with no entry has no home and nothing is suggested for it.
+  folder(type: string): string { return this.config.layout[type] ?? type; }
   pagePath(path: string) {
     if (!path.endsWith('.md') || reserved.includes(path)) throw new Error(`Invalid concept path: ${path}`);
     safePath(this.store.path(this.config.wiki), path);
@@ -163,7 +166,7 @@ export class Wiki {
       if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
       byPath.set(p.path, p);
     }
-    const errors = lint([...byPath.values()]).filter(f => f.severity === 'error');
+    const errors = lint([...byPath.values()], [], 0, this.config.layout).filter(f => f.severity === 'error');
     if (errors.length) throw new Error(json(errors));
     // Normalized at the single point everything written passes through, rather than in one caller.
     // An agent fills in fields it knows the schema has even when the plan stopped offering them, and
@@ -219,7 +222,7 @@ export class Wiki {
     // relative to the code, and without it they silently never fire.
     return this.store.locked(() => {
       const { pages, unreadable } = this.library();
-      return lint(pages, unreadable, manifest(this.root, this.config).sources.length);
+      return lint(pages, unreadable, manifest(this.root, this.config).sources.length, this.config.layout);
     });
   }
   // The event tape only ever grows, and it is knowledge: nothing here is deleted. Events are folded
@@ -308,7 +311,7 @@ export class Wiki {
     const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
       '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
     const reachable = this.reachable(checkpoint.lastIndexedCommit);
-    const findings = lint(pages, unreadable, inv.sources.length);
+    const findings = lint(pages, unreadable, inv.sources.length, this.config.layout);
     if (!reachable) findings.push({ code: 'lost-checkpoint', severity: 'error',
       message: `The sealed checkpoint ${checkpoint.lastIndexedCommit} is not in this repository, so changes since it cannot be compared; seal again once the wiki is level with the code` });
     return { revision: inv.revision, checkpoint, pages: pages.length,
@@ -378,7 +381,7 @@ export class Wiki {
   async lintPages(input: Draft[], ref = 'HEAD') {
     return this.store.locked(() => {
       const { pages, revision: at } = this.prepare(input, ref);
-      const findings = lint([...this.pages().filter(p => !pages.some(d => d.path === p.path)), ...pages]);
+      const findings = lint([...this.pages().filter(p => !pages.some(d => d.path === p.path)), ...pages], [], 0, this.config.layout);
       return { pages: pages.map(p => p.path), revision: at, findings,
         publishable: findings.filter(f => f.severity === 'error').length === 0 };
     });
@@ -430,7 +433,7 @@ export class Wiki {
     return this.store.locked(async () => {
       const existing = this.pages();
       const before = existing.find(p => p.meta.wikipoke.uid === `query:${id}`);
-      const path = before?.path ?? unique('queries', question, new Set(existing.map(p => p.path)));
+      const path = before?.path ?? unique(this.folder('query'), question, new Set(existing.map(p => p.path)));
       // The same question, already answered, against evidence that has not moved: the answer is the
       // cheapest in the wiki and researching it again produces a second page saying the same thing.
       // Offering it as a suggestion was not enough - it was ignored - so it is returned instead of a
@@ -568,7 +571,7 @@ export class Wiki {
         // Identity is the uid, never the path: a page already published keeps its name even after
         // the naming rules change, so no link in the wiki is broken by a later release.
         if (existing) return { event: e, uid, path: existing.path, existing };
-        const path = unique('decisions', e.title ?? headline(e.choice!), taken);
+        const path = unique(this.folder('decision'), e.title ?? headline(e.choice!), taken);
         taken.add(path);
         return { event: e, uid, path, existing: undefined };
       });

@@ -767,3 +767,37 @@ test('pages can be checked before they are published, and nothing is written', a
   await assert.rejects(wiki.lintPages([{ ...drafts[0], meta: { ...drafts[0].meta, sources: ['nowhere'] } }] as any),
     /Unverified source: nowhere/);
 });
+
+test('the taxonomy is proposed, never imposed', async () => {
+  const wiki = await setup();
+  // A page at the root when its type has a home: nobody chose that place.
+  await publish(wiki, { pages: [
+    { path: 'flat.md', meta: { type: 'entity', title: 'Flat', description: 'Flat', sources: ['src'] }, body: 'Text.' },
+    { path: 'entities/placed.md', meta: { type: 'entity', title: 'Placed', description: 'Placed', sources: ['src'] }, body: 'Text.' },
+    // A project that put a page under a folder of its own made a decision; second-guessing it would
+    // be the tool imposing a taxonomy rather than proposing one.
+    { path: 'apps/theirs.md', meta: { type: 'entity', title: 'Theirs', description: 'Theirs', sources: ['src'] }, body: 'Text.' }] });
+  const unplaced = (await wiki.lint()).filter(f => f.code === 'unplaced-page');
+  assert.deepEqual(unplaced.map(f => f.page), ['flat.md']);
+  assert.equal(unplaced[0].severity, 'warning', 'a suggestion, so it never blocks a publication');
+  assert.match(unplaced[0].message, /entities\/flat\.md/);
+
+  // The pages Wikipoke generates read the same map, so the taxonomy has one definition.
+  await wiki.ask('How many retries?', 'placed-query');
+  assert.equal(wiki.pages().find(p => p.meta.type === 'query')!.path.startsWith('queries/'), true);
+});
+
+test('a project can remap where its page types live', async () => {
+  const wiki = await setup();
+  const configPath = join(wiki.root, 'wikipoke.config.yaml');
+  writeFileSync(configPath, readFileSync(configPath, 'utf8')
+    .replace('entity: entities', 'entity: modules').replace('query: queries', 'query: preguntas'));
+  const remapped = new Wiki(wiki.root);
+  await publish(remapped, { pages: [{ path: 'entities/old.md',
+    meta: { type: 'entity', title: 'Old', description: 'Old', sources: ['src'] }, body: 'Text.' }] });
+  // `entities/` is now just a folder like any other: the project decides, and only a page with no
+  // folder at all is ever mentioned.
+  assert.deepEqual((await remapped.lint()).filter(f => f.code === 'unplaced-page'), []);
+  await remapped.ask('Why?', 'remapped');
+  assert.equal(remapped.pages().find(p => p.meta.type === 'query')!.path.startsWith('preguntas/'), true);
+});
