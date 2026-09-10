@@ -27,15 +27,20 @@ lock left by a dead process and names its owner.
 
 ## Add knowledge
 
-Run the installed `wikipoke-ingest` skill. It runs `wikipoke ingest`, reads the
-bounded source plan and related pages, obtains `wikipoke schema patch`, and
-publishes an agent-authored patch with `wikipoke publish --patch patch.json`.
+Run the installed `wikipoke-ingest` skill. It runs `wikipoke ingest` — or
+`wikipoke ingest --path <directory>` to aim at a part of the repository that
+never appeared in a diff — reads the bounded source plan and related pages,
+writes each page as Markdown under `.wikipoke/tmp/pages/`, and publishes the
+directory with `wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan's
+revision>`.
 
-Wikipoke verifies source IDs, revisions, hashes, paths, graph integrity, page
-identity, and concurrent edits before it publishes anything. A patch may carry
-the `revision` its plan was built on; if the sources moved in the meantime the
-patch is rejected and the plan has to be redone. Source text never reaches a
-page: only the source id, resource, revision, and hash are stored.
+A page declares its sources as patterns: a directory, a glob, or one file path.
+One page claiming `src/http` covers every file under it and keeps covering them
+when a new one lands. Wikipoke resolves each pattern against the plan and writes
+the revision and the digest into the page itself, so nothing is transcribed by
+hand. It verifies patterns, paths, graph integrity, page identity, and concurrent
+edits before publishing, and refuses the publication when any file matching those
+patterns moved between the plan and now. Source text never reaches a page.
 
 `publish` creates and replaces pages. It cannot delete a page or mark one
 obsolete — that stays a manual Git edit.
@@ -100,14 +105,13 @@ the full report at the next agent session, then use `wikipoke-ingest` when work
 is pending.
 
 When every included source is covered and lint is clean, run `wikipoke seal` to
-record the Git checkpoint. Full coverage is a demanding bar under a broad
-`include`, so scope deliberately. For a release, commit wiki content, run
-`wikipoke snapshot v1.0.0`, then commit `.wikipoke/releases/`; nothing reads a
-snapshot back, so keep the recorded commit if you intend to query that state
-later.
+record the Git checkpoint. Coverage is set membership — a file is covered when
+some page's pattern claims it — so a wiki written as modules reaches the bar
+without a page per file. To ask about a past state, pass that commit to
+`ask --ref <commit>`.
 
 To step back out, `wikipoke uninstall` removes the skills and hooks it installed
-and preserves the wiki, configuration, events, and releases.
+and preserves the wiki, configuration, and events.
 
 See [the knowledge format](./format.md) for page structure and
 [operations](./operations.md) for the event payload.

@@ -9,7 +9,7 @@ plans. Blobs are read a group at a time and a source nobody asked for is hashed
 from its bytes without ever being decoded, so the peak is one group rather than
 the repository — 127 MB rather than 315 MB on a 75 MB tree.
 
-Wikipoke does not invoke a model provider. It is independent of Claude, Codex, OpenCode, and other hosts. The host agent owns interpretation, code reading, and editorial judgement. Wikipoke owns deterministic source inventory, planning, validation, publication, query records, decision events, graph reconstruction, checkpoints, and release records.
+Wikipoke does not invoke a model provider. It is independent of Claude, Codex, OpenCode, and other hosts. The host agent owns interpretation, code reading, and editorial judgement. Wikipoke owns deterministic source inventory, planning, validation, publication, query records, decision events, graph reconstruction, and checkpoints.
 
 ## Repository layout
 
@@ -29,14 +29,13 @@ wiki/                      editable Markdown knowledge
   events/archive/          closed tasks folded into one JSONL per month
   hooks/post-commit        generated notifier
   hooks/session-start      generated agent briefing
-  releases/                release manifests
 .agents/skills/            generated host-neutral instructions
 .claude/skills/            the same skills, where Claude Code looks for them
 ```
 
 ## CLI contract
 
-`ingest` returns a read-only work plan. `publish` validates an agent patch against the current Git inventory; a patch may pin the `revision` it was planned against and is refused when the sources have moved. `ask` opens a query and `answer` validates citations before closure: an answer needs cited evidence, or explicitly declared gaps, in which case the query closes as `unsupported` rather than `answered`. `answered` is terminal — a further answer is refused instead of replacing the record — while `pending` and `unsupported` remain answerable. `schema patch` and `schema answer` expose machine-readable payload contracts.
+`ingest` returns a read-only work plan, bounded by the configured limits and drawn from one directory where it can; `--path` aims it at a part of the repository that never appeared in a diff. `publish` takes a directory of Markdown pages whose `sources` are patterns — a directory, a glob, or one file path — resolves each against the inventory at the commit named by `--ref`, and writes the revision and digest into the page itself. It is refused when any file matching those patterns changed between that commit and now. `ask` opens a query and `answer` validates citations before closure: an answer needs cited evidence, or explicitly declared gaps, in which case the query closes as `unsupported` rather than `answered`. `answered` is terminal — a further answer is refused instead of replacing the record — while `pending` and `unsupported` remain answerable. `schema page`, `schema answer` and `schema event` expose machine-readable contracts.
 
 The source inventory reads the whole scope through one batched `git cat-file` process rather than one process per file, so a thousand-file scope stays well under a second end to end.
 
@@ -66,11 +65,11 @@ The installer activates a delegating Git `post-commit` hook only when no hook ex
 
 The briefing at `.wikipoke/hooks/session-start` closes the other half of the loop: the notifier keeps the signal fresh, the briefing puts it in front of the agent, printing one line when the wiki owes work and nothing when it does not. Wikipoke composes it into `.claude/settings.json` only when that file is absent; every other harness gets a reported step rather than an edited config, because a harness config carries permissions and plugins that are not Wikipoke's to rewrite.
 
-The notifier runs `maintain --once`, which writes `.wikipoke/attention.json` itself. It resolves the CLI from `node_modules/.bin/wikipoke`, then `npx --no-install wikipoke`, and exits silently when neither is available; a failed run leaves the previous signal in place. `uninstall` removes only what `install` created, leaving the wiki, configuration, events, releases, and any foreign hook untouched.
+The notifier runs `maintain --once`, which writes `.wikipoke/attention.json` itself. It resolves the CLI from `node_modules/.bin/wikipoke`, then `npx --no-install wikipoke`, and exits silently when neither is available; a failed run leaves the previous signal in place. `uninstall` removes only what `install` created, leaving the wiki, configuration, events, and any foreign hook untouched.
 
 ## State and freshness
 
-Each page cites a resource, Git revision, and content hash; source text itself is never stored in a page. `status` compares those records with the current inventory to report drift and uncovered sources. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump. It carries the health of the wiki and nothing about what an agent did during a turn: a signal refreshed on every commit pays for everything in it, and the only things worth that price are the ones a session needs at startup.
+Each page cites one or more source patterns with the Git revision and the digest of what each matched; source text itself is never stored in a page. `status` compares those records with the current inventory on two independent axes: a file is **covered** when some page pattern claims it, and a page has **drifted** when the digest of what its pattern matches no longer agrees with what it recorded. Keeping them separate is what stops one edited file inside a module reporting every file in that module as undocumented. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump. It carries the health of the wiki against the code and nothing about what an agent did during a turn — including a count of in-scope files edited but not committed, which is the one debt that exists before any commit hook has a reason to run.
 
 `seal` records `lastIndexedCommit` only when the configured scope has no uncovered source, no drifted reference, and no error finding.
 
@@ -78,4 +77,4 @@ Each page cites a resource, Git revision, and content hash; source text itself i
 
 The following are absent, not merely undocumented. `README.md` carries the full list of known limits.
 
-Nothing detects divergence between a recorded decision and later implemented behavior, and there is no record of conflicting claims about the same scope: specification requirements FR-008 and FR-009 have no implementation. There is no importer for the two existing wikis (FR-014). Snapshots are write-only: `snapshot` stores refs and a manifest, but no command reads one back, and historical questions go through `ask --ref <commit>`. `publish` cannot delete or deprecate a page.
+Nothing detects divergence between a recorded decision and later implemented behavior, and there is no record of conflicting claims about the same scope: specification requirements FR-008 and FR-009 have no implementation. There is no importer for the two existing wikis (FR-014). There is no release capture: a past state is a commit, and historical questions go through `ask --ref <commit>`. `publish` cannot delete or deprecate a page.

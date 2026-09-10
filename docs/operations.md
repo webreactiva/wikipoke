@@ -27,16 +27,12 @@ include its explanation; `incomplete` represents missing or failed capture.
 The health report never treats a successful hook or empty event list as proof
 of complete decision capture.
 
-## Historical releases
+## Asking about a past state
 
-Commit the wiki first, then use `wikipoke snapshot <label>`. The command retains
-Git refs for the selected code commit and current wiki commit and writes a
-manifest under `.wikipoke/releases/`. Commit that manifest in the next commit.
-
-Nothing reads a snapshot back: there is no command to list, open, or query one.
-Record the code commit the manifest names, and ask historical questions with
-`wikipoke ask "..." --ref <commit>`. A release label is not accepted anywhere
-except by `snapshot` itself, and a label can only be captured once.
+There is no release label to capture or read back. Record the commit you care
+about the way you already record commits, and ask historical questions with
+`wikipoke ask "..." --ref <commit>`: the plan, the inventory and the citations
+are all resolved at that commit.
 
 Historical external sources remain subject to their own retention/access rules.
 
@@ -73,14 +69,10 @@ The refresh itself is detached from the commit: it reads every source in scope,
 which on a large repository is most of a second, and nothing waits on the result.
 The commit returns immediately and the signal is rewritten a moment later.
 
-## Reading a release back
+## Work the wiki cannot see yet
 
-```sh
-wikipoke releases
-wikipoke release v1.0.0
-```
-
-A manifest is stored under the hash of its label, so `releases` is the only way
-to get from a label to what was captured. `release <label>` adds whether the code
-and wiki refs are still reachable — a history rewrite can leave a manifest
-describing something that can no longer be checked out.
+Every number in the signal is computed from committed code. An agent that edits
+files and stops without committing leaves nothing for the post-commit hook to
+refresh, so the signal also counts `uncommitted` in-scope files. The session
+briefing runs at the start of a session and again when the agent stops, which is
+the one moment that count can say something the start of the session could not.

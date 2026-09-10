@@ -142,8 +142,8 @@ npx --no-install wikipoke --root /work/acme uninstall
 
 `uninstall` deletes only what `install` created, and reports what it removed,
 what it preserved, and what needs a manual step. It keeps the wiki directory,
-`wikipoke.config.yaml`, `.wikipoke/state.json`, events, releases, the attention
-signal, and any hook or skill file it did not write.
+`wikipoke.config.yaml`, `.wikipoke/state.json`, events, the attention signal,
+and any hook or skill file it did not write.
 
 ## Bootstrap and maintain
 
@@ -198,9 +198,9 @@ Wikipoke first creates a query record under `wiki/queries/`. A supplied
 `--request-id` retries the same request; use a new ID for a separate invocation
 of the same question. Use `--ref <commit>` for a historical code-source
 question. The skill researches and writes the cited response through `wikipoke answer`.
-Use `wikipoke schema answer` or `wikipoke schema patch` to obtain the exact
-JSON contract before writing either payload; agents never need to inspect the
-Wikipoke implementation to discover it.
+Use `wikipoke schema answer` for the answer payload, or `wikipoke schema page`
+for the frontmatter a wiki page carries; agents never need to inspect the
+Wikipoke implementation to discover either.
 
 `answer` requires cited evidence, or, when none exists, explicitly declared
 `gaps`. An answer carried by gaps alone closes the query as `unsupported`, not
@@ -237,18 +237,14 @@ form.
 
 ## Capture a release
 
-Commit wiki changes, then capture exact revisions:
+Commit wiki changes like any other change:
 
 ```sh
 git add wiki
 git commit -m "docs: update wiki"
-npx --no-install wikipoke --root /work/acme snapshot v1.0.0
-git add .wikipoke/releases
-git commit -m "docs: record wiki snapshot v1.0.0"
 ```
 
-Snapshots retain code/wiki refs and the health report at capture time. No
-command reads a snapshot back: to ask a historical question, pass the recorded
-code commit to `ask --ref`, not the release label. Snapshots cannot make
-external sources historically available when those source versions were not
-retained.
+The wiki is versioned by the repository that holds it, so a past state is a
+commit like any other. To ask a historical question, pass that commit to
+`ask --ref`. Wikipoke cannot make external sources historically available when
+those source versions were not retained.

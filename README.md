@@ -129,9 +129,9 @@ wikipoke status
 wikipoke ingest
 wikipoke ask "How are payments validated?" --request-id payment-validation
 wikipoke answer --request-id payment-validation --response answer.json
-wikipoke publish --patch .wikipoke/tmp/patch.json
+wikipoke ingest --path src/http
+wikipoke publish --pages .wikipoke/tmp/pages --ref <planned commit>
 wikipoke capture --event .wikipoke/tmp/decision.json
-wikipoke snapshot v1.0.0
 wikipoke seal
 wikipoke lint
 wikipoke graph
@@ -140,7 +140,7 @@ wikipoke uninstall
 ```
 
 Read the full [installation and operation guide](docs/installation.md) for
-configuration, scheduling, hooks, queries, task events, and release captures.
+configuration, scheduling, hooks, queries, and task events.
 Use the [user guide](docs/user-guide.md) for everyday workflows, the
 [knowledge format](docs/format.md) for page structure, and the
 [architecture guide](docs/architecture.md) for skills, hooks, CLI boundaries,
@@ -179,9 +179,7 @@ the turn. An unreadable page is reported as an `invalid-page` finding instead of
 failing every command, and `publish` will not overwrite it — except for the one
 case of unresolved merge conflict markers, which git wrote and nobody is midway
 through editing. File publication uses a recovery journal, and neither that
-journal nor the writer lock is ever committed. A snapshot requires
-committed wiki content and retains exact Git refs for code and wiki. It does not
-archive external source revisions automatically.
+journal nor the writer lock is ever committed.
 
 ## Known limits
 
@@ -201,14 +199,12 @@ These are absent from the product today, not merely undocumented.
   and never why. Wikipoke records an absent reason as absent rather than
   reconstructing one from a diff, which is the point, but it means an agent that
   declares nothing leaves nothing.
-- **Snapshots are write-only.** `snapshot` stores Git refs and a manifest under
-  `.wikipoke/releases/`, but no command lists, reads, or queries one. Historical
-  questions are asked by passing a commit to `ask --ref`, never a release label.
 - **No deletion or deprecation.** `publish` can only create or replace pages.
   Removing or marking a page obsolete is a manual Git edit.
 - **`seal` demands total coverage.** It refuses while any included source is
-  undocumented, any cited hash has drifted, or any error finding stands. With a
-  broad `include` that bar is impractical; choose a deliberately narrow scope.
+  unclaimed, any pattern has drifted, or any error finding stands. A page can
+  claim a whole module, so the bar is reachable under a broad `include` — but it
+  is still total.
 - **Reads take the writer lock.** `status`, `lint`, and `graph` serialize behind
   the same lock as writes, so two concurrent commands fail with a lock error.
 

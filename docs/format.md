@@ -32,8 +32,14 @@ The gateway sends validated payment requests through
 
 A source record holds only `id`, `resource`, `revision`, `hash`, and an optional
 `title`. Source text is never part of a page: the `content` field carried by an
-`ingest` plan is dropped on publication, so a patch may reuse the plan's
-`sources` array verbatim without spilling code into the wiki.
+`ingest` plan is never written.
+
+An agent does not write this record. It writes `sources` as a list of bare
+patterns — `src/payments` claims the directory, `src/payments/*.ts` the glob,
+`src/payments/gateway.ts` the one file — and `publish` resolves each against the
+inventory, stamping the revision and the digest of everything the pattern
+matched. A pattern naming exactly one file keeps that file's own digest, so a
+page written before patterns existed reads back unchanged.
 
 A source carries `id` and, when it differs from the id, `resource`; with the Git
 adapter they are the same path, so only `id` is written. `hash` and `revision`

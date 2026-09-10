@@ -51,7 +51,6 @@ cannot read.
 | `ask.after` | A query was opened or reused | `requestId`, `question`, `ref`, `state`, `reused`, `path` |
 | `answer.after` | An answer was persisted | `requestId`, `state`, `citations`, `gaps`, `pages` |
 | `capture.after` | A task event was recorded | `id`, `task`, `kind`, `actor`, `evidence`, `materialized`, `decisions` |
-| `snapshot.after` | A release was captured | `label`, `code`, `wiki`, `at` |
 | `seal.before` | Before the checkpoint advances | `ref` |
 | `seal.after` | The checkpoint advanced | `lastIndexedCommit`, `sealedAt` |
 | `maintain.after` | The attention signal was refreshed | the whole signal, which is already bounded and sampled |
@@ -100,3 +99,62 @@ is the machinery that made all of that happen whether anyone asked for it or not
 A project that wants the old behaviour back builds it on the harness's own hooks — Claude Code's
 `PostToolUse` and `Stop`, an OpenCode plugin — and on `capture.after` here, which is where Wikipoke can
 tell it that a decision landed.
+
+## Project commands
+
+An extension reacts: Wikipoke reaches a point in its own lifecycle and the script gets to answer. The
+other half is a verb the project offers, that an agent decides to run. Declare it under `commands`:
+
+```yaml
+commands:
+  - name: incident
+    description: Record an incident as a wiki page
+    run: ./scripts/incident.sh
+    timeout: 120
+```
+
+`wikipoke incident 2026-09-10-pool "The pool drained" src/http/pool.ts` runs the script from the
+project root with those arguments as `$1`, `$2`, `$3`, `WIKIPOKE_ROOT` and `WIKIPOKE_COMMAND` in the
+environment, and the agent's own stdio — what the script prints is what the agent reads. Its exit
+status is Wikipoke's.
+
+The verb is listed by `wikipoke --help` and by `doctor`, which is the point: an agent that knows
+Wikipoke finds the project's own verb without anyone pasting instructions into a prompt.
+
+### A page type of your own, generated
+
+This is what makes a project's page type a real one rather than a label. Wikipoke generates `query`
+pages from `ask`/`answer` and `decision` pages from `capture`; a project command generates its own,
+because the script owns the shape and hands the result to `publish` like any other page:
+
+```sh
+#!/bin/sh
+set -e
+dir="$WIKIPOKE_ROOT/.wikipoke/tmp/incidents"; rm -rf "$dir"; mkdir -p "$dir"
+{
+  echo "---"; echo "type: incident"; echo "title: $2"
+  echo "sources:"; shift 2; for pattern in "$@"; do echo "  - $pattern"; done
+  echo "---"; echo; echo "## What happened"; echo; echo "..."
+} > "$dir/$1.md"
+wikipoke --root "$WIKIPOKE_ROOT" publish --pages "$dir"
+```
+
+The script decides the body and the naming. Wikipoke still owns everything it owns for every other
+page: the identity, resolving each source pattern, stamping the revision and the digest, the lint,
+the atomic write. The type is yours and the guarantees are the tool's.
+
+Pair it with a blocking `publish.before` extension to give that type rules — the payload carries each
+page's `type` and `sources`, so a gate can insist an `incident` cites at least two patterns the way
+`lint` insists a `flow` does.
+
+### What a project command still cannot do
+
+- Make its type invisible to coverage. Only `query` and `decision` are outside that count, and
+  `health()` decides it.
+- Add a finding to `lint`, `status` or `attention.json`. A gate refuses with an exit status; it does
+  not appear in the signal.
+- Shadow a Wikipoke command. A declared `publish` is not registered, and `doctor` names it.
+
+A malformed entry under `commands` is skipped rather than fatal, so a typo in one verb does not take
+the rest of the tool with it. A malformed `extensions` entry is fatal on purpose: a gate a project
+believes in must not silently not exist.
