@@ -9,9 +9,11 @@ export const relationSchema = z.object({
   target: z.string().min(1), evidence: z.array(z.string()).default([]),
   basis: z.enum(['observed', 'inferred']).default('inferred'),
 });
-// `resource` is where the source was read from and `id` is what it is called. With a Git adapter they
-// are the same string, so it is written only when it differs - a frontmatter that repeats a path
-// twice teaches nothing and costs a line on every source of every page.
+// `id` is a pattern, and one file path is the pattern that matches one file. A directory or a glob
+// claims everything under it, which is what lets one page cover a module without listing its files.
+// `hash` is then the digest of the matched set, so a file appearing or changing under the pattern
+// moves it. `resource` is where the source was read from and is written only when it differs from
+// the id - a frontmatter that repeats a path twice teaches nothing and costs a line on every page.
 export const sourceSchema = z.object({
   id: z.string().min(1), resource: z.string().min(1).optional(), revision: z.string().optional(),
   hash: z.string().optional(), title: z.string().optional(),
@@ -63,9 +65,19 @@ export const configSchema = z.object({
     batchBytes: z.number().int().positive().default(64 * 1024) }),
 });
 export type Config = z.infer<typeof configSchema>;
-export const patchSchema = z.object({ pages: z.array(z.object({
-  path: z.string(), meta: pageSchema, body: z.string(),
-})), revision: z.string().optional(), findings: z.array(z.string()).default([]) });
+// What an agent writes: the page contract minus everything Wikipoke can work out for itself. Sources
+// are bare patterns, because the revision and the digest are already in the inventory and copying
+// sixty-four characters of hex by hand is how a model ends up writing a script to do it. The uid is
+// optional for the same reason - it exists so a renamed page keeps its identity, and the first
+// publication has no identity to keep, so Wikipoke assigns one and writes it into the page.
+export const draftSchema = z.object({
+  type: z.string().min(1), title: z.string().min(1), description: z.string().default(''),
+  sources: z.array(z.string().min(1)).default([]),
+  wikipoke: z.object({ uid: z.string().min(1).optional(), relations: z.array(relationSchema).default([]) })
+    .passthrough().default({ relations: [] }),
+}).passthrough();
+export type DraftMeta = z.infer<typeof draftSchema>;
+export interface Draft { path: string; meta: DraftMeta; body: string }
 export const answerSchema = z.object({ answer: z.string().min(1),
   citations: z.array(z.string()), gaps: z.array(z.string()).default([]) });
 export const eventSchema = z.object({

@@ -6,8 +6,9 @@ import { Command, InvalidArgumentError } from 'commander';
 import { parse } from 'yaml';
 import { Wiki } from './wiki.js';
 import { configSchema } from './model.js';
-import { answerSchema, eventSchema, extensionSchema, patchSchema } from './model.js';
+import { answerSchema, draftSchema, eventSchema, extensionSchema } from './model.js';
 import { z } from 'zod';
+import { readDrafts } from './knowledge.js';
 import { briefingActive, hookActive, install, uninstall } from './integrations.js';
 import { dispatch } from './extensions.js';
 import type { ExtensionEvent } from './model.js';
@@ -62,9 +63,9 @@ for (const [name, description, action] of [
   ['status', 'report health and pending work', async (wiki: Wiki) => wiki.status()],
   ['lint', 'validate wiki structure without an LLM', async (wiki: Wiki) => wiki.lint()],
   ['graph', 'emit a reconstructable graph', async (wiki: Wiki) => wiki.graph()],
-  ['ingest', 'bootstrap or reconcile source knowledge', async (wiki: Wiki, options: { ref?: string }) => {
-    extend(wiki, 'ingest.before', { ref: options.ref ?? 'HEAD' });
-    const plan = await wiki.ingest(options.ref);
+  ['ingest', 'bootstrap or reconcile source knowledge', async (wiki: Wiki, options: { ref?: string; path?: string }) => {
+    extend(wiki, 'ingest.before', { ref: options.ref ?? 'HEAD', ...(options.path ? { path: options.path } : {}) });
+    const plan = await wiki.ingest(options.ref, options.path);
     extend(wiki, 'ingest.after', { revision: plan.revision, complete: plan.complete,
       remaining: plan.remaining, sources: plan.sources.map(s => s.id) });
     return plan;
@@ -78,7 +79,8 @@ for (const [name, description, action] of [
   }],
 ] as const) {
   const command = program.command(name).description(description);
-  if (name === 'ingest') command.option('--ref <commit>', 'source commit', 'HEAD');
+  if (name === 'ingest') command.option('--ref <commit>', 'source commit', 'HEAD')
+    .option('--path <pattern>', 'plan this part of the repository, changed or not');
   if (name === 'maintain') command.requiredOption('--once', 'perform one bounded maintenance pass');
   command.action(async (options: any) => { try { output(await action(new Wiki(root()), options)); } catch (error) { fail(error); } });
 }
@@ -101,24 +103,28 @@ program.command('answer').description('validate and persist an agent-researched 
       citations: record.citations, gaps: record.gaps, pages: record.pages });
     output(record);
   } catch (error) { fail(error); } });
-program.command('publish').description('validate and publish an agent-authored wiki patch')
-  .requiredOption('--patch <file>', 'patch JSON file').option('--ref <commit>', 'source commit', 'HEAD')
+program.command('publish').description('validate and publish agent-authored wiki pages')
+  .requiredOption('--pages <directory>', 'directory of Markdown pages to publish')
+  .option('--ref <commit>', 'the commit the pages were planned against', 'HEAD')
   .action(async options => { try {
-    const wiki = new Wiki(root()), patch = JSON.parse(readFileSync(options.patch, 'utf8'));
-    // The only place a project can refuse knowledge before it lands: the paths are known, the wiki is
-    // not written yet, and a non-zero exit here leaves the wiki exactly as it was.
-    extend(wiki, 'publish.before', { ref: options.ref,
-      pages: Array.isArray(patch?.pages) ? patch.pages.map((page: { path?: string }) => page?.path) : [] });
-    const result = await wiki.publishPatch(patch, options.ref);
-    extend(wiki, 'publish.after', { ref: options.ref, published: result.published, findings: result.findings });
+    const wiki = new Wiki(root()), drafts = readDrafts(resolve(options.pages));
+    // The only place a project can refuse knowledge before it lands: the wiki is not written yet, and
+    // a non-zero exit here leaves it exactly as it was. The payload carries what a gate has to judge
+    // on - the type each page claims to be and the patterns it claims - because a script told only
+    // the paths would have to guess where the drafts are and parse the frontmatter itself. This is
+    // how a project gives a page type of its own the rules Wikipoke only has for `flow`.
+    extend(wiki, 'publish.before', { ref: options.ref, directory: resolve(options.pages),
+      pages: drafts.map(draft => ({ path: draft.path, type: draft.meta.type, sources: draft.meta.sources })) });
+    const result = await wiki.publishPages(drafts, options.ref);
+    extend(wiki, 'publish.after', { ref: options.ref, published: result.published });
     output(result);
   } catch (error) { fail(error); } });
 program.command('schema <kind>').description('emit the JSON schema for an agent-authored payload')
   .action((kind: string) => { try {
-    if (kind === 'patch') output(z.toJSONSchema(patchSchema));
+    if (kind === 'page') output(z.toJSONSchema(draftSchema));
     else if (kind === 'answer') output(z.toJSONSchema(answerSchema));
     else if (kind === 'event') output(z.toJSONSchema(eventSchema));
-    else throw new Error('Schema kind must be patch, answer or event');
+    else throw new Error('Schema kind must be page, answer or event');
   } catch (error) { fail(error); } });
 program.command('capture').description('persist and materialize a task event')
   .requiredOption('--event <file>', 'event JSON file')

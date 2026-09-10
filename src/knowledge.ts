@@ -4,7 +4,8 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkFrontmatter from 'remark-frontmatter';
 import { visit } from 'unist-util-visit';
-import { pageSchema, type Page, type Metadata, type Finding } from './model.js';
+import { z } from 'zod';
+import { draftSchema, pageSchema, type Draft, type Page, type Metadata, type Finding } from './model.js';
 import { files, read } from './runtime/store.js';
 
 const parser = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']);
@@ -15,15 +16,36 @@ export interface Unreadable { path: string; reason: string; code: string }
 // it kept, which is why it is worth telling apart from a page a human is halfway through writing.
 const conflicted = /^(<{7}|={7}|>{7})/m;
 export interface Library { pages: Page[]; unreadable: Unreadable[] }
-export function parsePage(raw: string, path: string): Page {
+function split(raw: string, path: string): { frontmatter: unknown; body: string } {
   const tree = parser.parse(raw), first = tree.children[0];
   if (first?.type !== 'yaml') throw new Error(`${path}: missing YAML frontmatter`);
   const doc = parseDocument((first as unknown as { value: string }).value);
   if (doc.errors.length) throw new Error(`${path}: ${doc.errors[0].message.split('\n')[0]}`);
-  const meta = pageSchema.safeParse(doc.toJS());
-  if (!meta.success) throw new Error(`${path}: ${meta.error.issues
+  return { frontmatter: doc.toJS(), body: raw.slice(first.position!.end.offset).replace(/^\r?\n/, '') };
+}
+function fault(path: string, error: z.ZodError): Error {
+  return new Error(`${path}: ${error.issues
     .map(i => `${i.path.join('.') || 'frontmatter'} ${i.message.split('\n')[0]}`).join('; ')}`);
-  return { path, meta: meta.data, raw, body: raw.slice(first.position!.end.offset).replace(/^\r?\n/, '') };
+}
+export function parsePage(raw: string, path: string): Page {
+  const { frontmatter, body } = split(raw, path);
+  const meta = pageSchema.safeParse(frontmatter);
+  if (!meta.success) throw fault(path, meta.error);
+  return { path, meta: meta.data, raw, body };
+}
+// The same file, read as an agent wrote it rather than as Wikipoke stamped it: sources are patterns
+// and the uid may be absent. Reading drafts from a directory is the whole publication surface -
+// Markdown in, Markdown out, with nothing in between for anyone to assemble.
+export function readDrafts(directory: string): Draft[] {
+  const found = files(directory).filter(p => p.endsWith('.md'));
+  if (!found.length) throw new Error(`No .md pages in ${directory}; write each page as Markdown with frontmatter, then publish the directory`);
+  return found.map(file => {
+    const path = relative(directory, file).split('\\').join('/');
+    const { frontmatter, body } = split(read(file)!, path);
+    const meta = draftSchema.safeParse(frontmatter);
+    if (!meta.success) throw fault(path, meta.error);
+    return { path, meta: meta.data, body };
+  });
 }
 export function render(meta: Metadata, body: string): string {
   return `---\n${stringify(pageSchema.parse(meta))}---\n${body.trim()}\n`;

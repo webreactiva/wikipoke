@@ -99,6 +99,35 @@ function walk(root: string, config: Config, ref: string, keep: (name: string) =>
 export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
   return walk(root, config, ref, () => true);
 }
+// A page's source is a pattern. Three spellings, because all three are what people write: the exact
+// path of one file, a directory claiming everything beneath it, and a glob. The directory form is
+// the one that matters - it is how a single page covers a module without listing its files, and
+// without a new page appearing every time somebody adds one.
+export function covers(pattern: string, id: string): boolean {
+  const bare = pattern.replace(/\/+$/, '');
+  return id === bare || id.startsWith(`${bare}/`) || matches(id, pattern);
+}
+export function matched(sources: SourceMeta[], pattern: string): SourceMeta[] {
+  return sources.filter(source => covers(pattern, source.id));
+}
+// The digest of what a pattern matches, so a file changing, appearing or disappearing underneath it
+// moves the page that claims it. A pattern naming one file keeps that file's own digest: every page
+// written before patterns existed names exactly one file, and recomputing those as set digests would
+// report every wiki already on disk as drifted the moment the tool is upgraded.
+export function digestOf(sources: SourceMeta[], pattern: string): string {
+  const set = matched(sources, pattern);
+  if (set.length === 1 && set[0].id === pattern) return set[0].hash;
+  return hash(set.map(source => `${source.id}:${source.hash}`).sort().join('\n')).slice(0, digest);
+}
+// Which in-scope files differ between two commits. This is the cheap half of "did the code move
+// while you were writing": one diff, rather than a second walk of the whole tree to rebuild an
+// inventory that Git can answer directly. Renames are reported under both names on purpose - a page
+// claiming either side has to be told.
+export function changed(root: string, config: Config, from: string, to = 'HEAD'): string[] {
+  const names = git(root, 'diff', '--name-only', '--no-renames', '-z',
+    revision(root, from), revision(root, to)).split('\0').filter(Boolean);
+  return [...new Set(names.filter(name => !ignored(name, config)))].sort();
+}
 // Identity and digest for every source in scope, and no content at all.
 export function manifest(root: string, config: Config, ref = 'HEAD'): Manifest {
   const { revision: rev, sources } = walk(root, config, ref, () => false);

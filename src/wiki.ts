@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { configSchema, patchSchema, answerSchema, eventSchema,
-  type Config, type Metadata, type Page, type SourceMeta } from './model.js';
+import { configSchema, draftSchema, answerSchema, eventSchema,
+  type Config, type Draft, type Metadata, type Page, type SourceMeta } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
-import { manifest, sourcesFor, revision, uncommitted, git } from './sources/git.js';
+import { manifest, sourcesFor, revision, uncommitted, covers, matched, digestOf, changed } from './sources/git.js';
 import { z } from 'zod';
 
 type Event = z.infer<typeof eventSchema>;
@@ -29,10 +29,20 @@ function slug(value: string): string {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72).replace(/-+$/g, '');
   return result || 'record';
 }
-// A plan is only bounded when both its file count and its byte weight are: ten files of a
-// large module outweigh an agent's context, and a truncated plan loses the pinned evidence
-// the patch has to carry. The first pending source always ships, so a file larger than the
-// budget is still planned rather than blocking the queue behind it forever.
+// Files in tree order are neighbours by accident. A batch drawn that way hands an agent a stylesheet,
+// two entry points and four unrelated pages and asks for knowledge about them - and the only page
+// that can be written about files sharing nothing is one page per file, which is the shape `lint`
+// reports as a mirror of the tree and `seal` refuses. So the batch starts wherever the queue starts
+// and takes everything under that directory first: whatever else it is, it is about one thing.
+function clustered(pending: SourceMeta[]): SourceMeta[] {
+  if (!pending.length) return pending;
+  const home = posix.dirname(pending[0].id);
+  const near = (source: SourceMeta) => source.id.startsWith(`${home}/`) || posix.dirname(source.id) === home;
+  return [...pending.filter(near), ...pending.filter(source => !near(source))];
+}
+// A plan is only bounded when both its file count and its byte weight are: ten files of a large
+// module outweigh an agent's context. The first pending source always ships, so a file larger than
+// the budget is still planned rather than blocking the queue behind it forever.
 function budgeted(pending: SourceMeta[], limits: Config['limits']): SourceMeta[] {
   const batch: SourceMeta[] = [];
   let bytes = 0;
@@ -261,18 +271,25 @@ export class Wiki {
   }
   private health() {
     const inv = manifest(this.root, this.config), { pages, unreadable } = this.library();
-    const current = new Map(inv.sources.map(s => [s.id, s]));
     // A decision cites the code it was about, not the code it documents. Counting it as coverage
     // would let a wiki with no knowledge in it report every source as documented.
-    const covered = new Set(pages.filter(p => !['query', 'decision'].includes(p.meta.type))
-      .flatMap(p => p.meta.sources.filter(s => sameDigest(s.hash, current.get(s.id)?.hash)).map(s => s.id)));
+    const claimed = pages.filter(p => !['query', 'decision'].includes(p.meta.type))
+      .flatMap(p => p.meta.sources.map(s => s.id));
+    // Coverage is set membership and nothing else: a file is covered when some page's pattern claims
+    // it. Requiring the digest to match as well made a single edit uncover every file its pattern
+    // matched - one moved file reporting a hundred as undocumented. That a page has fallen behind is
+    // drift, and drift is the axis that already says so.
+    const covered = new Set(inv.sources.filter(s => claimed.some(pattern => covers(pattern, s.id))).map(s => s.id));
     // Naming the remedy, not only the symptom: a source that is gone reads as a dead end, and the
     // way out - republish the page without it, or repoint it if the file was renamed - is not
     // something an agent finds on its own. Nothing else in the tool ever says it.
-    const drift = pages.flatMap(p => p.meta.sources.filter(s => s.hash && !sameDigest(s.hash, current.get(s.id)?.hash))
-      .map(s => ({ page: p.path, source: s.id, reason: current.has(s.id) ? 'changed' : 'missing',
-        remedy: current.has(s.id) ? 'Re-plan with ingest and republish the page against the current content'
-          : `${s.id} no longer exists: republish ${p.path} without that source, or repoint it at the path the file was renamed to` })));
+    const drift = pages.flatMap(p => p.meta.sources.filter(s => s.hash).flatMap(s => {
+      if (!matched(inv.sources, s.id).length) return [{ page: p.path, source: s.id, reason: 'missing',
+        remedy: `${s.id} matches no file in scope: republish ${p.path} without that source, or repoint it at the path the code moved to` }];
+      if (sameDigest(s.hash, digestOf(inv.sources, s.id))) return [];
+      return [{ page: p.path, source: s.id, reason: 'changed',
+        remedy: 'Re-plan with ingest and republish the page against the current content' }];
+    }));
     const events = this.events();
     const tasks = [...new Set(events.map(e => e.task))].map(task => {
       const list = events.filter(e => e.task === task), closed = [...list].reverse().find(e => e.kind === 'close');
@@ -300,21 +317,33 @@ export class Wiki {
     if (!checkpoint) return true;
     try { revision(this.root, checkpoint); return true; } catch { return false; }
   }
-  async ingest(ref = 'HEAD') {
+  async ingest(ref = 'HEAD', target?: string) {
     return this.store.locked(() => {
       // Planning needs identity and digest for everything, and content for the batch alone. Reading
       // the whole repository into memory to choose ten files is what put the peak at 425 MB.
       const inv = manifest(this.root, this.config, ref), existing = this.pages();
-      const documented = new Set(existing.filter(p => !['query', 'decision'].includes(p.meta.type))
-        .flatMap(p => p.meta.sources.filter(s => inv.sources.some(c => c.id === s.id && sameDigest(c.hash, s.hash))).map(s => s.id)));
-      const pending = inv.sources.filter(s => !documented.has(s.id));
-      const batch = budgeted(pending, this.config.limits);
+      const claimed = existing.filter(p => !['query', 'decision'].includes(p.meta.type))
+        .flatMap(p => p.meta.sources.map(s => s.id));
+      const outstanding = inv.sources.filter(s => !claimed.some(pattern => covers(pattern, s.id)));
+      // Aiming is the difference between seeding a wiki and grinding one out. Left to itself the
+      // plan hands over whatever is next in tree order, which is how an agent ends up documenting a
+      // stylesheet and two entry points together and writing a page per file because they share
+      // nothing. A target says "this part, now", and is the only way to cover code that was never
+      // going to show up in a diff.
+      if (target && !inv.sources.some(s => covers(target, s.id)))
+        throw new Error(`Nothing in scope matches ${target}; it must name a file, a directory or a glob inside the configured include patterns`);
+      const pending = target ? outstanding.filter(s => covers(target, s.id)) : outstanding;
+      const batch = budgeted(clustered(pending), this.config.limits);
       const sources = sourcesFor(this.root, this.config, batch.map(s => s.id), ref);
-      const sourceIds = new Set(sources.map(s => s.id));
-      const direct = new Set(existing.filter(p => p.meta.sources.some(s => sourceIds.has(s.id))).map(p => p.path));
+      const direct = new Set(existing.filter(p => p.meta.sources
+        .some(s => sources.some(source => covers(s.id, source.id)))).map(p => p.path));
       for (const edge of graph(existing).edges) if (edge.type === 'depends_on' && direct.has(edge.to)) direct.add(edge.from);
       const dirty = uncommitted(this.root, this.config);
-      return { complete: pending.length === 0, remaining: pending.length - sources.length,
+      // `complete` and `remaining` always speak for the whole scope, aimed or not: a pass that
+      // finished its target has not finished the wiki, and a plan that said so would stop the loop
+      // with most of the repository still undocumented.
+      return { complete: outstanding.length === 0, remaining: outstanding.length - sources.length,
+        ...(target ? { target, remainingHere: pending.length - sources.length } : {}),
         language: this.config.language, revision: inv.revision,
         // Sources whose working copy differs from the commit this plan was made against. Documenting
         // one of these describes code that is already superseded on disk.
@@ -326,49 +355,51 @@ export class Wiki {
         pages: existing.filter(p => direct.has(p.path)), catalog: existing.map(p => ({ path: p.path, title: p.meta.title })) };
     });
   }
-  async publishPatch(input: unknown, ref = 'HEAD') {
-    const output = patchSchema.parse(input);
+  // Pages as an agent writes them: Markdown with frontmatter, sources as bare patterns. Everything
+  // an agent used to transcribe - the revision, the digest of every file, the page's identity - is
+  // resolved here from the inventory it was planned against, because all of it was already known.
+  async publishPages(input: Draft[], ref = 'HEAD') {
+    const drafts = input.map(draft => ({ path: draft.path, body: draft.body, meta: draftSchema.parse(draft.meta) }));
+    if (!drafts.length) throw new Error('No pages to publish');
     return this.store.locked(() => {
-      const inv = manifest(this.root, this.config, ref), { pages: existing, unreadable } = this.library();
+      const at = revision(this.root, ref), inv = manifest(this.root, this.config, at);
+      const { pages: existing, unreadable } = this.library();
       const base = new Map(existing.map(p => [p.path, p.raw]));
       // A page a human is midway through writing must never be overwritten. A page full of conflict
       // markers is not that: git wrote them, nobody wants them kept, and refusing to publish over it
       // leaves the one repair the agent could make to a human editing YAML by hand.
       const broken = new Map(unreadable.filter(p => p.code !== 'conflict-markers').map(p => [p.path, p.reason]));
-      // The patch's revision is recorded, not enforced: what matters is that every source it cites
-      // still has the content it was written against, and each source carries its own hash for that.
-      if (output.revision && output.revision !== inv.revision && output.pages.every(p => !p.meta.sources.length))
-        throw new Error(`Source revision changed after planning: patch declares ${output.revision}, sources are at ${inv.revision}; plan again`);
-      const allowed = new Map(inv.sources.map(s => [s.id, s]));
-      const updated = output.pages.map(p => {
-        this.pagePath(p.path);
-        if (p.meta.type === 'query') throw new Error('Publish cannot replace captured history');
-        if (broken.has(p.path)) throw new Error(`Cannot publish over an unreadable page: ${p.path} (${broken.get(p.path)})`);
-        const onDisk = read(this.store.path(this.pagePath(p.path)));
-        if (onDisk !== (base.get(p.path) ?? null) && !unreadable.some(u => u.path === p.path && u.code === 'conflict-markers'))
-          throw new Error(`Concurrent edit: ${p.path}`);
-        const old = existing.find(e => e.path === p.path);
-        if (old && old.meta.wikipoke.uid !== p.meta.wikipoke.uid) throw new Error('Cannot replace page identity');
-        for (const source of p.meta.sources) {
-          const known = allowed.get(source.id);
-          // Naming the field that failed, not just the source: a patch built from a stale plan has a
-          // matching hash and a stale revision, and "unverified" alone sends an agent hunting a bug
-          // in the inventory instead of re-planning.
-          if (!known) throw new Error(`Unverified source: ${source.id} is outside the configured scope at this revision`);
-          if (source.resource !== undefined && source.resource !== known.resource)
-            throw new Error(`Unverified source: ${source.id} declares resource ${source.resource}, sources have ${known.resource}; re-plan with ingest`);
-          // Only the hash is checked. It already proves the content the page was written against,
-          // while the revision is the commit that content happened to sit in - so requiring it to
-          // match threw away a whole batch of an agent's work every time anyone committed anything
-          // during the turn, including a typo in a README the plan never touched.
-          if (!sameDigest(source.hash, known.hash))
-            throw new Error(`Unverified source: ${source.id} declares hash ${source.hash ?? 'nothing'}, sources have ${known.hash}; re-plan with ingest`);
-        }
-        return { ...p, raw: render(p.meta, p.body) };
+      // Did the code move while the pages were being written? One diff against the plan's commit
+      // answers it for every pattern at once - and only for the patterns these pages claim, so a
+      // typo committed in a README during the turn no longer throws away a batch of work.
+      const patterns = drafts.flatMap(draft => draft.meta.sources);
+      const moved = changed(this.root, this.config, at).filter(file => patterns.some(p => covers(p, file)));
+      if (moved.length) throw new Error(`Source moved after planning: ${moved.slice(0, 3).join(', ')}${
+        moved.length > 3 ? ` and ${moved.length - 3} more` : ''}; re-plan with ingest and write these pages again`);
+      const updated = drafts.map(draft => {
+        this.pagePath(draft.path);
+        if (draft.meta.type === 'query') throw new Error('Publish cannot replace captured history');
+        if (broken.has(draft.path)) throw new Error(`Cannot publish over an unreadable page: ${draft.path} (${broken.get(draft.path)})`);
+        const onDisk = read(this.store.path(this.pagePath(draft.path)));
+        if (onDisk !== (base.get(draft.path) ?? null) && !unreadable.some(u => u.path === draft.path && u.code === 'conflict-markers'))
+          throw new Error(`Concurrent edit: ${draft.path}`);
+        const old = existing.find(e => e.path === draft.path);
+        // Identity is assigned on first publication and never reassigned: a page keeps the uid it was
+        // given even when it is renamed, which is what keeps every link in the wiki pointing at it.
+        const uid = draft.meta.wikipoke.uid ?? old?.meta.wikipoke.uid ?? slug(draft.path.replace(/\.md$/, ''));
+        if (old && old.meta.wikipoke.uid !== uid) throw new Error('Cannot replace page identity');
+        const sources = draft.meta.sources.map(pattern => {
+          if (!matched(inv.sources, pattern).length)
+            throw new Error(`Unverified source: ${pattern} matches no file in the configured scope at ${at.slice(0, 12)}; check the pattern against the plan`);
+          return { id: pattern, revision: at.slice(0, 12), hash: digestOf(inv.sources, pattern) };
+        });
+        const meta: Metadata = { ...draft.meta, sources,
+          wikipoke: { ...draft.meta.wikipoke, uid, relations: draft.meta.wikipoke.relations } };
+        return { path: draft.path, meta, body: draft.body, raw: render(meta, draft.body) };
       });
-      if (!updated.length) throw new Error('Patch contains no pages');
       this.publish(updated);
-      return { published: updated.map(p => p.path), findings: output.findings };
+      return { published: updated.map(p => p.path), revision: at,
+        sources: Object.fromEntries(updated.map(p => [p.path, p.meta.sources.map(s => s.id)])) };
     });
   }
   async ask(question: string, requestId = randomUUID(), ref?: string, again = false) {
@@ -537,9 +568,13 @@ export class Wiki {
         // What this choice touches, written as links in the body rather than as typed relations: the
         // pages documenting the same code, and the other choices recorded under the same task. A
         // reader following the wiki finds them; so does the graph, which reads the body too.
-        const evidence = new Set(pinned.map(source => source.id));
+        // A decision names files; a page claims a pattern. Matching the two by string equality
+        // silently stopped finding anything the moment a page covered a module rather than a file -
+        // and a decision that links to nothing is a decision nobody reading the wiki will ever meet.
+        const evidence = pinned.map(source => source.id);
         const about = published.filter(page => !['decision', 'query'].includes(page.meta.type) &&
-          page.meta.sources.some(source => evidence.has(source.id))).map(page => page.path);
+          page.meta.sources.some(source => evidence.some(file => covers(source.id, file) || covers(file, source.id))))
+          .map(page => page.path);
         const together = named.filter(other => other.event.id !== e.id).map(other => siblings.get(other.event.id)!);
         const unverified = e.evidence.filter(file => !known.has(file));
         const section = (title: string, content: string) => content ? `\n# ${title}\n\n${content}\n` : '';

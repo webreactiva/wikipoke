@@ -20,13 +20,20 @@ async function setup() {
   git(root, 'add', '.'); git(root, 'commit', '-qm', 'initial');
   await Wiki.init(root, config); return new Wiki(root);
 }
+// Publication takes Markdown pages whose sources are bare patterns. These tests were written
+// against the JSON patch it replaced, so the shape is translated here rather than at every call site.
+function drafts(input: any) {
+  return (input.pages ?? []).map((page: any) => ({ path: page.path, body: page.body,
+    meta: { ...page.meta, sources: (page.meta.sources ?? []).map((s: any) => typeof s === "string" ? s : s.id) } }));
+}
+function publish(wiki: Wiki, input: any, ref?: string) { return wiki.publishPages(drafts(input), ref ?? input.revision); }
 function patch(sources: any[]) { return { pages: [{ path: 'concepts/retries.md', meta: { type: 'concept', title: 'Retries', description: 'Retry policy',
   sources: sources.map(({ content, ...source }: any) => source), wikipoke: { uid: 'retries', relations: [] } }, body: 'Requests use three retries.' }], findings: [] }; }
 
 test('ingest plans deterministic work and publish validates source evidence', async () => {
   const wiki = await setup();
   assert.deepEqual((await wiki.status()).uncovered, ['src/main.ts']);
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   const page = readFileSync(join(wiki.root, 'wiki/concepts/retries.md'), 'utf8');
   assert.equal((await wiki.ingest() as any).complete, true);
   assert.equal(readFileSync(join(wiki.root, 'wiki/concepts/retries.md'), 'utf8'), page);
@@ -34,7 +41,7 @@ test('ingest plans deterministic work and publish validates source evidence', as
   writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 4;');
   git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change');
   assert.equal((await wiki.status()).drift[0].source, 'src/main.ts');
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources)); assert.deepEqual((await wiki.status()).drift, []);
+  await publish(wiki, patch((await wiki.ingest() as any).sources)); assert.deepEqual((await wiki.status()).drift, []);
 });
 
 test('queries persist before agent research and deduplicate request IDs', async () => {
@@ -129,10 +136,10 @@ test('capture preserves declared reasons, is idempotent, and does not certify em
 test('agent patches cannot escape wiki scope or overwrite concurrent edits', async () => {
   const wiki = await setup(); const plan: any = await wiki.ingest();
   const outside = patch(plan.sources); outside.pages[0].path = '../../outside.md';
-  await assert.rejects(wiki.publishPatch(outside), /outside scope/);
+  await assert.rejects(publish(wiki, outside), /outside scope/);
   mkdirSync(join(wiki.root, 'wiki/concepts'), { recursive: true });
   writeFileSync(join(wiki.root, 'wiki/concepts/retries.md'), '---\ntype: concept\ntitle: Human\nwikipoke:\n  uid: human\n---\nhuman edit\n');
-  await assert.rejects(wiki.publishPatch(patch(plan.sources)), /(Concurrent edit|identity)/);
+  await assert.rejects(publish(wiki, patch(plan.sources)), /(Concurrent edit|identity)/);
   assert.match(read(join(wiki.root, 'wiki/concepts/retries.md'))!, /human edit/);
   symlinkSync(tmpdir(), join(wiki.root, 'wiki/escape'));
   assert.throws(() => wiki.store.path('wiki/escape/a.md'), /Symlink/);
@@ -141,7 +148,7 @@ test('agent patches cannot escape wiki scope or overwrite concurrent edits', asy
 test('seal records a checkpoint only after coverage and drift are clear', async () => {
   const wiki = await setup();
   await assert.rejects(wiki.seal(), /pending work: 1 uncovered source/);
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   const sealed = await wiki.seal();
   assert.equal(sealed.lastIndexedCommit, git(wiki.root, 'rev-parse', 'HEAD'));
   assert.equal((await wiki.status()).checkpoint.lastIndexedCommit, sealed.lastIndexedCommit);
@@ -206,7 +213,7 @@ test('an unreadable page is reported as a finding instead of breaking every comm
   assert.match(finding!.message, /frontmatter/);
   assert.equal(status.pages, 0);
   assert.ok((await wiki.lint()).some(f => f.code === 'invalid-page'));
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   assert.deepEqual((await wiki.status()).uncovered, []);
   await wiki.ask('Anything?', 'unreadable');
   await wiki.capture({ id: 'unreadable-event', task: 'Keep working', actor: 'agent/test',
@@ -218,7 +225,7 @@ test('an unreadable page is reported as a finding instead of breaking every comm
 test('publishing never copies source content into the frontmatter', async () => {
   const wiki = await setup();
   const plan: any = await wiki.ingest();
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/retries.md',
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [{ path: 'concepts/retries.md',
     meta: { type: 'concept', title: 'Retries', description: 'Retry policy', sources: plan.sources,
       wikipoke: { uid: 'retries', relations: [] } }, body: 'Requests use three retries.' }] });
   const page = readFileSync(join(wiki.root, 'wiki/concepts/retries.md'), 'utf8');
@@ -227,7 +234,7 @@ test('publishing never copies source content into the frontmatter', async () => 
   // one - and publish drops it even when an agent fills it in from the schema anyway.
   assert.deepEqual(Object.keys(wiki.pages()[0].meta.sources[0]).sort(), ['hash', 'id', 'revision']);
   const echoed_ = wiki.pages()[0].meta.sources.map(source => ({ ...source, resource: source.id }));
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/echo.md',
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [{ path: 'concepts/echo.md',
     meta: { type: 'concept', title: 'Echo', description: 'Echo', wikipoke: { uid: 'echo', relations: [] },
       sources: echoed_ }, body: 'Body.' }] });
   const echoed = wiki.pages().find(page => page.path === 'concepts/echo.md')!;
@@ -247,18 +254,56 @@ test('publish refuses a patch whose evidence moved, and only that', async () => 
   // move, so the work stands: rejecting it here threw away a whole batch for a typo in a README.
   writeFileSync(join(wiki.root, 'src/extra.ts'), 'export const extra = 1;\n');
   git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'extra');
-  await wiki.publishPatch({ ...patch(plan.sources), revision: plan.revision });
+  await publish(wiki, { ...patch(plan.sources), revision: plan.revision });
   assert.deepEqual((await wiki.status()).uncovered, ['src/extra.ts']);
 
   // The cited source itself moving is a different matter: the page was written against content that
-  // no longer exists, and that is refused by the hash it pinned.
+  // no longer exists. One diff against the commit the plan was made at settles it, so nothing has to
+  // be transcribed into the page for the check to have something to compare.
   const stale: any = await wiki.ingest();
   writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 99;\n');
   git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'moved');
-  await assert.rejects(wiki.publishPatch({ pages: [{ path: 'concepts/retries.md',
-    meta: { type: 'concept', title: 'Retries', description: 'Retry policy',
-      sources: [{ id: 'src/main.ts', revision: stale.revision, hash: hash('export const retries = 3;\n').slice(0, 16) }],
-      wikipoke: { uid: 'retries', relations: [] } }, body: 'Body.' }], findings: [] }), /declares hash/);
+  await assert.rejects(publish(wiki, { pages: [{ path: 'concepts/moved.md',
+    meta: { type: 'concept', title: 'Moved', description: 'Moved', sources: ['src/main.ts'],
+      wikipoke: { uid: 'moved', relations: [] } }, body: 'Body.' }] }, stale.revision),
+    /moved after planning: src\/main\.ts/);
+});
+
+test('one page covers a module, and a file appearing under it moves the page', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/queue.ts'), 'export const queue = [];\n');
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'second source');
+  // Two files, one pattern, one page. This is the whole point: coverage is reached by writing about
+  // a module, not by writing a page per file and passing every mechanical check while saying nothing.
+  await publish(wiki, { pages: [{ path: 'concepts/src.md', meta: { type: 'entity', title: 'The src module',
+    description: 'What src does', sources: ['src'] }, body: 'Retries and a queue.' }] });
+  assert.deepEqual((await wiki.status()).uncovered, []);
+  assert.deepEqual((await wiki.status()).drift, []);
+  // Identity is assigned, not transcribed: the page keeps the uid Wikipoke gave it on first publication.
+  assert.equal(wiki.pages()[0].meta.wikipoke.uid, 'concepts-src');
+  assert.deepEqual(wiki.pages()[0].meta.sources.map(s => s.id), ['src']);
+  // A new file under the pattern is covered the moment it lands - and the page that claims it has
+  // gone stale, which is the signal that actually needs a human or an agent to act.
+  writeFileSync(join(wiki.root, 'src/retry.ts'), 'export const retry = true;\n');
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'third source');
+  const status: any = await wiki.status();
+  assert.deepEqual(status.uncovered, []);
+  assert.deepEqual(status.drift.map((d: any) => [d.source, d.reason]), [['src', 'changed']]);
+});
+
+test('a plan can be aimed at a part of the repository that never changed', async () => {
+  const wiki = await setup();
+  mkdirSync(join(wiki.root, 'src/api'));
+  writeFileSync(join(wiki.root, 'src/api/routes.ts'), 'export const routes = [];\n');
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'api');
+  const aimed: any = await wiki.ingest('HEAD', 'src/api');
+  assert.deepEqual(aimed.sources.map((s: any) => s.id), ['src/api/routes.ts']);
+  // The aim says what is left here; `complete` and `remaining` keep speaking for the whole scope,
+  // so a loop driven by them does not stop with most of the repository still undocumented.
+  assert.equal(aimed.remainingHere, 0);
+  assert.equal(aimed.complete, false);
+  assert.equal(aimed.remaining, 1);
+  await assert.rejects(wiki.ingest('HEAD', 'src/nothing'), /Nothing in scope matches/);
 });
 
 test('attention writes a bounded signal instead of the whole graph', async () => {
@@ -279,7 +324,7 @@ test('attention writes a bounded signal instead of the whole graph', async () =>
   assert.deepEqual(Object.keys(written).sort(),
     ['at', 'checkpoint', 'drift', 'findings', 'flows', 'pages', 'revision', 'uncovered']);
   assert.deepEqual(JSON.parse(read(join(wiki.root, '.wikipoke/attention.json'))!), written);
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   assert.deepEqual((await wiki.graph()).nodes.map(n => n.id), wiki.pages().map(p => p.path));
 });
 
@@ -288,7 +333,7 @@ test('a page published under a nested index name stays visible to the wiki', asy
   const plan: any = await wiki.ingest(), sources = plan.sources.map(({ content, ...s }: any) => s);
   const page = (path: string, uid: string) => ({ path, meta: { type: 'concept', title: uid, description: uid,
     sources, wikipoke: { uid, relations: [] } }, body: 'Text.' });
-  const result: any = await wiki.publishPatch({ revision: plan.revision, findings: [],
+  const result: any = await publish(wiki, { revision: plan.revision, findings: [],
     pages: [page('entities/index.md', 'entities-index'), page('entities/real.md', 'real')] });
   assert.deepEqual(result.published, ['entities/index.md', 'entities/real.md']);
   const status = await wiki.status();
@@ -297,7 +342,7 @@ test('a page published under a nested index name stays visible to the wiki', asy
   assert.deepEqual((await wiki.graph()).nodes.map(n => n.id), ['entities/index.md', 'entities/real.md']);
   assert.match(read(join(wiki.root, 'wiki/index.md'))!, /\(entities\/index\.md\)/);
   assert.equal(wiki.pages().some(p => p.path === 'index.md'), false);
-  await assert.rejects(wiki.publishPatch({ ...patch(plan.sources), pages: [page('index.md', 'root')] }), /Invalid concept path/);
+  await assert.rejects(publish(wiki, { ...patch(plan.sources), pages: [page('index.md', 'root')] }), /Invalid concept path/);
 });
 
 test('publishing over an unreadable page names the real cause', async () => {
@@ -305,7 +350,7 @@ test('publishing over an unreadable page names the real cause', async () => {
   const plan: any = await wiki.ingest(), notes = join(wiki.root, 'wiki/concepts/retries.md');
   mkdirSync(join(wiki.root, 'wiki/concepts'), { recursive: true });
   writeFileSync(notes, 'Human notes without frontmatter\n');
-  await assert.rejects(wiki.publishPatch(patch(plan.sources)),
+  await assert.rejects(publish(wiki, patch(plan.sources)),
     /Cannot publish over an unreadable page: concepts\/retries\.md \(missing YAML frontmatter\)/);
   assert.equal(read(notes), 'Human notes without frontmatter\n');
 });
@@ -359,7 +404,7 @@ test('a task that records no decision leaves a tape but no wiki page', async () 
 
 test('capture publishes the choice, never a transcript of the task', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   const base = { task: 'pick a retry count', actor: 'agent/test', at: '2026-09-09T10:00:00Z' };
   await wiki.capture({ ...base, id: 'd0', kind: 'open' });
   await wiki.capture({ ...base, id: 'd1', kind: 'decision', choice: 'Three retries', rationale: 'Measured tail latency.' });
@@ -406,17 +451,17 @@ test('lint names the flow a file-by-file wiki never notices is missing', async (
   const sources = (await wiki.ingest() as any).sources.map(({ content, ...source }: any) => source);
   const page = (path: string, type: string, cited: any[]) => ({ path, meta: { type, title: path,
     description: path, sources: cited, wikipoke: { uid: path, relations: [] } }, body: 'Body.' });
-  await wiki.publishPatch({ pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
+  await publish(wiki, { pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
     page('c.md', 'entity', [])], findings: [] });
   // Every source is claimed and coverage reads green, which is exactly when the gap is invisible.
   assert.deepEqual((await wiki.status()).uncovered, []);
   assert.equal((await wiki.lint()).some(f => f.code === 'no-flows'), true);
 
-  await wiki.publishPatch({ pages: [page('flows/thin.md', 'flow', sources.slice(0, 1))], findings: [] });
+  await publish(wiki, { pages: [page('flows/thin.md', 'flow', sources.slice(0, 1))], findings: [] });
   assert.equal((await wiki.lint()).some(f => f.code === 'no-flows'), false);
   // A flow resting on one file is an entity wearing the wrong type.
   assert.equal((await wiki.lint()).some(f => f.code === 'thin-flow'), true);
-  await wiki.publishPatch({ pages: [page('flows/whole.md', 'flow', sources)], findings: [] });
+  await publish(wiki, { pages: [page('flows/whole.md', 'flow', sources)], findings: [] });
   assert.equal((await wiki.lint()).filter(f => f.code === 'thin-flow').length, 1);
 });
 
@@ -427,7 +472,7 @@ test('a wiki written with full-length digests is not reported as drifted after a
   // always repeated. Every one of those pages is still on disk in real projects.
   const legacy = plan.sources.map((source: any) => ({ id: source.id, resource: source.id,
     revision: git(wiki.root, 'rev-parse', 'HEAD'), hash: hash(readFileSync(join(wiki.root, source.id), 'utf8')) }));
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/retries.md',
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [{ path: 'concepts/retries.md',
     meta: { type: 'concept', title: 'Retries', description: 'Retry policy', sources: legacy,
       wikipoke: { uid: 'retries', relations: [] } }, body: 'Requests use three retries.' }] });
   const status: any = await wiki.status();
@@ -441,7 +486,7 @@ test('a wiki written with full-length digests is not reported as drifted after a
 
 test('a decision joins the graph through the code it was about', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   await wiki.capture({ id: 'g1', task: 'retry policy', actor: 'agent/test', at: '2026-09-09T10:00:00Z',
     kind: 'decision', title: 'Three retries', choice: 'Bound the retries at three.',
     rationale: 'Measured at p99.', evidence: ['src/main.ts', 'src/deleted.ts'] });
@@ -468,7 +513,7 @@ test('a decision joins the graph through the code it was about', async () => {
 
 test('an answer can cite a page, and the query is connected to what answered it', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   await wiki.ask('How many retries?', 'cited');
   await wiki.answer('cited', { answer: 'Three.', citations: ['src/main.ts', 'concepts/retries.md'], gaps: [] });
   const query = wiki.pages().find(p => p.meta.type === 'query')!;
@@ -487,7 +532,7 @@ test('the graph says which relations are symmetric and stops repeating itself', 
   const sources = plan.sources.map(({ content, ...source }: any) => source);
   const page = (path: string, relations: any[]) => ({ path, meta: { type: 'entity', title: path,
     description: path, sources, wikipoke: { uid: path, relations } }, body: 'Body.' });
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [
     page('a.md', [{ type: 'related_to', target: '/b.md' }, { type: 'depends_on', target: '/b.md' }]),
     page('b.md', [{ type: 'related_to', target: '/a.md' }, { type: 'depends_on', target: '/a.md' }]),
   ] });
@@ -509,7 +554,7 @@ test('a wikilink in the body is an edge, and brackets in code are not', async ()
   const sources = plan.sources.map(({ content, ...source }: any) => source);
   const page = (path: string, body: string) => ({ path, meta: { type: 'entity', title: path,
     description: path, sources, wikipoke: { uid: path, relations: [] } }, body });
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [
     page('concepts/retries.md', 'Bounded, see [[concepts/backoff]] and [[concepts/backoff|the backoff]].\n\n`const x = a[[0]]`\n'),
     page('concepts/backoff.md', 'Jittered.'),
   ] });
@@ -527,22 +572,22 @@ test('a wiki with no flow through it cannot be sealed as complete', async () => 
   const sources = (await wiki.ingest() as any).sources.map(({ content, ...source }: any) => source);
   const page = (path: string, type: string, cited: any[]) => ({ path, meta: { type, title: path,
     description: path, sources: cited, wikipoke: { uid: path, relations: [] } }, body: 'Body.' });
-  await wiki.publishPatch({ pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
+  await publish(wiki, { pages: [page('a.md', 'entity', sources), page('b.md', 'entity', []),
     page('c.md', 'entity', [])], findings: [] });
   // Coverage is clean and every finding is a warning, which used to be enough to certify the wiki.
   assert.deepEqual((await wiki.status()).uncovered, []);
   await assert.rejects(wiki.seal(), /no page describes a flow/);
-  await wiki.publishPatch({ pages: [page('flows/one.md', 'flow', sources)], findings: [] });
+  await publish(wiki, { pages: [page('flows/one.md', 'flow', sources)], findings: [] });
   assert.ok((await wiki.seal() as any).lastIndexedCommit);
 });
 
 test('a checkpoint that is no longer in the repository is reported, not read as clean', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   const flows = { path: 'flows/one.md', meta: { type: 'flow', title: 'Flow', description: 'Flow',
     sources: (await wiki.ingest() as any).sources.map(({ content, ...s }: any) => s),
     wikipoke: { uid: 'flow', relations: [] } }, body: 'Body.' };
-  await wiki.publishPatch({ pages: [flows], findings: [] });
+  await publish(wiki, { pages: [flows], findings: [] });
   await wiki.seal();
   // What a squash-merge leaves behind: state.json names a commit this repository does not have.
   writeFileSync(join(wiki.root, '.wikipoke/state.json'),
@@ -555,7 +600,7 @@ test('a checkpoint that is no longer in the repository is reported, not read as 
 
 test('what the wiki writes is readable by anyone who can read the repository', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   for (const file of ['wikipoke.config.yaml', 'wiki/index.md', 'wiki/concepts/retries.md']) {
     const mode = statSync(join(wiki.root, file)).mode & 0o777;
     // Owner-only made the wiki unreadable to CI, or to anyone in a container under another uid,
@@ -566,7 +611,7 @@ test('what the wiki writes is readable by anyone who can read the repository', a
 
 test('a page git filled with conflict markers is repairable by the agent that can read both sides', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   const page = join(wiki.root, 'wiki/concepts/retries.md');
   writeFileSync(page, '<<<<<<< HEAD\n---\ntype: concept\n=======\n---\ntype: concept\n>>>>>>> other\n');
   const findings = await wiki.lint();
@@ -574,19 +619,19 @@ test('a page git filled with conflict markers is repairable by the agent that ca
   assert.equal(findings.some(f => f.code === 'conflict-markers'), true);
   assert.match(findings.find(f => f.code === 'conflict-markers')!.message, /merge conflict/);
   // And the agent can fix it, instead of a human editing YAML by hand.
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   assert.deepEqual(await wiki.lint(), []);
 });
 
 test('drift names the way out, including when the file is simply gone', async () => {
   const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
+  await publish(wiki, patch((await wiki.ingest() as any).sources));
   git(wiki.root, 'rm', '-q', 'src/main.ts'); git(wiki.root, 'commit', '-qm', 'remove');
   const [gone]: any = (await wiki.status()).drift;
   assert.equal(gone.reason, 'missing');
   assert.match(gone.remedy, /republish concepts\/retries\.md without that source/);
   // Which is a real way out: the page stays as the record that this module existed.
-  await wiki.publishPatch({ pages: [{ path: 'concepts/retries.md', meta: { type: 'concept',
+  await publish(wiki, { pages: [{ path: 'concepts/retries.md', meta: { type: 'concept',
     title: 'Retries', description: 'Retry policy', sources: [], wikipoke: { uid: 'retries', relations: [] } },
     body: 'The retry module was removed.' }], findings: [] });
   assert.deepEqual((await wiki.status()).drift, []);
@@ -598,7 +643,7 @@ test('one sentence citing everything does not buy a covered wiki', async () => {
   git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'more');
   const plan: any = await wiki.ingest();
   // The whole repository claimed by one page with one sentence: the shape of the shortcut.
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: [{ path: 'concepts/all.md',
+  await publish(wiki, { revision: plan.revision, findings: [], pages: [{ path: 'concepts/all.md',
     meta: { type: 'concept', title: 'Everything', description: 'Everything',
       sources: plan.sources.map(({ content, ...source }: any) => source),
       wikipoke: { uid: 'all', relations: [] } }, body: 'This project contains source files.' }] });
@@ -633,12 +678,12 @@ test('a wiki shaped like the file tree is reported, and a wiki of knowledge is n
 
   // One page per file, named after the path: every source claimed, every other check green.
   const sources = plan.sources.map(({ content, ...source }: any) => source);
-  await wiki.publishPatch({ revision: plan.revision, findings: [], pages: sources.map((source: any) =>
+  await publish(wiki, { revision: plan.revision, findings: [], pages: sources.map((source: any) =>
     page(`${source.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`, [source],
       'This module exports a constant used elsewhere in the project.')) });
   let more: any = await wiki.ingest();
   while (more.sources.length) {
-    await wiki.publishPatch({ revision: more.revision, findings: [], pages: more.sources.map((source: any) => {
+    await publish(wiki, { revision: more.revision, findings: [], pages: more.sources.map((source: any) => {
       const { content, ...rest } = source;
       return page(`${source.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`, [rest],
         'This module exports a constant used elsewhere in the project.');
