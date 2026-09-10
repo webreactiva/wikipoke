@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { Wiki } from '../src/wiki.js';
-import { install, uninstall, skillState } from '../src/integrations.js';
+import { harnesses, install, uninstall, skillState } from '../src/integrations.js';
 import type { Config } from '../src/model.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -51,7 +51,7 @@ test('install writes valid agent-neutral skills and preserves foreign skill file
   const wiki = await setup(), foreign = join(wiki.root, '.agents/skills/wikipoke-query/SKILL.md');
   mkdirSync(join(wiki.root, '.agents/skills/wikipoke-query'), { recursive: true });
   writeFileSync(foreign, 'foreign skill');
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.ok(existsSync(join(wiki.root, '.agents/skills/wikipoke-ingest/SKILL.md')));
   assert.equal(readFileSync(foreign, 'utf8'), 'foreign skill');
   assert.equal(report.activeHook, true);
@@ -64,7 +64,7 @@ test('install preserves an existing post-commit hook', async () => {
   const wiki = await setup();
   const hook = join(wiki.root, '.git/hooks/post-commit');
   writeFileSync(hook, '#!/bin/sh\necho foreign\n');
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.equal(report.activeHook, false);
   assert.ok(report.manual.some(message => /existing post-commit/.test(message)));
   assert.match(readFileSync(hook, 'utf8'), /foreign/);
@@ -72,7 +72,7 @@ test('install preserves an existing post-commit hook', async () => {
 
 test('the delegated hook resolves the notifier at run time, not from a baked path', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   const delegator = readFileSync(join(wiki.root, '.git/hooks/post-commit'), 'utf8');
   assert.doesNotMatch(delegator, new RegExp(wiki.root.replaceAll('.', '\\.')));
   assert.match(delegator, /rev-parse --show-toplevel/);
@@ -85,7 +85,7 @@ test('the delegated hook resolves the notifier at run time, not from a baked pat
 
 test('the notifier refreshes the signal through maintain --once', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   // The refresh is made deliberately slow, because the property under test is that the hook does not
   // wait for it - not that a particular machine can fork a shell inside some number of milliseconds.
   // A wall-clock budget measured the second thing and failed wherever the first one still held.
@@ -104,7 +104,7 @@ test('the notifier refreshes the signal through maintain --once', async () => {
 
 test('a failed refresh keeps the previous attention signal and never fails the commit', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   const signal = join(wiki.root, '.wikipoke/attention.json');
   writeFileSync(signal, '{"drift":{"count":3}}\n');
   fakeCli(wiki.root, 'echo broken >&2\nexit 3');
@@ -116,7 +116,7 @@ test('a failed refresh keeps the previous attention signal and never fails the c
 
 test('the notifier stays silent when no Wikipoke executable is reachable', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   const signal = join(wiki.root, '.wikipoke/attention.json');
   writeFileSync(signal, '{"drift":{"count":3}}\n');
   const result = spawnSync(join(wiki.root, '.wikipoke/hooks/post-commit'), [],
@@ -127,14 +127,14 @@ test('the notifier stays silent when no Wikipoke executable is reachable', async
 
 test('uninstall removes only managed files and reports the knowledge it preserved', async () => {
   const wiki = await setup();
-  install(wiki.root); install(wiki.root);
+  install(wiki.root, harnesses); install(wiki.root, harnesses);
   const team = join(wiki.root, '.agents/skills/team-review/SKILL.md');
   mkdirSync(join(wiki.root, '.agents/skills/team-review'), { recursive: true });
   writeFileSync(team, 'team skill');
   writeFileSync(join(wiki.root, '.agents/skills/wikipoke-query/SKILL.md'), 'adopted by the team');
   mkdirSync(join(wiki.root, '.wikipoke/events'), { recursive: true });
   writeFileSync(join(wiki.root, '.wikipoke/events/a.json'), '{}\n');
-  const report = uninstall(wiki.root);
+  const report = uninstall(wiki.root, harnesses);
   assert.equal(existsSync(join(wiki.root, '.agents/skills/wikipoke-ingest/SKILL.md')), false);
   assert.equal(existsSync(join(wiki.root, '.agents/skills/wikipoke-decision/SKILL.md')), false);
   assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/post-commit')), false);
@@ -156,8 +156,8 @@ test('uninstall keeps a post-commit hook it did not install', async () => {
   const wiki = await setup();
   const hook = join(wiki.root, '.git/hooks/post-commit');
   writeFileSync(hook, '#!/bin/sh\n. .wikipoke/hooks/post-commit\necho foreign\n');
-  install(wiki.root);
-  const report = uninstall(wiki.root);
+  install(wiki.root, harnesses);
+  const report = uninstall(wiki.root, harnesses);
   assert.match(readFileSync(hook, 'utf8'), /foreign/);
   assert.ok(report.preserved.includes('.git/hooks/post-commit'));
   assert.ok(report.manual.some(message => /not installed by Wikipoke/.test(message)));
@@ -166,20 +166,20 @@ test('uninstall keeps a post-commit hook it did not install', async () => {
 
 test('uninstall is idempotent and safe on an untouched project', async () => {
   const wiki = await setup();
-  install(wiki.root);
-  uninstall(wiki.root);
-  const report = uninstall(wiki.root);
+  install(wiki.root, harnesses);
+  uninstall(wiki.root, harnesses);
+  const report = uninstall(wiki.root, harnesses);
   assert.deepEqual(report.removed, []);
   assert.ok(report.preserved.includes('wiki'));
 });
 test('install composes a session briefing so an agent does not open a session blind', async () => {
   const wiki = await setup();
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.equal(report.activeBriefing, true);
   const settings = JSON.parse(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'));
   assert.equal(settings.hooks.SessionStart[0].hooks[0].command, 'sh .wikipoke/hooks/session-start');
   assert.match(readFileSync(join(wiki.root, '.wikipoke/hooks/session-start'), 'utf8'), /never runs an LLM/);
-  const removal = uninstall(wiki.root);
+  const removal = uninstall(wiki.root, harnesses);
   assert.ok(removal.removed.includes('.claude/settings.json'));
   assert.ok(removal.removed.includes('.wikipoke/hooks/session-start'));
 });
@@ -188,17 +188,17 @@ test('install never rewrites a settings file the project already owns', async ()
   const wiki = await setup();
   mkdirSync(join(wiki.root, '.claude'), { recursive: true });
   writeFileSync(join(wiki.root, '.claude/settings.json'), '{ "permissions": { "allow": [] } }\n');
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.equal(report.activeBriefing, false);
   assert.ok(report.manual.some(message => /session-start/.test(message)));
   assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), '{ "permissions": { "allow": [] } }\n');
-  uninstall(wiki.root);
+  uninstall(wiki.root, harnesses);
   assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), '{ "permissions": { "allow": [] } }\n');
 });
 
 test('the session briefing reports what the wiki owes and stays silent when clean', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   fakeCli(wiki.root, 'exit 0');
   mkdirSync(join(wiki.root, '.wikipoke'), { recursive: true });
   writeFileSync(join(wiki.root, '.wikipoke/attention.json'), JSON.stringify({
@@ -216,7 +216,7 @@ test('the session briefing reports what the wiki owes and stays silent when clea
 
 test('the briefing pushes itself into every harness that auto-discovers a file', async () => {
   const wiki = await setup();
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   // OpenCode auto-loads .opencode/plugin/*.js and Cursor auto-loads .cursor/rules/*.mdc, so neither
   // needs a human to paste anything, and neither appears as a manual step.
   assert.ok(report.skills.includes('.opencode/plugin/wikipoke.js'));
@@ -227,10 +227,10 @@ test('the briefing pushes itself into every harness that auto-discovers a file',
     assert.ok(report.manual.every(step => !step.startsWith(`${harness}:`)), `${harness} was pushed, so it needs no step`);
   }
   // Codex reads AGENTS.md, which the project owns, so it stays a named step.
-  assert.ok(report.manual.some(step => step.startsWith('Codex:')));
+  assert.ok(report.manual.some(step => step.startsWith('codex:')));
   assert.ok(report.manual.some(step => /Brief the agent at session start/.test(step)));
 
-  const removal = uninstall(wiki.root);
+  const removal = uninstall(wiki.root, harnesses);
   assert.ok(removal.removed.includes('.opencode/plugin/wikipoke.js'));
   assert.ok(removal.removed.includes('.cursor/rules/wikipoke.mdc'));
   assert.equal(existsSync(join(wiki.root, '.opencode')), false, 'an emptied directory is not left behind');
@@ -240,16 +240,16 @@ test('a foreign plugin or rule of the same name is left alone', async () => {
   const wiki = await setup();
   mkdirSync(join(wiki.root, '.opencode/plugin'), { recursive: true });
   writeFileSync(join(wiki.root, '.opencode/plugin/wikipoke.js'), 'export default () => ({});\n');
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.ok(report.manual.some(step => /Skipped \.opencode\/plugin\/wikipoke\.js/.test(step)));
   assert.equal(readFileSync(join(wiki.root, '.opencode/plugin/wikipoke.js'), 'utf8'), 'export default () => ({});\n');
-  const removal = uninstall(wiki.root);
+  const removal = uninstall(wiki.root, harnesses);
   assert.ok(removal.preserved.includes('.opencode/plugin/wikipoke.js'));
 });
 
 test('the OpenCode briefing refreshes from the signal instead of freezing at startup', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   fakeCli(wiki.root, `cd "${repoRoot}" && exec "${process.execPath}" --import tsx "${cliSource}" "$@"`);
   const plugin = await import(join(wiki.root, '.opencode/plugin/wikipoke.js') + '?fresh');
   const hooks = await plugin.wikipoke({ directory: wiki.root });
@@ -267,7 +267,7 @@ test('the OpenCode briefing refreshes from the signal instead of freezing at sta
 
 test('every generated hook is a syntactically valid shell script', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   // A backtick in a message is valid shell that runs a command; `sh -n` accepts it happily and the
   // text arrives mangled, or worse, executed. Neither belongs in a message.
   for (const hook of ['post-commit', 'session-start']) {
@@ -285,7 +285,7 @@ test('every generated hook is a syntactically valid shell script', async () => {
 
 test('install keeps the writer lock out of every commit', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   const ignored = readFileSync(join(wiki.root, '.gitignore'), 'utf8');
   assert.match(ignored, /\.wikipoke\/write\.lock\//);
   assert.match(ignored, /\.wikipoke\/transaction\.json/);
@@ -305,13 +305,13 @@ test('install keeps the writer lock out of every commit', async () => {
   assert.equal(/write\.lock/.test(staged), false);
   // Knowledge in the same directory still travels.
   assert.match(staged, /\.wikipoke\/state\.json/);
-  install(wiki.root);
+  install(wiki.root, harnesses);
   assert.equal(readFileSync(join(wiki.root, '.gitignore'), 'utf8'), ignored);
 });
 
 test('a broken wiki says so, instead of printing what a healthy one prints', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   fakeCli(wiki.root, 'exit 0');
   const brief = () => execFileSync('sh', [join(wiki.root, '.wikipoke/hooks/session-start')],
     { cwd: wiki.root, encoding: 'utf8' }).trim();
@@ -343,7 +343,7 @@ test('install retires the automatic capture hooks an older release left behind',
   writeFileSync(join(wiki.root, '.wikipoke/hooks/session-stop'), '#!/bin/sh\nexit 0\n');
   writeFileSync(join(wiki.root, '.claude/settings.json'), legacy);
 
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/tool-journal')), false);
   assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/session-stop')), false);
   assert.ok(report.manual.some(step => step.includes('docs/extensions.md')));
@@ -365,14 +365,14 @@ test('a settings file Wikipoke no longer recognises is named, not rewritten', as
   } }, null, 2);
   mkdirSync(join(wiki.root, '.claude'), { recursive: true });
   writeFileSync(join(wiki.root, '.claude/settings.json'), theirs);
-  const report = install(wiki.root);
+  const report = install(wiki.root, harnesses);
   assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), theirs);
   assert.ok(report.manual.some(step => step.includes('session-stop') && step.includes('by hand')));
 });
 
 test('a skill file left by an older release is reported, not left to mislead an agent', async () => {
   const wiki = await setup();
-  install(wiki.root);
+  install(wiki.root, harnesses);
   const skill = join(wiki.root, '.claude/skills/wikipoke-ingest/SKILL.md');
   const current = readFileSync(skill, 'utf8');
   assert.match(current, /<!-- managed by wikipoke \d+\.\d+\.\d+; do not edit this line -->/);
@@ -385,7 +385,38 @@ test('a skill file left by an older release is reported, not left to mislead an 
 
   // install replaces it: recognition uses the version-less prefix, so a file any release wrote is
   // still ours to take back.
-  install(wiki.root);
+  install(wiki.root, harnesses);
   assert.deepEqual(skillState(wiki.root).filter(s => !s.current), []);
   assert.equal(readFileSync(skill, 'utf8'), current);
+});
+
+test('install wires the agent this project uses, and nothing it does not', async () => {
+  const wiki = await setup();
+  // A repository driven by Claude Code usually carries a CLAUDE.md before it carries a .claude
+  // directory, so the evidence is deliberately generous.
+  writeFileSync(join(wiki.root, 'CLAUDE.md'), '# project\n');
+  const report = install(wiki.root);
+  assert.deepEqual(report.harnesses, ['claude']);
+  assert.ok(existsSync(join(wiki.root, '.claude/skills/wikipoke-ingest/SKILL.md')));
+  // Files nobody asked for are files somebody has to decide whether to commit.
+  assert.equal(existsSync(join(wiki.root, '.cursor/rules/wikipoke.mdc')), false);
+  assert.equal(existsSync(join(wiki.root, '.opencode/plugin/wikipoke.js')), false);
+  // The neutral home is always written: it is what makes the skills readable by anything at all.
+  assert.ok(existsSync(join(wiki.root, '.agents/skills/wikipoke-ingest/SKILL.md')));
+  assert.ok(report.manual.some(step => step.includes('--agent cursor') || step.includes('Nothing was wired for')));
+});
+
+test('with no harness in sight, install says so instead of guessing', async () => {
+  const wiki = await setup();
+  const report = install(wiki.root);
+  assert.deepEqual(report.harnesses, []);
+  assert.equal(report.activeBriefing, false);
+  assert.ok(existsSync(join(wiki.root, '.agents/skills/wikipoke-ingest/SKILL.md')));
+  assert.equal(existsSync(join(wiki.root, '.claude/settings.json')), false);
+  assert.ok(report.manual.some(step => step.includes('No agent harness was detected')));
+
+  // Naming it is how a project that has not started using one yet still gets wired.
+  const named = install(wiki.root, ['claude']);
+  assert.deepEqual(named.harnesses, ['claude']);
+  assert.equal(named.activeBriefing, true);
 });

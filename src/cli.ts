@@ -9,7 +9,7 @@ import { configSchema } from './model.js';
 import { answerSchema, draftSchema, eventSchema, extensionSchema } from './model.js';
 import { z } from 'zod';
 import { readDrafts } from './knowledge.js';
-import { briefingActive, hookActive, install, skillState, uninstall } from './integrations.js';
+import { briefingActive, harnesses, hookActive, install, skillState, uninstall, type Harness } from './integrations.js';
 import { dispatch } from './extensions.js';
 import type { ExtensionEvent } from './model.js';
 import { commandSchema, type ProjectCommand } from './model.js';
@@ -181,8 +181,17 @@ program.command('seal').description('advance the Git checkpoint after complete r
 program.command('recover').description('release a writer lock left behind by a dead process')
   .requiredOption('--unlock', 'release the recorded lock after reporting its owner')
   .action(() => { try { output(new Store(root()).unlock()); } catch (error) { fail(error); } });
-program.command('install').description('install agent-neutral skills and a composable hook')
-  .action(() => { try { output(install(root())); } catch (error) { fail(error); } });
+program.command('install').description('install the skills, and wire the agent this project uses')
+  // Detection is the default because it is right nearly always and wrong quietly: naming the harness
+  // is how a project that has not started using one yet still gets wired.
+  .option('--agent <name...>', `wire these instead of what is detected: ${harnesses.join(', ')}, or none`)
+  .action((options: { agent?: string[] }) => { try {
+    const named = options.agent?.flatMap(value => value.split(',')).map(value => value.trim().toLowerCase()).filter(Boolean);
+    if (named?.some(name => name === 'all')) return output(install(root(), [...harnesses]));
+    const unknown = named?.filter(name => name !== 'none' && !harnesses.includes(name as Harness));
+    if (unknown?.length) throw new Error(`Unknown agent: ${unknown.join(', ')}; expected ${harnesses.join(', ')}, all, or none`);
+    output(install(root(), named && named.filter(name => name !== 'none') as Harness[]));
+  } catch (error) { fail(error); } });
 program.command('uninstall').description('remove Wikipoke-managed skills and hooks, preserving knowledge')
   .action(() => { try { output(uninstall(root())); } catch (error) { fail(error); } });
 // Project commands are declared in the configuration, so they have to exist before the parser runs -

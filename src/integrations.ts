@@ -425,8 +425,8 @@ const legacySettings = `${JSON.stringify({
 // and an instruction line an agent reads is a working adapter where no lifecycle hook exists.
 // Codex is the one harness left without a file Wikipoke can own: it reads AGENTS.md, which the
 // project writes, so it gets a named step instead of an edited config.
-const harnesses: [string, string][] = [
-  ['Codex', `add a line to AGENTS.md telling the agent to run \`${briefingCommand}\` before it starts work.`],
+const manualSteps: [Harness, string][] = [
+  ['codex', `add a line to AGENTS.md telling the agent to run \`${briefingCommand}\` before it starts work.`],
 ];
 const delegatorScript = `#!/bin/sh
 # ${marker}; delegates to the project-local notifier, resolved at run time.
@@ -447,7 +447,27 @@ export function skillState(root: string): { path: string; current: boolean }[] {
   }
   return found;
 }
-export interface InstallReport { skills: string[]; hook: string; activeHook: boolean; briefing: string; activeBriefing: boolean; manual: string[] }
+// Which agent this project actually uses. Writing for all of them left `.opencode/` and `.cursor/`
+// in repositories that use neither, and a file a project did not ask for is a file somebody has to
+// decide whether to commit. The neutral `.agents/skills/` is always written - it is what makes the
+// skills readable by anything - and everything harness-shaped is wired only where it belongs.
+export const harnesses = ['claude', 'opencode', 'cursor', 'codex'] as const;
+export type Harness = (typeof harnesses)[number];
+// Evidence that a harness is in use here, generous on purpose: a repository driven by Claude Code
+// usually carries a CLAUDE.md before it carries a .claude directory, and missing the harness the
+// user is sitting in is a worse failure than wiring one they also use.
+const evidence: Record<Harness, string[]> = {
+  claude: ['.claude', 'CLAUDE.md'],
+  opencode: ['.opencode', 'opencode.json'],
+  cursor: ['.cursor', '.cursorrules'],
+  codex: ['AGENTS.md'],
+};
+export function detectHarnesses(root: string): Harness[] {
+  return harnesses.filter(name => evidence[name].some(path => {
+    try { return existsSync(resolve(root, path)); } catch { return false; }
+  }));
+}
+export interface InstallReport { skills: string[]; harnesses: Harness[]; skipped: Harness[]; hook: string; activeHook: boolean; briefing: string; activeBriefing: boolean; manual: string[] }
 export interface UninstallReport { removed: string[]; preserved: string[]; manual: string[] }
 function hookPath(root: string): string {
   const value = execFileSync('git', ['-C', root, 'rev-parse', '--git-path', 'hooks'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -474,8 +494,12 @@ function ignoreVolatile(root: string): string | null {
   atomic(path, `${body}${body && !body.endsWith('\n') ? '\n' : ''}${body ? '\n' : ''}# ${marker}: never commit the writer lock or an in-flight transaction\n${missing.join('\n')}\n`);
   return '.gitignore';
 }
-export function install(root: string): InstallReport {
+export function install(root: string, wanted?: Harness[]): InstallReport {
   const store = new Store(root), manual: string[] = [], installed: string[] = [];
+  // Named explicitly, or whatever this repository shows evidence of using. An empty list is a real
+  // answer - the neutral skills still land, and nothing harness-shaped is written.
+  const chosen = new Set<Harness>(wanted ?? detectHarnesses(root));
+  const skipped = harnesses.filter(name => !chosen.has(name));
   const ignored_ = ignoreVolatile(root);
   if (ignored_) installed.push(ignored_);
   // `.agents/skills/` is the neutral home and OpenCode reads it. Claude Code does not - verified by
@@ -483,7 +507,7 @@ export function install(root: string): InstallReport {
   // same file is written where Claude Code looks. A block message naming a skill the agent cannot
   // invoke is worse than no message at all.
   for (const [name, content] of Object.entries(skills)) {
-    for (const home of ['.agents/skills', '.claude/skills']) {
+    for (const home of ['.agents/skills', ...(chosen.has('claude') ? ['.claude/skills'] : [])]) {
       const path = store.path(`${home}/${name}/SKILL.md`), old = read(path);
       if (old !== null && !old.includes(managed)) { manual.push(`Skipped ${relative(root, path)}: not managed by Wikipoke.`); continue; }
       atomic(path, content); installed.push(`${home}/${name}/SKILL.md`);
@@ -512,7 +536,8 @@ export function install(root: string): InstallReport {
   // because a settings file carries permissions and hooks that are none of Wikipoke's business.
   let activeBriefing = briefingActive(root);
   const configured = store.path(settings);
-  if (!activeBriefing && !existsSync(configured)) {
+  if (!chosen.has('claude')) activeBriefing = false;
+  else if (!activeBriefing && !existsSync(configured)) {
     atomic(configured, settingsScript(briefingCommand));
     activeBriefing = true;
   } else if (!activeBriefing) {
@@ -529,17 +554,22 @@ export function install(root: string): InstallReport {
   if (retired.length) manual.push(`Removed ${retired.join(' and ')}: automatic decision capture is no longer built in. Attach your own script instead - see docs/extensions.md.`);
   // These two harnesses auto-discover a file of their own, so the briefing pushes itself rather than
   // waiting for a human to paste an instruction that, unpasted, means nothing happens at all.
-  for (const [path, content] of [[opencodePlugin, pluginScript], [cursorRule, cursorScript]] as const) {
+  for (const [harness, path, content] of [['opencode', opencodePlugin, pluginScript],
+    ['cursor', cursorRule, cursorScript]] as const) {
+    if (!chosen.has(harness)) continue;
     const target = store.path(path), old = read(target);
     if (old !== null && !old.includes(marker) && !old.includes(managed)) {
       manual.push(`Skipped ${path}: not managed by Wikipoke.`); continue;
     }
     atomic(target, content); installed.push(path);
   }
-  for (const [harness, step] of harnesses) manual.push(`${harness}: ${step}`);
+  for (const [harness, step] of manualSteps) if (chosen.has(harness)) manual.push(`${harness}: ${step}`);
+  if (skipped.length) manual.push(`Nothing was wired for ${skipped.join(', ')}: no sign of ${
+    skipped.length > 1 ? 'them' : 'it'} in this repository. The skills are in .agents/skills/, which any agent-neutral tool reads; wire one explicitly with: wikipoke install --agent ${skipped[0]}`);
+  if (!chosen.size) manual.push('No agent harness was detected, so only the neutral skills were written. Name yours with --agent to get the session briefing wired.');
   manual.push('See "Brief the agent at session start" in the Wikipoke README for the exact snippets.');
   manual.push('Schedule `npx --no-install wikipoke maintain --once` to refresh the deterministic attention signal.');
-  return { skills: installed, hook: relative(root, hook), activeHook, briefing: relative(root, brief), activeBriefing, manual };
+  return { skills: installed, harnesses: [...chosen], skipped, hook: relative(root, hook), activeHook, briefing: relative(root, brief), activeBriefing, manual };
 }
 function prune(directory: string): void { try { rmdirSync(directory); } catch { /* keep non-empty directories */ } }
 function wikiDirectory(root: string): string {

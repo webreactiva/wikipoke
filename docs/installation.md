@@ -119,6 +119,13 @@ absolute path. It never replaces an existing hook or hook manager; in that case
 it reports the composition step instead. `doctor` reports whether the notifier
 is active.
 
+`install` wires only the harnesses this project shows evidence of using — a
+`CLAUDE.md` or `.claude/` for Claude Code, `.cursor/` or `.cursorrules`,
+`.opencode/` or `opencode.json`, `AGENTS.md` for Codex. Pass `--agent <name...>`
+to name them instead (also `all` or `none`), which is how a project that has not
+started using one yet still gets wired. The report lists `harnesses` and
+`skipped`, and the skills always land in the neutral `.agents/skills/`.
+
 `install` also writes `.wikipoke/hooks/session-start`, which refreshes the signal
 and prints one line when the wiki owes work. Commits keep the signal fresh; this
 puts it in front of the agent, at the start of a session and again when the agent

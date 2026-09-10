@@ -69,6 +69,14 @@ owed; at the end it can say the one thing nothing else can, that the agent
 edited code and left it uncommitted, so no commit hook has had a reason to run.
 It prints and exits zero — it never refuses a stop.
 
+`install` wires the agent this project actually uses. It looks for evidence — a
+`CLAUDE.md` or `.claude/`, a `.cursor/`, an `.opencode/`, an `AGENTS.md` — and
+wires only those, so a repository that uses none of them does not end up with
+folders it never asked for. Name one yourself with `install --agent claude`
+(repeatable, or `all`, or `none`); the report says what it wired and what it
+skipped. The skills always land in `.agents/skills/`, which is what makes them
+readable by any agent-neutral tool.
+
 Wikipoke composes this for Claude Code only when the project has no
 `.claude/settings.json`, and never rewrites one it finds. Every other harness is
 told, not configured: a harness config carries permissions and plugins that are
