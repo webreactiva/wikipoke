@@ -19,7 +19,7 @@ otherwise \\\`npx --no-install ${cli}\\\`. Every command below assumes that pref
 const skills: Record<string, string> = {
   'wikipoke-ingest': `---
 name: wikipoke-ingest
-description: Reconcile the project wiki with changed source code using Wikipoke.
+description: Take code into the project wiki with Wikipoke - seed it, reconcile what changed, or aim at a part nothing has covered yet.
 user_invocable: true
 ---
 
@@ -27,52 +27,84 @@ ${header}
 
 ${resolve_}
 
-Write the intermediate JSON files these commands take and produce under \`.wikipoke/tmp/\`, which is
-git-ignored. Anywhere outside the project - \`/tmp\` and friends - is a sandbox boundary in most
-harnesses, and asking a human for permission to write a scratch file is a poor way to spend their
-attention.
+Write the pages under \`.wikipoke/tmp/pages/\`, which is git-ignored. Anywhere outside the project -
+\`/tmp\` and friends - is a sandbox boundary in most harnesses, and asking a human for permission to
+write a scratch file is a poor way to spend their attention.
 
 ## Plan
 
-Run \`${cli} ingest\`. The plan is bounded by \`limits.batchFiles\` and \`limits.batchBytes\`,
-so it is meant to be read whole — never truncate it. It answers with:
+Run \`${cli} ingest\`, or \`${cli} ingest --path <directory>\` to aim at a part of the repository whether
+or not it ever changed. Aiming is how a wiki gets seeded: left to itself the plan hands over whatever
+is next in tree order, and code that was never in a diff is never offered at all.
 
-- \`sources\` — the batch to document, each with \`id\`, \`resource\`, \`revision\`, \`hash\` and \`content\`.
+The plan is bounded by \`limits.batchFiles\` and \`limits.batchBytes\`, so it is meant to be read whole —
+never truncate it. It answers with:
+
+- \`sources\` — the batch to document, each with \`id\`, \`revision\` and \`content\`. They are drawn from one
+  directory where it can, so the batch is about one thing.
 - \`pages\` and \`catalog\` — the wiki context and every existing page, so you connect rather than duplicate.
-- \`revision\` — the commit the plan was made against.
+- \`revision\` — the commit the plan was made against. Pass it back to \`publish --ref\`.
 - \`uncommitted\` — in-scope files whose working copy differs from that commit. The plan carries the
   committed version of those files, so documenting one describes code the disk has already moved
   past. Commit first, or leave those files for a later pass.
-- \`complete\` and \`remaining\` — whether anything is left, and how much.
+- \`complete\` and \`remaining\` — whether anything is left in the whole scope, and how much. With
+  \`--path\`, \`remainingHere\` is what is left inside the aim; the other two still speak for everything.
 
 Read the sources and the related pages yourself, and reason in your own flow. Do not modify source code.
 
-## Publish
+## Write the pages
 
-Get the exact contract with \`${cli} schema patch\`, then publish with
-\`${cli} publish --patch .wikipoke/tmp/patch.json\`.
-Three things the schema states but that are easy to get wrong:
+One Markdown file per page under \`.wikipoke/tmp/pages/\`, named as you want the page to live in the
+wiki — \`.wikipoke/tmp/pages/concepts/retries.md\` publishes as \`concepts/retries.md\`. Frontmatter,
+then the prose. Get the exact contract with \`${cli} schema page\`:
 
-- **Copy each source's \`revision\` and \`hash\` verbatim from the plan into \`meta.sources\`.** They are
-  the pinned evidence. Never recompute a hash: it is a SHA-256 of the decoded file content, it is
-  already in the plan, and \`publish\` rejects a value that does not match.
-- **\`body\` is one Markdown string**, not an array of lines.
-- **Declare the plan's \`revision\` in the patch.** Publication is then refused if the sources moved
-  while you were working, instead of recording knowledge against code that no longer exists.
+    ---
+    type: entity
+    title: The retry policy
+    description: How requests are retried and what decides the limit
+    sources:
+      - src/http
+      - src/config/retries.ts
+    ---
+
+    Prose. Ordinary Markdown links, or [[retry-limit]] — both are read as edges. A wikilink
+    resolves by file name, not by title: [[retry-limit]], never [[The retry limit]].
+
+**\`sources\` are patterns, not a file list.** A directory claims everything under it, a glob claims
+what it matches, and a path claims that one file. Claim the module you actually described: \`src/http\`
+is one line that covers forty files, and it keeps covering them when a forty-first appears. Wikipoke
+resolves each pattern against the plan and writes the revision and the digest into the page itself —
+never copy a hash, there is nowhere to put one and nothing to compute.
+
+There is no JSON to assemble and no script to write. If you find yourself generating these files
+programmatically, stop: the prose is the work, and a page a script produced from a filename says
+nothing a reader could not get from \`ls\`.
 
 Write every page in the plan's \`language\`, whatever language the conversation is happening in. The
 wiki outlives the session that produced it and is read by people who never saw that conversation.
+
+## Publish
+
+\`${cli} publish --pages .wikipoke/tmp/pages --ref <the plan's revision>\`
+
+Passing the plan's revision is what lets Wikipoke refuse the publication if the code moved under your
+patterns while you were writing, instead of recording knowledge against code that no longer exists.
+Only files matching your own patterns count, so somebody committing a typo in a README during your
+turn no longer throws the batch away.
+
+Then run \`${cli} lint\` before you call it done: it runs no model, and it is the same check \`seal\`
+applies. Delete the staging directory once the pages are in.
 
 ## Flows
 
 Coverage is a file axis: it goes green when every source is claimed by some page, and it never asks
 for the page that matters most. A **flow** is the one type no single file can produce - the sequence
-several files make together, and the reason the order is what it is. Give it \`type: flow\`, cite
-every source it crosses, and spend the page on why the steps are ordered that way and what breaks if
-they are reordered. \`lint\` reports \`no-flows\` while the wiki describes code and no page describes
-a path through it, and \`thin-flow\` for a flow resting on a single source.
+several files make together, and the reason the order is what it is. Give it \`type: flow\`, cite every
+source it crosses, and spend the page on why the steps are ordered that way and what breaks if they
+are reordered. \`lint\` reports \`no-flows\` while the wiki describes code and no page describes a path
+through it, and \`thin-flow\` for a flow resting on a single source.
 
-Do not wait for \`ingest\` to ask. It plans from what changed, and a flow that was never written
+Do not wait for \`ingest\` to ask. It plans from what is uncovered, and a flow that was never written
 went missing without any file going uncovered.
 
 ## One page per file is not a wiki
@@ -80,26 +112,40 @@ went missing without any file going uncovered.
 Coverage can be reached two ways, and only one of them is worth doing. A page per source file, named
 after its path, claims every source and passes every mechanical check while restating what the code
 already says - and it rots on the next refactor. Group by what a reader is trying to understand: a
-module, a convention, a decision, a path through the code. \`lint\` reports \`mirrors-the-tree\` when
-the wiki has about as many pages as there are sources and most of them cite a single file, and
-\`seal\` refuses while it does.
+module, a convention, a decision, a path through the code. \`lint\` reports \`mirrors-the-tree\` when the
+wiki has about as many pages as there are sources and most of them cite a single file, and \`seal\`
+refuses while it does. Patterns are the way out: one page claiming \`src/http\` is a page about the
+HTTP layer, and forty pages claiming one file each are a directory listing.
 
 ## Repeat
 
-One pass documents one batch. Loop — \`ingest\`, publish, \`ingest\` again — until \`complete\` is true,
-re-planning each time so the batch reflects what you just published. Prefer a page that carries a
-decision and its consequence over one that restates what the code already says.
+One pass documents one batch. Loop — \`ingest\`, write, publish, \`ingest\` again — until \`complete\` is
+true, re-planning each time so the batch reflects what you just published. **Never carry a plan
+across passes**: the batch is recomputed every time, and pages written against an old one name files
+the new one no longer offers.
 
-When a source in \`drift\` no longer exists, the page is not stuck: republish it without that source
-and say in the body that the module was removed, or repoint it at the path the file was renamed to.
+When a source in \`drift\` matches nothing any more, the page is not stuck: republish it without that
+pattern and say in the body that the module was removed, or repoint it at where the code moved to.
 The page stays as the record that the thing existed, which is exactly what a diff cannot tell anyone
 six months later. Each drift entry carries a \`remedy\` saying which of the two applies.
 
-A page reported as \`conflict-markers\` was written by a merge, not by a person. Read both sides,
-merge them yourself and publish over it - \`publish\` allows that, and only for this case.
+A page reported as \`conflict-markers\` was written by a merge, not by a person. Read both sides, merge
+them yourself and publish over it - \`publish\` allows that, and only for this case.
 
-Read \`.wikipoke/attention.json\` for the bounded health signal; it is refreshed on every commit.
-Use \`${cli} status\` only when you need the full uncovered list, which is unbounded.
+## What else is here
+
+- \`${cli} status\` — the full uncovered list, which is unbounded. Prefer \`.wikipoke/attention.json\`,
+  the bounded signal refreshed on every commit and at the end of every session. It also counts
+  \`uncommitted\` in-scope files: work the wiki cannot see yet because it is not committed.
+- \`${cli} graph\` — nodes and edges, to see what a page is connected to before you rewrite it.
+- \`${cli} seal\` — certify the wiki is level with the code. It refuses while anything is uncovered,
+  drifted, flowless or shaped like the file tree. Run it when the loop is done; do not force it.
+- The wiki also holds answered questions (the \`wikipoke-query\` skill) and recorded decisions (the
+  \`wikipoke-decision\` skill). Both cite the same sources these pages claim, so a decision about code
+  you documented links itself to the page describing it. Read them before researching from scratch.
+- \`${cli} --help\` — **read it once per project.** A project can add verbs of its own, marked
+  \`(project command)\`, and they are how that project wants a page of its own kind to be written.
+  Prefer one over writing the page by hand: it exists because somebody decided the shape.
 `,
   'wikipoke-query': `---
 name: wikipoke-query
@@ -136,6 +182,11 @@ ask anyone for permission to write a scratch file.
 - \`answered\` is terminal. To revise a closed answer, ask again under a new \`--request-id\`.
 - Write the answer in the wiki's \`language\`, which \`ask\` reports, not in the language of the
   question. A wiki that stores whichever language each session happened to use is not readable as one.
+
+An answered question is a page like any other: it sits in the graph, \`${cli} graph\` shows what it
+cites, and the next \`ask\` offers it back. When the answer turns out to be knowledge rather than a
+question — something a reader would look for without knowing to ask — write it as a page with the
+\`wikipoke-ingest\` skill and let the query cite that page.
 `,
   'wikipoke-decision': `---
 name: wikipoke-decision
@@ -161,6 +212,9 @@ Open one when you expect to record a decision under it.
   against the inventory and pinned into the page's \`sources\`, which is what puts the decision in the
   graph next to the code and the pages describing it, and what later reports the choice as drifted
   when that code moves. Evidence naming a file outside scope is kept in the body, unverified.
+  Naming files is right here even though knowledge pages claim patterns: a choice was made about
+  particular code. The decision page links itself to every page whose pattern covers those files,
+  so a decision about \`src/http/retry.ts\` finds the page describing \`src/http\` on its own.
 - A \`decision\` event requires the \`choice\` that was made, and \`evidence\` naming the source files the
   choice is about. That is what ties a decision to code, and what later reports the choice as drifted
   when that code moves. Capture the decision when you make the change, not in a later documentation
