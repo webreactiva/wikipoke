@@ -60,8 +60,14 @@ the trigger you want.
 A fresh signal nobody reads changes nothing. `install` also writes
 `.wikipoke/hooks/session-start`, a no-LLM script that refreshes the signal and
 prints one line when the wiki owes work — undocumented sources, pages citing
-moved code, error findings, no flow page — and stays silent
-when it owes none. Run it where the agent will see it.
+moved code, error findings, no flow page, in-scope files edited but not
+committed — and stays silent when it owes none. Run it where the agent will see
+it.
+
+It belongs at both ends of a session. At the start it says what the wiki already
+owed; at the end it can say the one thing nothing else can, that the agent
+edited code and left it uncommitted, so no commit hook has had a reason to run.
+It prints and exits zero — it never refuses a stop.
 
 Wikipoke composes this for Claude Code only when the project has no
 `.claude/settings.json`, and never rewrites one it finds. Every other harness is
@@ -77,6 +83,9 @@ whether the briefing is composed.
     "SessionStart": [
       { "matcher": "startup|resume",
         "hooks": [{ "type": "command", "command": "sh .wikipoke/hooks/session-start", "timeout": 20 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "sh .wikipoke/hooks/session-start", "timeout": 20 }] }
     ]
   }
 }
@@ -86,7 +95,7 @@ whether the briefing is composed.
 `AGENTS.md`, which both read:
 
 ```markdown
-At the start of a session, run `sh .wikipoke/hooks/session-start` and act on what it prints.
+At the start of a session, and again when you finish, run `sh .wikipoke/hooks/session-start` and act on what it prints.
 ```
 
 OpenCode needs no such line: `install` writes `.opencode/plugin/wikipoke.js`,

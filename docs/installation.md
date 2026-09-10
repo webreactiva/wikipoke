@@ -121,7 +121,10 @@ is active.
 
 `install` also writes `.wikipoke/hooks/session-start`, which refreshes the signal
 and prints one line when the wiki owes work. Commits keep the signal fresh; this
-puts it in front of the agent. Wikipoke composes it into `.claude/settings.json`
+puts it in front of the agent, at the start of a session and again when the agent
+stops — the end of a turn being the only moment anything can report in-scope code
+that was edited and never committed. It prints and exits zero, never refusing a
+stop. Wikipoke composes it into `.claude/settings.json`
 only when that file does not exist, and never rewrites one it finds; for Claude
 Code, Codex, OpenCode and Cursor it reports the manual step instead. The README
 section "Brief the agent at session start" carries the snippet for each.
@@ -235,7 +238,7 @@ of this; a project that wants to be prompted attaches its own script, see
 [extensions](./extensions.md). See [operations](./operations.md) for the event
 form.
 
-## Capture a release
+## Keep the wiki in Git
 
 Commit wiki changes like any other change:
 

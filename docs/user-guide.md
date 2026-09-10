@@ -95,7 +95,7 @@ recorded absence. If your project wants to be asked — at the end of a turn, be
 a release, wherever it makes sense — attach a script of your own; see
 [extensions](./extensions.md).
 
-## Maintain and release
+## Maintain and seal
 
 The post-commit hook runs `wikipoke maintain --once`, which refreshes
 `.wikipoke/attention.json`. It never calls a model and never blocks a commit; if

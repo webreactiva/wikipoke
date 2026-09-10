@@ -12,7 +12,7 @@ type: entity
 title: Payment gateway
 description: Sends validated payment requests to the configured provider.
 sources:
-  - id: src/payments/gateway.ts
+  - id: src/payments
     revision: 0123456789ab
     hash: 0123456789abcdef
 wikipoke:
