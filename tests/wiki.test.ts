@@ -44,6 +44,30 @@ test('ingest plans deterministic work and publish validates source evidence', as
   await publish(wiki, patch((await wiki.ingest() as any).sources)); assert.deepEqual((await wiki.status()).drift, []);
 });
 
+test('an ingest batch exposes structural landmarks missing from its related prose', async () => {
+  const wiki = await setup();
+  const first: any = await wiki.ingest();
+  assert.match(first.staging, /^\.wikipoke\/tmp\/pages\/[0-9a-f]{12}-[0-9a-f]{8}$/);
+  assert.deepEqual(first.sources[0].landmarks, ['retries']);
+  assert.deepEqual(first.sources[0].unmentionedLandmarks, ['retries']);
+  await publish(wiki, patch(first.sources));
+  writeFileSync(join(wiki.root, 'src/main.ts'),
+    'export const retries = 3;\nexport function backoff() { return 250; }\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'backoff');
+  const changed: any = await wiki.ingest();
+  assert.deepEqual(changed.sources[0].landmarks, ['retries', 'backoff']);
+  assert.deepEqual(changed.sources[0].unmentionedLandmarks, ['backoff']);
+  assert.deepEqual(changed.editorial.groups, { concept: ['concepts/retries.md'] });
+});
+
+test('structural landmarks do not mistake control flow for class methods', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/main.ts'),
+    'export class Queue {\n  run() {\n    for (const item of []) { void item; }\n  }\n}\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'queue');
+  assert.deepEqual((await wiki.ingest() as any).sources[0].landmarks, ['Queue', 'run']);
+});
+
 test('ingest reopens changed coverage and completes only after reconciliation', async () => {
   const wiki = await setup();
   await publish(wiki, patch((await wiki.ingest()).sources));

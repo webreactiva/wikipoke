@@ -145,11 +145,19 @@ for the flow pages a wiki is missing or leaning on one source;
 `dependency-cycle` for circular `depends_on`; `replacement-cycle` for circular
 `supersedes`; `broken-link` for a link to a page that is not there;
 `unknown-evidence` for a relation citing evidence outside the page's own sources;
+`isolated-page` when an explanatory page has no navigable link in either direction;
+`overlapping-pages` when two pages of the same type claim almost the same files;
 `duplicate-id` for two pages sharing a `wikipoke.uid`; `conflict-markers` for a
 page a merge left unresolved; and `lost-checkpoint` when the sealed commit is no
 longer in the repository. `seal` is held by every error, and by `no-flows`,
 `thin-coverage` and `mirrors-the-tree` — the three warnings that describe a wiki
 which looks complete and is not.
+
+Isolation and overlap are editorial review cues and do not hold `seal`: a
+standalone page or two views over the same code can be intentional. The generated
+`index.md` is an agent navigation map grouped by page type. It lists each page's
+source patterns and outgoing knowledge links, with flows first as the usual
+entry point for end-to-end behavior.
 
 The validator preserves unrecognized frontmatter fields and Markdown body text.
 It rejects duplicate UIDs, evidence IDs that do not belong to the page's sources,

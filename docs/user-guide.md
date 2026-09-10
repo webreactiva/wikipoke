@@ -30,16 +30,25 @@ lock left by a dead process and names its owner.
 Run the installed `wikipoke-ingest` skill. It runs `wikipoke ingest` — or
 `wikipoke ingest --path <directory>` to aim at a part of the repository that
 never appeared in a diff — reads the bounded source plan and related pages,
-writes each page as Markdown under `.wikipoke/tmp/pages/`, checks the directory
-with `wikipoke lint --pages .wikipoke/tmp/pages` — every check `publish` runs, at
-no cost and writing nothing — and publishes it with `wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan's
+writes each page as Markdown under the batch-specific `staging` directory returned
+by the plan, checks that exact directory with `wikipoke lint --pages <staging>` —
+every check `publish` runs, at no cost and writing nothing — and publishes it
+with `wikipoke publish --pages <staging> --ref <the plan's
 revision>`.
+
+Staging remains below the git-ignored `.wikipoke/tmp/pages/` boundary, but each
+revision and source batch gets a distinct directory. This prevents drafts left
+by an earlier pass from being published as part of the next one.
 
 Before writing, use the plan's `overview` (directories and file counts), the
 project README and entry points to sketch pages around reader questions and
 cross-module journeys. A source batch is a reading budget, not a page outline.
 Follow dependencies at the planned revision and inspect the scope you claim;
 do not cite a directory merely because a few of its files arrived in a batch.
+Each source includes `landmarks` extracted from its structure and
+`unmentionedLandmarks` absent from related page prose. Use them as a checklist,
+mention the ones that matter to the reader, and leave irrelevant implementation
+details out. They expose possible omissions; they do not prove semantic coverage.
 
 Plans include both uncovered sources and sources cited by outdated documentation.
 `drift` names changed or deleted references, and `findings` reports structural
@@ -53,6 +62,10 @@ an explicit report if no progress is possible.
 retain their original evidence: do not rewrite past choices or answers to clear
 a checkpoint. Review them explicitly; their drift continues to block `seal`.
 Mechanical checks establish consistency, not factual or editorial quality.
+The plan's `editorial` map groups pages and names isolated or strongly overlapping
+knowledge. `lint` reports the same cases as non-blocking `isolated-page` and
+`overlapping-pages` warnings. Connect a stranded page, distinguish two pages by
+the question they answer, or keep the warning when the structure is intentional.
 
 A page declares its sources as patterns: a directory, a glob, or one file path.
 One page claiming `src/http` covers every file under it and keeps covering them

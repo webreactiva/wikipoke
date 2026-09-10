@@ -84,6 +84,20 @@ that an explanation is correct. Editorial instructions ask the host agent to
 orient itself, follow cross-module flows, read the scope it claims and separate
 observations from inference before publishing.
 
+Each planned source carries a bounded structural outline. For TypeScript and
+JavaScript it includes exports, method-like declarations, CLI commands, and test
+case names; for
+Markdown it includes headings; for JSON it includes top-level and operational
+keys. The plan marks landmarks absent from the prose of pages already claiming
+that source. These are review cues rather than semantic coverage: extraction can
+name an irrelevant symbol and cannot know whether an explanation preserved the
+important behavior.
+
+The generated index is an agent-oriented editorial map grouped by page type,
+with source patterns and outgoing knowledge links. Ingestion also returns a
+structured editorial summary of page groups, isolated pages, and same-type pages
+whose resolved source coverage strongly overlaps.
+
 Each page cites one or more source patterns with the Git revision and the digest of what each matched; source text itself is never stored in a page. `status` compares those records with the current inventory on two independent axes: a file is **covered** when some page pattern claims it, and a page has **drifted** when the digest of what its pattern matches no longer agrees with what it recorded. Keeping them separate is what stops one edited file inside a module reporting every file in that module as undocumented. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump. It carries the health of the wiki against the code and nothing about what an agent did during a turn — including a count of in-scope files edited but not committed, which is the one debt that exists before any commit hook has a reason to run.
 
 `seal` records `lastIndexedCommit` only when the configured scope has no uncovered source, no drifted reference, and no error finding.

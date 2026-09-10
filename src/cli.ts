@@ -155,7 +155,7 @@ program.command('schema <kind>').description('emit the JSON schema for an agent-
       'Prose, in the wiki\'s language. Link other pages with [[retry-limit]] - a wikilink resolves',
       'by file name, which is why it survives a page being moved.',
     ].join('\n'),
-      usage: 'Write one such file per page under .wikipoke/tmp/pages/, then: wikipoke lint --pages .wikipoke/tmp/pages && wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan\'s revision>' });
+      usage: 'Write one such file per page under the ingest plan\'s staging directory, then lint and publish that exact directory with the plan\'s revision.' });
     else if (kind === 'answer') output(z.toJSONSchema(answerSchema));
     else if (kind === 'event') output(z.toJSONSchema(eventSchema));
     else throw new Error('Schema kind must be page, answer or event');

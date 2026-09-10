@@ -4,7 +4,7 @@ import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { configSchema, draftSchema, answerSchema, eventSchema,
   type Config, type Draft, type Metadata, type Page, type SourceMeta, type Manifest } from './model.js';
-import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
+import { index, lint, loadPages, graph, editorialMap, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
 import { manifest, sourcesFor, revision, uncommitted, covers, matched, digestOf, changed } from './sources/git.js';
 import { z } from 'zod';
@@ -52,6 +52,40 @@ function budgeted(pending: SourceMeta[], limits: Config['limits']): SourceMeta[]
     batch.push(source); bytes += source.size;
   }
   return batch;
+}
+// These are structural landmarks, not a claim that a parser understands the source language. They
+// give an agent a bounded checklist of named surfaces it might otherwise silently omit. False
+// positives are left visible as review material and never block publication or a checkpoint.
+function landmarks(path: string, content: string): string[] {
+  const found: string[] = [];
+  const collect = (pattern: RegExp, group = 1) => {
+    for (const match of content.matchAll(pattern)) if (match[group]) found.push(match[group].trim());
+  };
+  if (/\.[cm]?[jt]sx?$/.test(path)) {
+    collect(/^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:class|function|const|let|var|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm);
+    collect(/^\s{2}(?:static\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)(?:<[^>\n]+>)?\s*\([^\n]*\)\s*(?::[^\n{]+)?\s*\{/gm);
+    collect(/\.command\(['"`]([^'"` <[]+)/g);
+    collect(/^test\(['"`]([^'"`]+)['"`]/gm);
+  } else if (/\.md$/i.test(path)) collect(/^#{1,3}\s+(.+)$/gm);
+  else if (/\.json$/i.test(path)) {
+    try {
+      const value = JSON.parse(content) as Record<string, unknown>;
+      found.push(...Object.keys(value));
+      for (const key of ['scripts', 'bin', 'exports']) {
+        const nested = value[key];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested))
+          found.push(...Object.keys(nested).map(name => `${key}.${name}`));
+      }
+    } catch { /* An invalid JSON source remains readable source, just without landmarks. */ }
+  }
+  const control = new Set(['if', 'else', 'for', 'while', 'switch', 'catch', 'with', 'do', 'try']);
+  return [...new Set(found)].filter(name => !control.has(name) && !name.includes('${')).slice(0, 50);
+}
+function mentions(text: string, landmark: string): boolean {
+  const normalize = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9_$.-]+/g, ' ').trim();
+  const needle = normalize(landmark);
+  return !!needle && normalize(text).includes(needle);
 }
 // A readable path is worth more than a deterministic one, and the page's identity never lived in the
 // path anyway - it lives in `wikipoke.uid`. So the name is just the slug, and the numeric suffix
@@ -366,10 +400,14 @@ export class Wiki {
       // with most of the repository still undocumented.
       const blockers = health.findings.filter(f => f.severity === 'error'
         || ['no-flows', 'thin-coverage', 'mirrors-the-tree'].includes(f.code));
+      const planKey = hash([inv.revision, ...batch.map(source => source.id),
+        ...refresh.map(item => `${item.page}:${item.source}`), ...blockers.map(item => item.code)].join('\n')).slice(0, 8);
       return { complete: outstanding.length === 0 && health.drift.length === 0 && blockers.length === 0,
         remaining: outstanding.length - sources.length,
+        staging: `.wikipoke/tmp/pages/${inv.revision.slice(0, 12)}-${planKey}`,
         drift: health.drift, findings: health.findings,
         reviewRequired: health.drift.filter(d => historical.has(d.page)),
+        editorial: editorialMap(existing, inv.sources.map(source => source.id)),
         overview: [...directories].sort(([a], [b]) => a.localeCompare(b))
           .map(([directory, files]) => ({ directory, files })),
         ...(target ? { target, remainingHere: pending.length - sources.length } : {}),
@@ -380,7 +418,14 @@ export class Wiki {
         ...(dirty.length ? { warning: `${dirty.length} in-scope file(s) have uncommitted changes; this plan describes the committed version. Commit first, or leave those files for a later pass.` } : {}),
         // The plan is what an agent copies into the frontmatter, so it offers no field it would only
         // be repeating: with a Git adapter the resource is the id.
-        sources: sources.map(({ resource, ...rest }) => resource === rest.id ? rest : { ...rest, resource }),
+        sources: sources.map(({ resource, ...rest }) => {
+          const named = landmarks(rest.id, rest.content);
+          const prose = existing.filter(page => page.meta.sources.some(source => covers(source.id, rest.id)))
+            .map(page => `${page.meta.title}\n${page.meta.description}\n${page.body}`).join('\n');
+          const outlined = { ...rest, landmarks: named,
+            unmentionedLandmarks: named.filter(name => !mentions(prose, name)) };
+          return resource === rest.id ? outlined : { ...outlined, resource };
+        }),
         pages: existing.filter(p => direct.has(p.path)), catalog: existing.map(p => ({ path: p.path, title: p.meta.title })) };
     });
   }

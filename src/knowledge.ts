@@ -68,6 +68,12 @@ export function loadPages(root: string): Library {
   return { pages, unreadable };
 }
 export interface Edge { from: string; to: string; type: string; evidence: string[] }
+export interface EditorialOverlap { pages: [string, string]; sharedSources: string[] }
+export interface EditorialMap {
+  groups: Record<string, string[]>;
+  isolated: string[];
+  overlaps: EditorialOverlap[];
+}
 export function target(from: string, value: string): string {
   const path = decodeURIComponent(value.split('#')[0]);
   return posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join(posix.dirname(from), path || posix.basename(from)));
@@ -120,6 +126,37 @@ export function graph(pages: Page[]) {
     ? { ...e, from: e.to, to: e.from } : e);
   return { nodes: pages.map(p => ({ id: p.path, uid: p.meta.wikipoke.uid, type: p.meta.type, title: p.meta.title })),
     edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()], symmetric };
+}
+// A graph is mechanically reconstructable but not yet an editorial map. Agents need the smaller
+// view: what kinds of page exist, which knowledge has no navigable connection, and which same-kind
+// pages claim almost the same code. None of these signals proves a page is wrong, so they remain
+// review cues rather than publication errors.
+export function editorialMap(pages: Page[], sourceIds: string[] = []): EditorialMap {
+  const described = pages.filter(p => !['query', 'decision'].includes(p.meta.type));
+  const paths = new Set(pages.map(page => page.path));
+  const links = graph(pages).edges.filter(e => e.type !== 'source' && paths.has(e.from) && paths.has(e.to));
+  const connected = new Set(links.flatMap(e => [e.from, e.to]));
+  const groups: Record<string, string[]> = {};
+  for (const page of pages) groups[page.meta.type] = [...(groups[page.meta.type] ?? []), page.path];
+  const claimed = (page: Page) => new Set(sourceIds.length
+    ? sourceIds.filter(id => page.meta.sources.some(source => covers(source.id, id)))
+    : page.meta.sources.map(source => source.id));
+  const sets = new Map(described.map(page => [page.path, claimed(page)]));
+  const overlaps: EditorialOverlap[] = [];
+  for (let left = 0; left < described.length; left++) for (let right = left + 1; right < described.length; right++) {
+    const a = described[left], b = described[right];
+    if (a.meta.type !== b.meta.type) continue;
+    const mine = sets.get(a.path)!, theirs = sets.get(b.path)!;
+    const shared = [...mine].filter(id => theirs.has(id)).sort();
+    const union = new Set([...mine, ...theirs]);
+    if (shared.length && shared.length / Math.min(mine.size, theirs.size) >= 0.8
+      && shared.length / union.size >= 0.6)
+      overlaps.push({ pages: [a.path, b.path], sharedSources: shared });
+  }
+  return { groups: Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+    .map(([type, paths]) => [type, paths.sort()])),
+  isolated: described.length < 3 ? [] : described.filter(page => !connected.has(page.path)).map(p => p.path),
+  overlaps };
 }
 export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount = 0,
   layout: Record<string, string> = {}, sourceIds?: string[]): Finding[] {
@@ -175,6 +212,11 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   if (sourceCount >= 30 && described_.length >= sourceCount * 0.8 && single >= described_.length * 0.7)
     findings.push({ code: 'mirrors-the-tree', severity: 'warning',
       message: `${described_.length} pages for ${sourceCount} sources, ${single} of them citing a single file: a wiki shaped like the file tree restates the code instead of carrying what the code cannot say` });
+  const editorial = editorialMap(pages, sourceIds);
+  for (const page of editorial.isolated) findings.push({ code: 'isolated-page', severity: 'warning', page,
+    message: 'No other knowledge page links to this page and it links to none; connect it or confirm it is intentionally standalone' });
+  for (const overlap of editorial.overlaps) findings.push({ code: 'overlapping-pages', severity: 'warning',
+    page: overlap.pages[0], message: `${overlap.pages.join(' and ')} cover nearly the same sources (${overlap.sharedSources.join(', ')}); make their reader questions distinct or consolidate them` });
   // A page at the wiki root when its type has a home is almost always a page nobody chose a place
   // for. Only the flat case is reported: a project that put a page under a folder of its own made a
   // decision, and second-guessing it would be the tool imposing a taxonomy rather than proposing one.
@@ -218,5 +260,22 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
 // tape of a task, the chronology of what changed — is not knowledge and is not listed here; it lives
 // in .wikipoke/events and in the generated log, reachable through the decision pages and the graph.
 export function index(pages: Page[]): string {
-  return '# Knowledge index\n\n' + pages.map(p => `- [${p.meta.title.replace(/[\[\]\n]/g, '')}](${p.path}) - ${p.meta.description.replace(/\n/g, ' ')}`).join('\n') + '\n';
+  const links = graph(pages).edges.filter(edge => edge.type !== 'source');
+  const byPath = new Map(pages.map(page => [page.path, page]));
+  const order = ['overview', 'flow', 'entity', 'concept', 'decision', 'query'];
+  const types = [...new Set(pages.map(page => page.meta.type))]
+    .sort((a, b) => (order.indexOf(a) < 0 ? order.length : order.indexOf(a))
+      - (order.indexOf(b) < 0 ? order.length : order.indexOf(b)) || a.localeCompare(b));
+  const clean = (value: string) => value.replace(/[\[\]\n]/g, ' ');
+  const label = (type: string) => ({ entity: 'Entities', query: 'Queries' }[type]
+    ?? type.charAt(0).toUpperCase() + type.slice(1) + 's');
+  const sections = types.map(type => `## ${label(type)}\n\n` + pages.filter(page => page.meta.type === type)
+    .map(page => {
+      const targets = [...new Set(links.filter(edge => edge.from === page.path && byPath.has(edge.to)).map(edge => edge.to))];
+      const sources = page.meta.sources.map(source => `\`${source.id}\``).join(', ') || '_none_';
+      const connects = targets.length ? targets.map(path => `[${clean(byPath.get(path)!.meta.title)}](${path})`).join(', ') : '_none_';
+      return `- [${clean(page.meta.title)}](${page.path}) - ${clean(page.meta.description)}\n  - Sources: ${sources}\n  - Connects to: ${connects}`;
+    }).join('\n')).join('\n\n');
+  return '# Knowledge index\n\nGenerated navigation map for agents. Start with flows for end-to-end behavior, '
+    + 'then follow their connections to entities and concepts.\n\n' + sections + '\n';
 }

@@ -33,9 +33,11 @@ ${header}
 
 ${resolve_}
 
-Write the pages under \`.wikipoke/tmp/pages/\`, which is git-ignored. Anywhere outside the project -
-\`/tmp\` and friends - is a sandbox boundary in most harnesses, and asking a human for permission to
-write a scratch file is a poor way to spend their attention.
+Write the pages under the plan's \`staging\` directory, which is a batch-specific path below
+\`.wikipoke/tmp/pages/\` and is git-ignored. Using that exact directory keeps drafts from an earlier
+batch out of this publication. Anywhere outside the project - \`/tmp\` and friends - is a sandbox
+boundary in most harnesses, and asking a human for permission to write a scratch file is a poor way
+to spend their attention.
 
 ## Plan
 
@@ -50,7 +52,9 @@ never truncate it. It answers with:
   directory where it can, so the batch is about one thing.
 - \`pages\` and \`catalog\` — the wiki context and every existing page, so you connect rather than duplicate.
 - \`revision\` — the commit the plan was made against. Pass it back to \`publish --ref\`.
+- \`staging\` — the exact batch-specific directory for drafts, lint, and publication.
 - \`overview\` — directories and file counts across the scope, without loading their contents.
+- \`editorial\` — page groups plus isolated and strongly overlapping pages to review.
 - \`drift\` and \`findings\` — outdated references and structural issues, including work with no source batch.
 - \`reviewRequired\` — drift in historical queries or decisions. Report it for review; never rewrite
   an old answer or choice merely to make the checkpoint pass.
@@ -59,6 +63,11 @@ never truncate it. It answers with:
   past. Commit first, or leave those files for a later pass.
 - \`complete\` and \`remaining\` — whether anything is left in the whole scope, and how much. With
   \`--path\`, \`remainingHere\` is what is left inside the aim; the other two still speak for everything.
+
+Each source also carries bounded \`landmarks\` and \`unmentionedLandmarks\`. These are structural names
+Wikipoke can extract without interpreting the code: exports, method-like declarations, CLI commands,
+test case names, Markdown headings, and notable JSON keys. Review them before writing. Mention what matters to the page's reader
+and explicitly leave irrelevant landmarks out; they are cues, never proof of semantic coverage.
 
 Read the sources and the related pages yourself, and reason in your own flow. Do not modify source code.
 
@@ -77,8 +86,8 @@ choices. A flow should include its trigger, ordered steps, state changes, result
 
 ## Write the pages
 
-One Markdown file per page under \`.wikipoke/tmp/pages/\`, named as you want the page to live in the
-wiki — \`.wikipoke/tmp/pages/concepts/retries.md\` publishes as \`concepts/retries.md\`. Frontmatter,
+One Markdown file per page under the plan's \`staging\` directory, named as you want the page to live
+in the wiki — \`<staging>/concepts/retries.md\` publishes as \`concepts/retries.md\`. Frontmatter,
 then the prose. Get the exact contract with \`${cli} schema page\`:
 
     ---
@@ -128,7 +137,7 @@ wiki outlives the session that produced it and is read by people who never saw t
 
 ## Publish
 
-\`${cli} publish --pages .wikipoke/tmp/pages --ref <the plan's revision>\`
+\`${cli} publish --pages <the plan's staging directory> --ref <the plan's revision>\`
 
 Passing the plan's revision is what lets Wikipoke refuse the publication if the code moved under your
 patterns while you were writing, instead of recording knowledge against code that no longer exists.
@@ -137,10 +146,13 @@ turn no longer throws the batch away.
 
 Check them first — it costs nothing and writes nothing:
 
-\`${cli} lint --pages .wikipoke/tmp/pages --ref <the plan's revision>\`
+\`${cli} lint --pages <the plan's staging directory> --ref <the plan's revision>\`
 
 It runs every check \`publish\` runs and answers \`publishable\`. Fix what it names, then publish.
 Afterwards \`${cli} lint\` reports on the wiki as a whole, which is the same check \`seal\` applies.
+It also reports \`isolated-page\` and \`overlapping-pages\` as editorial warnings. Isolation may be
+intentional and two pages may legitimately read the same code, so these warnings never block a seal;
+use them to connect a stranded page or make the pages' questions more distinct.
 Delete the staging directory once the pages are in.
 
 ## Flows

@@ -3,3 +3,5 @@ dist/
 *.tgz
 .env
 .DS_Store
+/wiki/
+/.wikipoke/

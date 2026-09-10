@@ -1,0 +1,20 @@
+version: 1
+wiki: wiki
+language: en
+include:
+  - src/**
+  - tests/**
+  - README.md
+  - package.json
+exclude: []
+layout:
+  entity: entities
+  flow: flows
+  concept: concepts
+  query: queries
+  decision: decisions
+extensions: []
+commands: []
+limits:
+  batchFiles: 50
+  batchBytes: 524288
