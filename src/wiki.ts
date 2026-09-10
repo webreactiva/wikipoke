@@ -559,47 +559,6 @@ export class Wiki {
       return { id: event.id, task: event.task, materialized: true, decisions: decisions.length };
     });
   }
-  async snapshot(label: string, ref = 'HEAD') {
-    return this.store.locked(() => {
-      const code = revision(this.root, ref), wiki = revision(this.root);
-      const dirty = git(this.root, 'status', '--porcelain', '--', this.config.wiki);
-      if (dirty.trim()) throw new Error('Commit wiki changes before a snapshot');
-      const tree = git(this.root, 'ls-tree', '-r', '--name-only', wiki, '--', this.config.wiki);
-      if (!tree.trim()) throw new Error('Snapshot requires committed wiki content');
-      const name = hash(label), dest = `.wikipoke/releases/${name}.json`;
-      if (read(this.store.path(dest))) throw new Error('Release label already captured');
-      git(this.root, 'update-ref', `refs/wikipoke/${name}/code`, code);
-      git(this.root, 'update-ref', `refs/wikipoke/${name}/wiki`, wiki);
-      const manifest = { label, code, wiki, at: stamp(), health: this.health() };
-      this.store.commit([{ path: dest, before: null, after: json(manifest) }]);
-      return manifest;
-    });
-  }
-  // A capture nobody can read back is a capture that did not happen. The manifest is named by the
-  // hash of its label, so the only way to find one was to know the hash - which nothing printed.
-  async releases() {
-    return this.store.locked(() => files(this.store.path('.wikipoke/releases'))
-      .filter(f => f.endsWith('.json'))
-      .flatMap(f => { try { return [JSON.parse(read(f)!)]; } catch { return []; } })
-      .map(({ health, ...manifest }) => ({ ...manifest,
-        // The health at capture time is kept in the file and summarized here: a listing is for
-        // finding a release, and the full graph of the day it was taken is not that.
-        pending: (health?.uncovered?.length ?? 0) + (health?.drift?.length ?? 0),
-        refs: { code: `refs/wikipoke/${hash(manifest.label)}/code`, wiki: `refs/wikipoke/${hash(manifest.label)}/wiki` } }))
-      .sort((a, b) => b.at.localeCompare(a.at)));
-  }
-  async release(label: string) {
-    return this.store.locked(() => {
-      const manifest = read(this.store.path(`.wikipoke/releases/${hash(label)}.json`));
-      if (!manifest) throw new Error(`No release captured under that label; list them with: wikipoke releases`);
-      const parsed = JSON.parse(manifest);
-      // Reachability is the question a reader actually has: a ref that a history rewrite dropped
-      // makes the manifest a record of something that can no longer be checked out.
-      const reachable = (commit: string) => { try { revision(this.root, commit); return true; } catch { return false; } };
-      return { ...parsed, refs: { code: `refs/wikipoke/${hash(label)}/code`, wiki: `refs/wikipoke/${hash(label)}/wiki` },
-        reachable: { code: reachable(parsed.code), wiki: reachable(parsed.wiki) } };
-    });
-  }
   async seal(ref = 'HEAD') {
     return this.store.locked(() => {
       const health = this.health(), commit = revision(this.root, ref);

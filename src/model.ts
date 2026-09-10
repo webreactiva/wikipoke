@@ -35,7 +35,7 @@ export interface Finding { code: string; message: string; page?: string; severit
 // rather than discovered in a directory: a directory whose contents run is a directory anything can
 // be dropped into, and `doctor` could never say which of those files was meant to be there.
 export const extensionEvents = ['init.after', 'ingest.before', 'ingest.after', 'publish.before',
-  'publish.after', 'ask.after', 'answer.after', 'capture.after', 'snapshot.after', 'seal.before',
+  'publish.after', 'ask.after', 'answer.after', 'capture.after', 'seal.before',
   'seal.after', 'maintain.after'] as const;
 export type ExtensionEvent = (typeof extensionEvents)[number];
 export const extensionSchema = z.object({

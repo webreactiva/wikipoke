@@ -138,15 +138,6 @@ test('agent patches cannot escape wiki scope or overwrite concurrent edits', asy
   assert.throws(() => wiki.store.path('wiki/escape/a.md'), /Symlink/);
 });
 
-test('release snapshots retain exact refs and require committed wiki', async () => {
-  const wiki = await setup(); await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
-  await assert.rejects(wiki.snapshot('v1'), /Commit wiki/);
-  git(wiki.root, 'add', 'wiki'); git(wiki.root, 'commit', '-qm', 'wiki');
-  const result = await wiki.snapshot('v1');
-  assert.equal(git(wiki.root, 'rev-parse', `refs/wikipoke/${hash('v1')}/wiki`), result.wiki);
-  await assert.rejects(wiki.snapshot('v1'), /already captured/);
-});
-
 test('seal records a checkpoint only after coverage and drift are clear', async () => {
   const wiki = await setup();
   await assert.rejects(wiki.seal(), /pending work: 1 uncovered source/);
@@ -657,23 +648,6 @@ test('a wiki shaped like the file tree is reported, and a wiki of knowledge is n
   const mirrored: any = await wiki.status();
   assert.deepEqual(mirrored.uncovered, []);
   assert.equal(mirrored.findings.some((f: any) => f.code === 'mirrors-the-tree'), true);
-});
-
-test('a captured release can be found and read back by its label', async () => {
-  const wiki = await setup();
-  await wiki.publishPatch(patch((await wiki.ingest() as any).sources));
-  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'wiki');
-  await wiki.snapshot('v1.0.0');
-  await wiki.snapshot('v1.1.0');
-  const listed: any = await wiki.releases();
-  // Newest first, and each one names the refs that hold it — the manifest file is named after the
-  // hash of its label, so without this there was no way to get from a label to anything.
-  assert.deepEqual(listed.map((r: any) => r.label), ['v1.1.0', 'v1.0.0']);
-  assert.match(listed[0].refs.code, /^refs\/wikipoke\/[a-f0-9]{64}\/code$/);
-  const one: any = await wiki.release('v1.0.0');
-  assert.equal(one.reachable.code, true);
-  assert.equal(one.reachable.wiki, true);
-  await assert.rejects(wiki.release('v9'), /list them with/);
 });
 
 test('maintenance keeps the tape from growing without bound, and loses nothing', async () => {
