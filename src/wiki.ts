@@ -261,10 +261,16 @@ export class Wiki {
       // Flows are counted, not sampled: their absence is one fact, and it is the one kind of pending
       // work a diff can never raise, because nothing goes uncovered when a flow is missing.
       const flows = { count: health.flows, missing: health.findings.some(f => f.code === 'no-flows') };
+      // Every other number here is computed from committed code, which is the state an agent editing
+      // files has not reached yet. Uncommitted in-scope work is the debt that exists before the hook
+      // that refreshes this file has any reason to run, so it is the one thing the signal can say at
+      // the end of a session that it could not say at the start.
+      const dirty = uncommitted(this.root, this.config);
       const signal = { at: stamp(), revision: health.revision, checkpoint: health.checkpoint.lastIndexedCommit,
         pages: health.pages, flows, findings: { error: count('error'), warning: count('warning') },
         drift: { count: health.drift.length, sample: health.drift.slice(0, SAMPLE) },
-        uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) } };
+        uncovered: { count: health.uncovered.length, sample: health.uncovered.slice(0, SAMPLE) },
+        uncommitted: { count: dirty.length, sample: dirty.slice(0, SAMPLE) } };
       this.store.commit([{ path, before: read(this.store.path(path)), after: json(signal) }]);
       return { ...signal, pruned };
     });

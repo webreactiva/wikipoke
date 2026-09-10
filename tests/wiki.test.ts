@@ -319,10 +319,10 @@ test('attention writes a bounded signal instead of the whole graph', async () =>
   // What the pass pruned is about this run, not part of the signal a session reads back.
   const { pruned, ...written } = signal as any;
   assert.deepEqual(pruned, { archived: 0 });
-  // The signal is what a session reads at startup, so it stays the bounded health of the wiki and
-  // nothing about what an agent did during a turn.
+  // The signal is what a session reads at startup and at the end of a turn, so it stays the bounded
+  // health of the wiki against the code - never a transcript of what an agent did.
   assert.deepEqual(Object.keys(written).sort(),
-    ['at', 'checkpoint', 'drift', 'findings', 'flows', 'pages', 'revision', 'uncovered']);
+    ['at', 'checkpoint', 'drift', 'findings', 'flows', 'pages', 'revision', 'uncommitted', 'uncovered']);
   assert.deepEqual(JSON.parse(read(join(wiki.root, '.wikipoke/attention.json'))!), written);
   await publish(wiki, patch((await wiki.ingest() as any).sources));
   assert.deepEqual((await wiki.graph()).nodes.map(n => n.id), wiki.pages().map(p => p.path));

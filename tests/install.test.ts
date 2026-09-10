@@ -346,7 +346,10 @@ test('install retires the automatic capture hooks an older release left behind',
   assert.equal(existsSync(join(wiki.root, '.wikipoke/hooks/session-stop')), false);
   assert.ok(report.manual.some(step => step.includes('docs/extensions.md')));
   const settings = JSON.parse(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'));
-  assert.deepEqual(Object.keys(settings.hooks), ['SessionStart']);
+  // The retired hooks are gone; the surviving Stop hook is the briefing itself, which prints and
+  // never refuses a stop - the opposite of the one an older release wired here.
+  assert.deepEqual(Object.keys(settings.hooks), ['SessionStart', 'Stop']);
+  assert.equal(settings.hooks.Stop[0].hooks[0].command, 'sh .wikipoke/hooks/session-start');
   assert.equal(report.activeBriefing, true);
 });
 

@@ -284,6 +284,7 @@ try {
   if (s.drift?.count) owed.push(s.drift.count + " page(s) citing moved code");
   if (s.findings?.error) owed.push(s.findings.error + " error finding(s)");
   if (s.flows?.missing) owed.push("no flow page describing how the code runs end to end");
+  if (s.uncommitted?.count) owed.push(s.uncommitted.count + " in-scope file(s) edited but not committed, which the wiki cannot see yet");
   if (owed.length) process.stdout.write("Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile; the full signal is in .wikipoke/attention.json.\\n");
 } catch { /* no signal yet is not a problem worth reporting */ }
 ' "$root/.wikipoke/attention.json" 2>/dev/null
@@ -325,6 +326,7 @@ function brief(key, directory) {
     if (signal.drift && signal.drift.count) owed.push(signal.drift.count + " page(s) citing moved code");
     if (signal.findings && signal.findings.error) owed.push(signal.findings.error + " error finding(s)");
     if (signal.flows && signal.flows.missing) owed.push("no flow page describing how the code runs end to end");
+    if (signal.uncommitted && signal.uncommitted.count) owed.push(signal.uncommitted.count + " in-scope file(s) edited but not committed, which the wiki cannot see yet");
     line = owed.length ? "Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile;" +
       " the full signal is in .wikipoke/attention.json." : "";
   } catch { /* no signal on disk yet leaves the startup briefing standing */ }
@@ -349,9 +351,14 @@ ${header}
 At the start of a session, run \`${briefingCommand}\` and act on what it prints. It is deterministic,
 never runs a model, and stays silent when the wiki owes no work.
 `;
+// The same deterministic line, at both ends of a session. At the start it says what the wiki already
+// owed; at the end it can say something nothing else can - that the agent edited code and left it
+// uncommitted, so neither the post-commit hook nor the wiki has seen the work at all. It prints and
+// exits zero: an earlier release refused the stop instead, which is why it was taken back out.
 const settingsScript = (command: string) => `${JSON.stringify({
   hooks: {
     SessionStart: [{ matcher: 'startup|resume', hooks: [{ type: 'command', command, timeout: 20 }] }],
+    Stop: [{ hooks: [{ type: 'command', command, timeout: 20 }] }],
   },
 }, null, 2)}\n`;
 // What an older release wrote into the same file: the briefing plus a hook on every edit and a hook
