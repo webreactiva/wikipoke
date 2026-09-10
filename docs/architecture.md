@@ -77,4 +77,4 @@ Each page cites one or more source patterns with the Git revision and the digest
 
 The following are absent, not merely undocumented. `README.md` carries the full list of known limits.
 
-Nothing detects divergence between a recorded decision and later implemented behavior, and there is no record of conflicting claims about the same scope: specification requirements FR-008 and FR-009 have no implementation. There is no importer for the two existing wikis (FR-014). There is no release capture: a past state is a commit, and historical questions go through `ask --ref <commit>`. `publish` cannot delete or deprecate a page.
+Nothing detects divergence between a recorded decision and later implemented behavior, and there is no record of conflicting claims about the same scope. There is no importer for the two existing wikis. There is no release capture: a past state is a commit, and historical questions go through `ask --ref <commit>`. `publish` cannot delete or deprecate a page.

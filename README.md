@@ -196,10 +196,9 @@ These are absent from the product today, not merely undocumented.
 
 - **No divergence detection and no conflict record.** Nothing compares a
   recorded decision against later implemented behavior, and competing claims
-  about the same scope are not tracked or resolved. Specification requirements
-  FR-008 and FR-009 are unimplemented.
+  about the same scope are not tracked or resolved.
 - **No importers for the existing wikis.** There is no migration path for the
-  Widgetron or Web Reactiva wikis (FR-014 unimplemented).
+  Widgetron or Web Reactiva wikis.
 - **Capture cannot be enforced outside Claude Code.** Only Claude Code exposes a
   hook that can refuse a stop. Everywhere else `block` degrades to a notice, and
   a notice is not enough: given a correct one naming every file it had just
@@ -216,6 +215,3 @@ These are absent from the product today, not merely undocumented.
   is still total.
 - **Reads take the writer lock.** `status`, `lint`, and `graph` serialize behind
   the same lock as writes, so two concurrent commands fail with a lock error.
-
-The requirement IDs above refer to `docs/sdlc/wikipoke/spec.md` in the
-repository, which is not part of the published package.

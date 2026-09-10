@@ -2,7 +2,7 @@
 
 - Communicate with Daniel in Spanish.
 - Write project documentation in English.
-- Follow `.agents/skills/gate-driven-development/SKILL.md` for the active
-  development cycle. Read its `state.md` before resuming cycle work.
-- Keep proposal history distinct from approved requirements. Never record
-  human gate approval without an explicit decision about that artifact.
+- Keep proposal history distinct from what the tool actually does. `docs/PROPUESTA.md`
+  is a dated proposal and says so; the guides in `docs/` describe the built product.
+- Record a choice worth remembering with `wikipoke capture`, against the code it
+  was about. Never invent a rationale nobody stated.
