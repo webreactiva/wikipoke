@@ -9,7 +9,7 @@ import { configSchema } from './model.js';
 import { answerSchema, draftSchema, eventSchema, extensionSchema } from './model.js';
 import { z } from 'zod';
 import { readDrafts } from './knowledge.js';
-import { briefingActive, hookActive, install, uninstall } from './integrations.js';
+import { briefingActive, hookActive, install, skillState, uninstall } from './integrations.js';
 import { dispatch } from './extensions.js';
 import type { ExtensionEvent } from './model.js';
 import { commandSchema, type ProjectCommand } from './model.js';
@@ -79,7 +79,10 @@ program.command('init').description('create an explicit configuration and empty 
   } catch (error) { fail(error); } });
 for (const [name, description, action] of [
   ['status', 'report health and pending work', async (wiki: Wiki) => wiki.status()],
-  ['lint', 'validate wiki structure without an LLM', async (wiki: Wiki) => wiki.lint()],
+  ['lint', 'validate wiki structure, or a directory of pages before publishing',
+    async (wiki: Wiki, options: { pages?: string; ref?: string }) => options.pages
+      ? wiki.lintPages(readDrafts(resolve(options.pages)), options.ref)
+      : wiki.lint()],
   ['graph', 'emit a reconstructable graph', async (wiki: Wiki) => wiki.graph()],
   ['ingest', 'bootstrap or reconcile source knowledge', async (wiki: Wiki, options: { ref?: string; path?: string }) => {
     extend(wiki, 'ingest.before', { ref: options.ref ?? 'HEAD', ...(options.path ? { path: options.path } : {}) });
@@ -99,6 +102,10 @@ for (const [name, description, action] of [
   const command = program.command(name).description(description);
   if (name === 'ingest') command.option('--ref <commit>', 'source commit', 'HEAD')
     .option('--path <pattern>', 'plan this part of the repository, changed or not');
+  // The same checks `publish` runs, before anything is written. Every finding it reports used to
+  // cost a failed publication to discover.
+  if (name === 'lint') command.option('--pages <directory>', 'check a directory of pages before publishing')
+    .option('--ref <commit>', 'the commit the pages were planned against', 'HEAD');
   if (name === 'maintain') command.requiredOption('--once', 'perform one bounded maintenance pass');
   command.action(async (options: any) => { try { output(await action(new Wiki(root()), options)); } catch (error) { fail(error); } });
 }
@@ -139,7 +146,16 @@ program.command('publish').description('validate and publish agent-authored wiki
   } catch (error) { fail(error); } });
 program.command('schema <kind>').description('emit the JSON schema for an agent-authored payload')
   .action((kind: string) => { try {
-    if (kind === 'page') output(z.toJSONSchema(draftSchema));
+    // A page is Markdown, so a JSON schema alone describes the frontmatter and leaves an agent to
+    // work out the file it belongs to. The example is the file, which is what gets copied.
+    if (kind === 'page') output({ ...z.toJSONSchema(draftSchema), example: [
+      '---', 'type: entity', 'title: The HTTP layer',
+      'description: How outbound requests are built, pooled and retried',
+      'sources:', '  - src/http', '  - src/config/retries.ts', '---', '',
+      'Prose, in the wiki\'s language. Link other pages with [[retry-limit]] - a wikilink resolves',
+      'by file name, which is why it survives a page being moved.',
+    ].join('\n'),
+      usage: 'Write one such file per page under .wikipoke/tmp/pages/, then: wikipoke lint --pages .wikipoke/tmp/pages && wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan\'s revision>' });
     else if (kind === 'answer') output(z.toJSONSchema(answerSchema));
     else if (kind === 'event') output(z.toJSONSchema(eventSchema));
     else throw new Error('Schema kind must be page, answer or event');
@@ -196,13 +212,17 @@ program.command('doctor').description('report environment and configured capabil
       config: configured ? 'wikipoke.config.yaml' : null, wiki: null,
       hook: '.wikipoke/hooks/post-commit', hookComposed: hookActive(path),
       briefing: '.wikipoke/hooks/session-start', briefingComposed: briefingActive(path),
-      extensions: [] as unknown[], commands: [] as unknown[], pending: null, problems };
+      extensions: [] as unknown[], commands: [] as unknown[], skills: skillState(path), pending: null, problems };
     if (Number(process.versions.node.split('.')[0]) < 22) problems.push(`Node 22 or later is required; running ${process.version}.`);
     if (!version) problems.push('Git is not on PATH; Wikipoke reads every source from Git.');
     else if (!repo) problems.push(`No Git repository with at least one commit at ${path}.`);
     if (!configured) problems.push('No wikipoke.config.yaml; run init to configure the wiki.');
     if (!report.hookComposed) problems.push('No post-commit hook composes .wikipoke/hooks/post-commit; the attention signal will not refresh on commit.');
     if (!report.briefingComposed) problems.push('No agent harness runs .wikipoke/hooks/session-start; an agent will open a session without the attention signal.');
+    // The skill text is what an agent reads before it reads anything else. One left behind by an
+    // older release names commands this build does not have, and nothing about reading it says so.
+    const stale = (report.skills as { path: string; current: boolean }[]).filter(skill => !skill.current);
+    if (stale.length) problems.push(`${stale.length} installed skill(s) were written by an older Wikipoke and may name commands this version (${manifest.version}) does not have: ${stale.map(skill => skill.path).join(', ')}. Run: wikipoke install`);
     if (configured) {
       try {
         const raw = parse(readFileSync(configPath, 'utf8')) as { wiki?: string; extensions?: unknown; commands?: unknown };

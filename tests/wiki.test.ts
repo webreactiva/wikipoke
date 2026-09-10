@@ -728,3 +728,42 @@ test('a plan carries the content of its batch and nothing else', async () => {
   const status: any = await wiki.status();
   assert.equal(status.uncovered.length, 13);
 });
+
+test('a page can cite a file inside a pattern it claims, and a link out of the wiki says so', async () => {
+  const wiki = await setup();
+  writeFileSync(join(wiki.root, 'src/pool.ts'), 'export const pool = [];\n');
+  git(wiki.root, 'add', '.'); git(wiki.root, 'commit', '-qm', 'pool');
+  await publish(wiki, { pages: [
+    { path: 'concepts/other.md', meta: { type: 'concept', title: 'Other', description: 'Other', sources: [] }, body: 'Text.' },
+    // Evidence names a file; the source is the pattern that covers it. Comparing those as strings
+    // made this an error, and the only way out was to delete the relation.
+    { path: 'concepts/src.md', meta: { type: 'entity', title: 'The src module', description: 'src',
+      sources: ['src'], wikipoke: { relations: [{ type: 'related_to', target: 'concepts/other.md',
+        evidence: ['src/pool.ts'], basis: 'observed' }] } }, body: 'Retries and a pool.' }] });
+  assert.deepEqual((await wiki.lint()).filter(f => f.code === 'unknown-evidence'), []);
+
+  // A `../` from a page at the root cannot resolve to anything, and saying "broken link" reads as a
+  // page that is merely missing.
+  await publish(wiki, { pages: [{ path: 'stray.md', meta: { type: 'concept', title: 'Stray',
+    description: 'Stray', sources: ['src'] }, body: 'See [nothing](../outside.md).' }] });
+  const escaping = (await wiki.lint()).find(f => f.code === 'link-escapes-wiki');
+  assert.match(escaping!.message, /points above the wiki root/);
+  assert.equal((await wiki.lint()).some(f => f.code === 'broken-link' && f.message.includes('outside')), false);
+});
+
+test('pages can be checked before they are published, and nothing is written', async () => {
+  const wiki = await setup();
+  const drafts = [{ path: 'concepts/retries.md', body: 'Requests use three retries.',
+    meta: { type: 'concept', title: 'Retries', description: 'Retry policy', sources: ['src'],
+      wikipoke: { relations: [{ type: 'related_to', target: 'concepts/missing.md', evidence: [], basis: 'inferred' }] } } }];
+  const report: any = await wiki.lintPages(drafts as any);
+  assert.deepEqual(report.pages, ['concepts/retries.md']);
+  assert.equal(report.publishable, true);
+  assert.equal(report.findings.some((f: any) => f.code === 'broken-link'), true);
+  assert.equal(existsSync(join(wiki.root, 'wiki/concepts/retries.md')), false, 'a check must not write');
+  assert.equal(wiki.pages().length, 0);
+
+  // The checks publish would refuse on are refused here too, at no cost.
+  await assert.rejects(wiki.lintPages([{ ...drafts[0], meta: { ...drafts[0].meta, sources: ['nowhere'] } }] as any),
+    /Unverified source: nowhere/);
+});

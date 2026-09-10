@@ -5,7 +5,7 @@ import remarkParse from 'remark-parse';
 import remarkFrontmatter from 'remark-frontmatter';
 import { visit } from 'unist-util-visit';
 import { z } from 'zod';
-import { draftSchema, pageSchema, type Draft, type Page, type Metadata, type Finding } from './model.js';
+import { covers, draftSchema, pageSchema, type Draft, type Page, type Metadata, type Finding } from './model.js';
 import { files, read } from './runtime/store.js';
 
 const parser = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']);
@@ -127,9 +127,14 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   for (const p of pages) {
     if (ids.has(p.meta.wikipoke.uid)) findings.push({ code: 'duplicate-id', severity: 'error', page: p.path, message: p.meta.wikipoke.uid });
     ids.add(p.meta.wikipoke.uid);
-    const sources = new Set(p.meta.sources.map(s => s.id));
+    // Evidence names a file; a source is a pattern. Comparing the two as strings meant a page
+    // claiming `apps/playground/src/**` could not cite a file inside it - the page covers the file,
+    // the relation is about the file, and the only way out was to delete the relation.
+    const patterns = p.meta.sources.map(s => s.id);
     for (const r of p.meta.wikipoke.relations) for (const id of r.evidence)
-      if (!sources.has(id)) findings.push({ code: 'unknown-evidence', severity: 'error', page: p.path, message: id });
+      if (!patterns.some(pattern => covers(pattern, id))) findings.push({ code: 'unknown-evidence',
+        severity: 'error', page: p.path,
+        message: `${id} is outside every source this page claims${patterns.length ? `: ${patterns.join(', ')}` : ''}` });
   }
   // A flow is the page type that cannot be derived from one file: it is the sequence several files
   // make together, and the reason the order is what it is. Reconciling a diff never asks for one,
@@ -167,7 +172,19 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
       message: `${described_.length} pages for ${sourceCount} sources, ${single} of them citing a single file: a wiki shaped like the file tree restates the code instead of carrying what the code cannot say` });
   const { edges } = graph(pages);
   for (const e of edges.filter(e => e.type !== 'source')) {
-    if (!paths.has(e.to)) findings.push({ code: 'broken-link', severity: 'warning', page: e.from, message: e.to });
+    // Both ends, not just the target. A symmetric relation is stored with its ends in a fixed order,
+    // so a `related_to` pointing at a page that does not exist can end up as the *from* of its own
+    // edge - and checking only the target reported nothing at all.
+    const source = paths.has(e.from) ? e.from : e.to;
+    for (const end of new Set([e.from, e.to])) {
+      if (paths.has(end)) continue;
+      // A `../` from a page at the wiki root resolves to a path above the wiki, which is not a page
+      // anybody can create and not a link any amount of moving will fix. Reported as itself, because
+      // "broken link to ../thing.md" reads as a page that is merely missing.
+      if (end.startsWith('../')) findings.push({ code: 'link-escapes-wiki', severity: 'warning', page: source,
+        message: `${end} points above the wiki root; a page at the root has nothing above it, so link it by its path inside the wiki` });
+      else findings.push({ code: 'broken-link', severity: 'warning', page: source, message: end });
+    }
   }
   // A cycle in a directed relation is a claim that cannot be true of both ends at once. Supersession
   // is an error because it makes the replacement order undecidable; a dependency cycle is a warning

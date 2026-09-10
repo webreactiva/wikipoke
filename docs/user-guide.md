@@ -30,8 +30,9 @@ lock left by a dead process and names its owner.
 Run the installed `wikipoke-ingest` skill. It runs `wikipoke ingest` — or
 `wikipoke ingest --path <directory>` to aim at a part of the repository that
 never appeared in a diff — reads the bounded source plan and related pages,
-writes each page as Markdown under `.wikipoke/tmp/pages/`, and publishes the
-directory with `wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan's
+writes each page as Markdown under `.wikipoke/tmp/pages/`, checks the directory
+with `wikipoke lint --pages .wikipoke/tmp/pages` — every check `publish` runs, at
+no cost and writing nothing — and publishes it with `wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan's
 revision>`.
 
 A page declares its sources as patterns: a directory, a glob, or one file path.

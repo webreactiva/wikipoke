@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { minimatch } from 'minimatch';
-import type { Config, Inventory, Manifest, Source, SourceMeta } from '../model.js';
+import { covers, type Config, type Inventory, type Manifest, type Source, type SourceMeta } from '../model.js';
 import { hash } from '../runtime/store.js';
 
 // Blobs are read a group at a time, and the group is the peak. Thirty-two megabytes of source
@@ -99,14 +99,7 @@ function walk(root: string, config: Config, ref: string, keep: (name: string) =>
 export function inventory(root: string, config: Config, ref = 'HEAD'): Inventory {
   return walk(root, config, ref, () => true);
 }
-// A page's source is a pattern. Three spellings, because all three are what people write: the exact
-// path of one file, a directory claiming everything beneath it, and a glob. The directory form is
-// the one that matters - it is how a single page covers a module without listing its files, and
-// without a new page appearing every time somebody adds one.
-export function covers(pattern: string, id: string): boolean {
-  const bare = pattern.replace(/\/+$/, '');
-  return id === bare || id.startsWith(`${bare}/`) || matches(id, pattern);
-}
+export { covers };
 export function matched(sources: SourceMeta[], pattern: string): SourceMeta[] {
   return sources.filter(source => covers(pattern, source.id));
 }

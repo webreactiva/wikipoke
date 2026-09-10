@@ -1,3 +1,4 @@
+import { minimatch } from 'minimatch';
 import { z } from 'zod';
 
 // Three types, and each one earns its place by being read somewhere: `depends_on` widens the
@@ -18,6 +19,14 @@ export const sourceSchema = z.object({
   id: z.string().min(1), resource: z.string().min(1).optional(), revision: z.string().optional(),
   hash: z.string().optional(), title: z.string().optional(),
 });
+// What a source pattern means, and the only place that decides it. Three spellings, because all
+// three are what people write: the exact path of one file, a directory claiming everything beneath
+// it, and a glob. The directory form is the one that matters - it is how a single page covers a
+// module without listing its files, and without a new page appearing every time somebody adds one.
+export function covers(pattern: string, id: string): boolean {
+  const bare = pattern.replace(/\/+$/, '');
+  return id === bare || id.startsWith(`${bare}/`) || minimatch(id, pattern, { dot: true });
+}
 export const pageSchema = z.object({
   type: z.string().min(1), title: z.string().min(1), description: z.string().default(''),
   sources: z.array(sourceSchema).default([]),

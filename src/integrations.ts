@@ -1,10 +1,16 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, rmdirSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmdirSync, rmSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { Store, atomic, read } from './runtime/store.js';
 
-const header = '<!-- managed by wikipoke; do not edit this line -->';
+// The skill text is instructions an agent follows before it reads anything else, so a copy left
+// behind by an older release is the most expensive stale file in the project: it sends the agent to
+// commands that no longer exist. Stamping the version is what lets anything notice. Recognition uses
+// the version-less prefix, so a file written by any release is still ours to replace.
+const managed = '<!-- managed by wikipoke';
+const version = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+const header = `${managed} ${version}; do not edit this line -->`;
 const marker = 'managed by Wikipoke';
 const notifier = '.wikipoke/hooks/post-commit';
 const briefing = '.wikipoke/hooks/session-start';
@@ -92,8 +98,13 @@ patterns while you were writing, instead of recording knowledge against code tha
 Only files matching your own patterns count, so somebody committing a typo in a README during your
 turn no longer throws the batch away.
 
-Then run \`${cli} lint\` before you call it done: it runs no model, and it is the same check \`seal\`
-applies. Delete the staging directory once the pages are in.
+Check them first — it costs nothing and writes nothing:
+
+\`${cli} lint --pages .wikipoke/tmp/pages --ref <the plan's revision>\`
+
+It runs every check \`publish\` runs and answers \`publishable\`. Fix what it names, then publish.
+Afterwards \`${cli} lint\` reports on the wiki as a whole, which is the same check \`seal\` applies.
+Delete the staging directory once the pages are in.
 
 ## Flows
 
@@ -287,7 +298,25 @@ try {
   if (s.uncommitted?.count) owed.push(s.uncommitted.count + " in-scope file(s) edited but not committed, which the wiki cannot see yet");
   if (owed.length) process.stdout.write("Wikipoke: " + owed.join(", ") + ". Use the wikipoke-ingest skill to reconcile; the full signal is in .wikipoke/attention.json.\\n");
 } catch { /* no signal yet is not a problem worth reporting */ }
-' "$root/.wikipoke/attention.json" 2>/dev/null
+// A skill file from an older release is the one stale thing an agent cannot detect by reading it:
+// it parses, it reads as authoritative, and it names commands this build does not have.
+try {
+  const root = process.argv[2], version = process.argv[3];
+  if (version) {
+    const stale = [];
+    for (const home of [".agents/skills", ".claude/skills"]) {
+      let names = [];
+      try { names = fs.readdirSync(root + "/" + home); } catch { continue; }
+      for (const name of names) {
+        const file = root + "/" + home + "/" + name + "/SKILL.md";
+        let text = ""; try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+        if (text.includes("<!-- managed by wikipoke") && !text.includes("<!-- managed by wikipoke " + version + ";")) stale.push(home + "/" + name);
+      }
+    }
+    if (stale.length) process.stdout.write("Wikipoke: " + stale.length + " installed skill(s) were written by an older release and may name commands this version does not have (" + stale.join(", ") + "). Run: wikipoke install\\n");
+  }
+} catch { /* an unreadable skill file is a problem for install, not for the briefing */ }
+' "$root/.wikipoke/attention.json" "$root" "$($cli --version 2>/dev/null)" 2>/dev/null
 exit 0
 `;
 const briefingCommand = `sh ${briefing}`;
@@ -387,6 +416,17 @@ hook="$root/${notifier}"
 exec "$hook" "$@"
 `;
 
+// Which managed skill files are on disk, and whether each was written by this build. A skill from an
+// older release parses fine, reads as authoritative and is wrong, so nothing else can detect it.
+export function skillState(root: string): { path: string; current: boolean }[] {
+  const store = new Store(root), found: { path: string; current: boolean }[] = [];
+  for (const name of Object.keys(skills)) for (const home of ['.agents/skills', '.claude/skills']) {
+    const relativePath = `${home}/${name}/SKILL.md`, old = read(store.path(relativePath));
+    if (old === null || !old.includes(managed)) continue;
+    found.push({ path: relativePath, current: old.includes(header) });
+  }
+  return found;
+}
 export interface InstallReport { skills: string[]; hook: string; activeHook: boolean; briefing: string; activeBriefing: boolean; manual: string[] }
 export interface UninstallReport { removed: string[]; preserved: string[]; manual: string[] }
 function hookPath(root: string): string {
@@ -425,7 +465,7 @@ export function install(root: string): InstallReport {
   for (const [name, content] of Object.entries(skills)) {
     for (const home of ['.agents/skills', '.claude/skills']) {
       const path = store.path(`${home}/${name}/SKILL.md`), old = read(path);
-      if (old !== null && !old.includes(header)) { manual.push(`Skipped ${relative(root, path)}: not managed by Wikipoke.`); continue; }
+      if (old !== null && !old.includes(managed)) { manual.push(`Skipped ${relative(root, path)}: not managed by Wikipoke.`); continue; }
       atomic(path, content); installed.push(`${home}/${name}/SKILL.md`);
     }
   }
@@ -471,7 +511,7 @@ export function install(root: string): InstallReport {
   // waiting for a human to paste an instruction that, unpasted, means nothing happens at all.
   for (const [path, content] of [[opencodePlugin, pluginScript], [cursorRule, cursorScript]] as const) {
     const target = store.path(path), old = read(target);
-    if (old !== null && !old.includes(marker) && !old.includes(header)) {
+    if (old !== null && !old.includes(marker) && !old.includes(managed)) {
       manual.push(`Skipped ${path}: not managed by Wikipoke.`); continue;
     }
     atomic(target, content); installed.push(path);
@@ -495,7 +535,7 @@ export function uninstall(root: string): UninstallReport {
     for (const home of ['.agents/skills', '.claude/skills']) {
       const path = store.path(`${home}/${name}/SKILL.md`), old = read(path);
       if (old === null) continue;
-      if (!old.includes(header)) { preserved.push(relative(root, path)); manual.push(`Kept ${relative(root, path)}: not managed by Wikipoke.`); continue; }
+      if (!old.includes(managed)) { preserved.push(relative(root, path)); manual.push(`Kept ${relative(root, path)}: not managed by Wikipoke.`); continue; }
       rmSync(path); removed.push(relative(root, path)); prune(dirname(path));
     }
   }
@@ -511,7 +551,7 @@ export function uninstall(root: string): UninstallReport {
   for (const path of [opencodePlugin, cursorRule]) {
     const target = store.path(path), old = read(target);
     if (old === null) continue;
-    if (!old.includes(marker) && !old.includes(header)) { preserved.push(path); manual.push(`Kept ${path}: not managed by Wikipoke.`); continue; }
+    if (!old.includes(marker) && !old.includes(managed)) { preserved.push(path); manual.push(`Kept ${path}: not managed by Wikipoke.`); continue; }
     rmSync(target); removed.push(path); prune(dirname(target)); prune(dirname(dirname(target)));
   }
   const configured = store.path(settings);

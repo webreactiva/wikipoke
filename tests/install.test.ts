@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { Wiki } from '../src/wiki.js';
-import { install, uninstall } from '../src/integrations.js';
+import { install, uninstall, skillState } from '../src/integrations.js';
 import type { Config } from '../src/model.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -366,4 +366,24 @@ test('a settings file Wikipoke no longer recognises is named, not rewritten', as
   const report = install(wiki.root);
   assert.equal(readFileSync(join(wiki.root, '.claude/settings.json'), 'utf8'), theirs);
   assert.ok(report.manual.some(step => step.includes('session-stop') && step.includes('by hand')));
+});
+
+test('a skill file left by an older release is reported, not left to mislead an agent', async () => {
+  const wiki = await setup();
+  install(wiki.root);
+  const skill = join(wiki.root, '.claude/skills/wikipoke-ingest/SKILL.md');
+  const current = readFileSync(skill, 'utf8');
+  assert.match(current, /<!-- managed by wikipoke \d+\.\d+\.\d+; do not edit this line -->/);
+  // The skill text is the first thing an agent reads. A copy from an earlier release parses, reads
+  // as authoritative, and names commands this build does not have - and nothing about reading it
+  // says so, which is why it has to be stamped and checked rather than trusted.
+  writeFileSync(skill, current.replace(/managed by wikipoke [^;]+;/, 'managed by wikipoke 0.0.1;'));
+  const stale = skillState(wiki.root).filter(s => !s.current);
+  assert.deepEqual(stale.map(s => s.path), ['.claude/skills/wikipoke-ingest/SKILL.md']);
+
+  // install replaces it: recognition uses the version-less prefix, so a file any release wrote is
+  // still ours to take back.
+  install(wiki.root);
+  assert.deepEqual(skillState(wiki.root).filter(s => !s.current), []);
+  assert.equal(readFileSync(skill, 'utf8'), current);
 });

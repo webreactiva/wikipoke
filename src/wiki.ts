@@ -365,9 +365,28 @@ export class Wiki {
   // an agent used to transcribe - the revision, the digest of every file, the page's identity - is
   // resolved here from the inventory it was planned against, because all of it was already known.
   async publishPages(input: Draft[], ref = 'HEAD') {
+    return this.store.locked(() => {
+      const { pages, revision: at } = this.prepare(input, ref);
+      this.publish(pages);
+      return { published: pages.map(p => p.path), revision: at,
+        sources: Object.fromEntries(pages.map(p => [p.path, p.meta.sources.map(s => s.id)])) };
+    });
+  }
+  // Everything `publish` checks, without writing anything. Every one of those checks used to cost a
+  // failed publication to discover, and a page rejected for citing a file it does covers is not a
+  // mistake worth learning by trial: the run that finds it should be the run that costs nothing.
+  async lintPages(input: Draft[], ref = 'HEAD') {
+    return this.store.locked(() => {
+      const { pages, revision: at } = this.prepare(input, ref);
+      const findings = lint([...this.pages().filter(p => !pages.some(d => d.path === p.path)), ...pages]);
+      return { pages: pages.map(p => p.path), revision: at, findings,
+        publishable: findings.filter(f => f.severity === 'error').length === 0 };
+    });
+  }
+  private prepare(input: Draft[], ref: string): { pages: Page[]; revision: string } {
     const drafts = input.map(draft => ({ path: draft.path, body: draft.body, meta: draftSchema.parse(draft.meta) }));
     if (!drafts.length) throw new Error('No pages to publish');
-    return this.store.locked(() => {
+    {
       const at = revision(this.root, ref), inv = manifest(this.root, this.config, at);
       const { pages: existing, unreadable } = this.library();
       const base = new Map(existing.map(p => [p.path, p.raw]));
@@ -403,10 +422,8 @@ export class Wiki {
           wikipoke: { ...draft.meta.wikipoke, uid, relations: draft.meta.wikipoke.relations } };
         return { path: draft.path, meta, body: draft.body, raw: render(meta, draft.body) };
       });
-      this.publish(updated);
-      return { published: updated.map(p => p.path), revision: at,
-        sources: Object.fromEntries(updated.map(p => [p.path, p.meta.sources.map(s => s.id)])) };
-    });
+      return { pages: updated, revision: at };
+    }
   }
   async ask(question: string, requestId = randomUUID(), ref?: string, again = false) {
     const id = hash(requestId);
