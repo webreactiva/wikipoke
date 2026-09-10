@@ -69,6 +69,21 @@ The notifier runs `maintain --once`, which writes `.wikipoke/attention.json` its
 
 ## State and freshness
 
+Ingestion plans queue uncovered files and current files matching outdated
+documentation references. Deleted references carry their affected pages even
+when no source content can be returned. Plans expose drift, structural findings,
+historical records requiring review, and a directory/count overview for initial
+orientation. Completion requires the same coverage, drift and finding conditions
+as a checkpoint; an empty source queue alone is insufficient. Historical query
+and decision drift is reported without scheduling automatic rewrites.
+
+Coverage heuristics in `status`, `lint`, and draft checks count distinct matched
+files, not pattern strings. Overlapping patterns count each file once. These
+checks can flag very thin prose or a file-tree-shaped wiki, but cannot establish
+that an explanation is correct. Editorial instructions ask the host agent to
+orient itself, follow cross-module flows, read the scope it claims and separate
+observations from inference before publishing.
+
 Each page cites one or more source patterns with the Git revision and the digest of what each matched; source text itself is never stored in a page. `status` compares those records with the current inventory on two independent axes: a file is **covered** when some page pattern claims it, and a page has **drifted** when the digest of what its pattern matches no longer agrees with what it recorded. Keeping them separate is what stops one edited file inside a module reporting every file in that module as undocumented. `attention.json` is a compact derivative of that report — counts plus a bounded sample — not a full dump. It carries the health of the wiki against the code and nothing about what an agent did during a turn — including a count of in-scope files edited but not committed, which is the one debt that exists before any commit hook has a reason to run.
 
 `seal` records `lastIndexedCommit` only when the configured scope has no uncovered source, no drifted reference, and no error finding.

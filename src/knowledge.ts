@@ -122,8 +122,11 @@ export function graph(pages: Page[]) {
     edges: [...new Map(normalized.map(e => [`${e.from}\0${e.type}\0${e.to}`, e])).values()], symmetric };
 }
 export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount = 0,
-  layout: Record<string, string> = {}): Finding[] {
+  layout: Record<string, string> = {}, sourceIds?: string[]): Finding[] {
   const findings: Finding[] = [], paths = new Set(pages.map(p => p.path)), ids = new Set<string>();
+  const counts = new Map(pages.map(p => [p.path, sourceIds
+    ? sourceIds.filter(id => p.meta.sources.some(s => covers(s.id, id))).length
+    : p.meta.sources.length]));
   for (const u of unreadable) findings.push({ code: u.code, severity: 'error', page: u.path, message: u.reason });
   for (const p of pages) {
     if (ids.has(p.meta.wikipoke.uid)) findings.push({ code: 'duplicate-id', severity: 'error', page: p.path, message: p.meta.wikipoke.uid });
@@ -146,7 +149,7 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   if (described.length >= 3 && !flows.length)
     findings.push({ code: 'no-flows', severity: 'warning',
       message: `${described.length} pages describe code and none describes a flow through it` });
-  for (const flow of flows) if (flow.meta.sources.length < 2)
+  for (const flow of flows) if (counts.get(flow.path)! < 2)
     findings.push({ code: 'thin-flow', severity: 'warning', page: flow.path,
       message: 'A flow crosses files; this one cites fewer than two sources' });
   // Coverage is set membership: citing a source covers it, and citing costs nothing. One page with
@@ -155,10 +158,11 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   // it claims. Calibrated against two real wikis - the thinnest genuine page spends 120 characters
   // per source and the most extreme index page 32, while the degenerate case spends about one.
   for (const p of pages) {
-    if (p.meta.sources.length < 3 || ['query', 'decision'].includes(p.meta.type)) continue;
-    const spent = p.body.trim().length / p.meta.sources.length;
+    const count = counts.get(p.path)!;
+    if (count < 3 || ['query', 'decision'].includes(p.meta.type)) continue;
+    const spent = p.body.trim().length / count;
     if (spent < 25) findings.push({ code: 'thin-coverage', severity: 'warning', page: p.path,
-      message: `Claims ${p.meta.sources.length} sources in ${p.body.trim().length} characters; a citation is not a description` });
+      message: `Claims ${count} sources in ${p.body.trim().length} characters; a citation is not a description` });
   }
   // The other way to reach full coverage without writing a wiki: one page per file, named after the
   // path, mirroring the tree. Every source is claimed, every check is green, and the result restates
@@ -167,7 +171,7 @@ export function lint(pages: Page[], unreadable: Unreadable[] = [], sourceCount =
   // as a mirror has 98% at 1.01. This only speaks for a wiki large enough for the shape to mean
   // something.
   const described_ = pages.filter(p => !['query', 'decision'].includes(p.meta.type));
-  const single = described_.filter(p => p.meta.sources.length === 1).length;
+  const single = described_.filter(p => counts.get(p.path) === 1).length;
   if (sourceCount >= 30 && described_.length >= sourceCount * 0.8 && single >= described_.length * 0.7)
     findings.push({ code: 'mirrors-the-tree', severity: 'warning',
       message: `${described_.length} pages for ${sourceCount} sources, ${single} of them citing a single file: a wiki shaped like the file tree restates the code instead of carrying what the code cannot say` });

@@ -35,6 +35,25 @@ with `wikipoke lint --pages .wikipoke/tmp/pages` — every check `publish` runs,
 no cost and writing nothing — and publishes it with `wikipoke publish --pages .wikipoke/tmp/pages --ref <the plan's
 revision>`.
 
+Before writing, use the plan's `overview` (directories and file counts), the
+project README and entry points to sketch pages around reader questions and
+cross-module journeys. A source batch is a reading budget, not a page outline.
+Follow dependencies at the planned revision and inspect the scope you claim;
+do not cite a directory merely because a few of its files arrived in a batch.
+
+Plans include both uncovered sources and sources cited by outdated documentation.
+`drift` names changed or deleted references, and `findings` reports structural
+issues. `complete` is false while coverage, drift or checkpoint-blocking findings
+remain; `remaining` counts queued source files after the current batch, not all
+remaining editorial work. An empty batch can still require repairing a deleted
+reference or writing a missing flow. Re-plan after publication, and stop with
+an explicit report if no progress is possible.
+
+`reviewRequired` lists drift in historical decisions and queries. These records
+retain their original evidence: do not rewrite past choices or answers to clear
+a checkpoint. Review them explicitly; their drift continues to block `seal`.
+Mechanical checks establish consistency, not factual or editorial quality.
+
 A page declares its sources as patterns: a directory, a glob, or one file path.
 One page claiming `src/http` covers every file under it and keeps covering them
 when a new one lands. Wikipoke resolves each pattern against the plan and writes

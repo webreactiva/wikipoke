@@ -3,7 +3,7 @@ import { rmSync } from 'node:fs';
 import { posix } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { configSchema, draftSchema, answerSchema, eventSchema,
-  type Config, type Draft, type Metadata, type Page, type SourceMeta } from './model.js';
+  type Config, type Draft, type Metadata, type Page, type SourceMeta, type Manifest } from './model.js';
 import { index, lint, loadPages, graph, render, reserved, type Library } from './knowledge.js';
 import { Store, read, hash, json, safePath, files } from './runtime/store.js';
 import { manifest, sourcesFor, revision, uncommitted, covers, matched, digestOf, changed } from './sources/git.js';
@@ -222,7 +222,8 @@ export class Wiki {
     // relative to the code, and without it they silently never fire.
     return this.store.locked(() => {
       const { pages, unreadable } = this.library();
-      return lint(pages, unreadable, manifest(this.root, this.config).sources.length, this.config.layout);
+      const inv = manifest(this.root, this.config);
+      return lint(pages, unreadable, inv.sources.length, this.config.layout, inv.sources.map(s => s.id));
     });
   }
   // The event tape only ever grows, and it is knowledge: nothing here is deleted. Events are folded
@@ -278,8 +279,8 @@ export class Wiki {
       return { ...signal, pruned };
     });
   }
-  private health() {
-    const inv = manifest(this.root, this.config), { pages, unreadable } = this.library();
+  private health(ref = 'HEAD', inventory?: Manifest) {
+    const inv = inventory ?? manifest(this.root, this.config, ref), { pages, unreadable } = this.library();
     // A decision cites the code it was about, not the code it documents. Counting it as coverage
     // would let a wiki with no knowledge in it report every source as documented.
     const claimed = pages.filter(p => !['query', 'decision'].includes(p.meta.type))
@@ -311,7 +312,7 @@ export class Wiki {
     const checkpoint = this.store.load<{ version: number; lastIndexedCommit: string | null }>(
       '.wikipoke/state.json', { version: 1, lastIndexedCommit: null });
     const reachable = this.reachable(checkpoint.lastIndexedCommit);
-    const findings = lint(pages, unreadable, inv.sources.length, this.config.layout);
+    const findings = lint(pages, unreadable, inv.sources.length, this.config.layout, inv.sources.map(s => s.id));
     if (!reachable) findings.push({ code: 'lost-checkpoint', severity: 'error',
       message: `The sealed checkpoint ${checkpoint.lastIndexedCommit} is not in this repository, so changes since it cannot be compared; seal again once the wiki is level with the code` });
     return { revision: inv.revision, checkpoint, pages: pages.length,
@@ -333,7 +334,13 @@ export class Wiki {
       const inv = manifest(this.root, this.config, ref), existing = this.pages();
       const claimed = existing.filter(p => !['query', 'decision'].includes(p.meta.type))
         .flatMap(p => p.meta.sources.map(s => s.id));
-      const outstanding = inv.sources.filter(s => !claimed.some(pattern => covers(pattern, s.id)));
+      const health = this.health(ref, inv);
+      // Historical queries and decisions retain their original evidence. Surface their drift for
+      // review, but never ask an agent to rewrite the record merely to advance a checkpoint.
+      const historical = new Set(existing.filter(p => ['query', 'decision'].includes(p.meta.type)).map(p => p.path));
+      const refresh = health.drift.filter(d => !historical.has(d.page));
+      const outstanding = inv.sources.filter(s => !claimed.some(pattern => covers(pattern, s.id))
+        || refresh.some(d => covers(d.source, s.id)));
       // Aiming is the difference between seeding a wiki and grinding one out. Left to itself the
       // plan hands over whatever is next in tree order, which is how an agent ends up documenting a
       // stylesheet and two entry points together and writing a page per file because they share
@@ -346,12 +353,25 @@ export class Wiki {
       const sources = sourcesFor(this.root, this.config, batch.map(s => s.id), ref);
       const direct = new Set(existing.filter(p => p.meta.sources
         .some(s => sources.some(source => covers(s.id, source.id)))).map(p => p.path));
+      for (const d of refresh) if (d.reason === 'missing' && (!target || covers(target, d.source) || covers(d.source, target))) direct.add(d.page);
       for (const edge of graph(existing).edges) if (edge.type === 'depends_on' && direct.has(edge.to)) direct.add(edge.from);
       const dirty = uncommitted(this.root, this.config);
+      const directories = new Map<string, number>();
+      for (const source of inv.sources) {
+        const directory = posix.dirname(source.id);
+        directories.set(directory, (directories.get(directory) ?? 0) + 1);
+      }
       // `complete` and `remaining` always speak for the whole scope, aimed or not: a pass that
       // finished its target has not finished the wiki, and a plan that said so would stop the loop
       // with most of the repository still undocumented.
-      return { complete: outstanding.length === 0, remaining: outstanding.length - sources.length,
+      const blockers = health.findings.filter(f => f.severity === 'error'
+        || ['no-flows', 'thin-coverage', 'mirrors-the-tree'].includes(f.code));
+      return { complete: outstanding.length === 0 && health.drift.length === 0 && blockers.length === 0,
+        remaining: outstanding.length - sources.length,
+        drift: health.drift, findings: health.findings,
+        reviewRequired: health.drift.filter(d => historical.has(d.page)),
+        overview: [...directories].sort(([a], [b]) => a.localeCompare(b))
+          .map(([directory, files]) => ({ directory, files })),
         ...(target ? { target, remainingHere: pending.length - sources.length } : {}),
         language: this.config.language, revision: inv.revision,
         // Sources whose working copy differs from the commit this plan was made against. Documenting
@@ -381,7 +401,11 @@ export class Wiki {
   async lintPages(input: Draft[], ref = 'HEAD') {
     return this.store.locked(() => {
       const { pages, revision: at } = this.prepare(input, ref);
-      const findings = lint([...this.pages().filter(p => !pages.some(d => d.path === p.path)), ...pages], [], 0, this.config.layout);
+      const inv = manifest(this.root, this.config, ref);
+      const library = this.library();
+      const findings = lint([...library.pages.filter(p => !pages.some(d => d.path === p.path)), ...pages],
+        library.unreadable.filter(p => !pages.some(d => d.path === p.path)), inv.sources.length,
+        this.config.layout, inv.sources.map(s => s.id));
       return { pages: pages.map(p => p.path), revision: at, findings,
         publishable: findings.filter(f => f.severity === 'error').length === 0 };
     });

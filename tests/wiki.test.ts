@@ -44,6 +44,69 @@ test('ingest plans deterministic work and publish validates source evidence', as
   await publish(wiki, patch((await wiki.ingest() as any).sources)); assert.deepEqual((await wiki.status()).drift, []);
 });
 
+test('ingest reopens changed coverage and completes only after reconciliation', async () => {
+  const wiki = await setup();
+  await publish(wiki, patch((await wiki.ingest()).sources));
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 8;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change');
+  const plan = await wiki.ingest();
+  assert.equal(plan.complete, false);
+  assert.deepEqual(plan.sources.map(s => s.id), ['src/main.ts']);
+  assert.match(plan.sources[0].content, /8/);
+  assert.deepEqual(plan.pages.map(p => p.path), ['concepts/retries.md']);
+  assert.equal(plan.drift[0].reason, 'changed');
+  await publish(wiki, patch(plan.sources), plan.revision);
+  assert.equal((await wiki.ingest()).complete, true);
+  await wiki.seal();
+});
+
+test('a deleted source remains actionable even with an empty batch', async () => {
+  const wiki = await setup();
+  await publish(wiki, patch((await wiki.ingest()).sources));
+  git(wiki.root, 'rm', 'src/main.ts'); git(wiki.root, 'commit', '-qm', 'remove');
+  const plan = await wiki.ingest();
+  assert.equal(plan.complete, false);
+  assert.equal(plan.sources.length, 0);
+  assert.equal(plan.drift[0].reason, 'missing');
+  assert.equal(plan.pages[0].path, 'concepts/retries.md');
+  await publish(wiki, patch([]));
+  assert.equal((await wiki.ingest()).complete, true);
+});
+
+test('historical evidence drift requests review without rewriting the record', async () => {
+  const wiki = await setup();
+  await wiki.capture({ id: 'historical', task: 'policy', actor: 'test', kind: 'decision',
+    at: '2026-09-10T10:00:00Z', choice: 'Use three retries.', evidence: ['src/main.ts'] });
+  await publish(wiki, patch((await wiki.ingest()).sources));
+  writeFileSync(join(wiki.root, 'src/main.ts'), 'export const retries = 8;\n');
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'change');
+  await publish(wiki, patch((await wiki.ingest()).sources));
+  const plan = await wiki.ingest();
+  assert.equal(plan.complete, false);
+  assert.equal(plan.sources.length, 0);
+  assert.equal(plan.reviewRequired.length, 1);
+  assert.match(wiki.pages().find(p => p.meta.type === 'decision')!.body, /three retries/);
+});
+
+test('quality checks resolve and deduplicate patterns in drafts and published pages', async () => {
+  const wiki = await setup();
+  for (let n = 0; n < 4; n++) writeFileSync(join(wiki.root, `src/m${n}.ts`), `export const n = ${n};\n`);
+  git(wiki.root, 'add', 'src'); git(wiki.root, 'commit', '-qm', 'module');
+  const draft = { path: 'flows/request.md', meta: { type: 'flow', title: 'Request',
+    sources: ['src', 'src/**', 'src/main.ts'] }, body: 'Short.' };
+  const check = await wiki.lintPages([draft] as any);
+  assert.match(check.findings.find(f => f.code === 'thin-coverage')!.message, /Claims 5 sources/);
+  await wiki.publishPages([draft] as any);
+  assert.equal((await wiki.ingest()).complete, false);
+  assert.equal((await wiki.ingest()).sources.length, 0);
+  assert.equal((await wiki.lint()).some(f => f.code === 'thin-coverage'), true);
+  await assert.rejects(wiki.seal(), /claim more sources/);
+  await wiki.publishPages([{ ...draft, meta: { ...draft.meta, sources: ['src'] },
+    body: 'The request enters the handler, validates its input, reads the configured retry limit, then executes the operation. Failures retry until the limit is exhausted and return an error.' }] as any);
+  assert.equal((await wiki.lint()).some(f => f.code === 'thin-flow'), false);
+  assert.equal((await wiki.ingest()).complete, true);
+});
+
 test('queries persist before agent research and deduplicate request IDs', async () => {
   const wiki = await setup();
   await wiki.ask('How many retries?', 'request-1');
