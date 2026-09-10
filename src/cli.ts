@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Command, InvalidArgumentError } from 'commander';
@@ -12,7 +12,8 @@ import { readDrafts } from './knowledge.js';
 import { briefingActive, hookActive, install, uninstall } from './integrations.js';
 import { dispatch } from './extensions.js';
 import type { ExtensionEvent } from './model.js';
-import { Store } from './runtime/store.js';
+import { commandSchema, type ProjectCommand } from './model.js';
+import { Store, read } from './runtime/store.js';
 
 // A path-installed CLI has no registry entry to look the build up in, so the one question
 // an operator asks of an unfamiliar binary must be answerable by the binary itself.
@@ -42,6 +43,23 @@ function count(value: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) throw new InvalidArgumentError('Expected a positive integer.');
   return parsed;
+}
+// `--root` has to be read before Commander reads it, because what the configuration declares decides
+// which commands exist at all. Only this one flag is looked for; everything else is the parser's.
+function declaredRoot(): string {
+  const flag = process.argv.indexOf('--root');
+  return resolve(flag > 0 ? process.argv[flag + 1] ?? '.' : process.cwd());
+}
+function projectCommands(path: string): ProjectCommand[] {
+  const raw = read(resolve(path, 'wikipoke.config.yaml'));
+  if (raw === null) return [];
+  try {
+    const declared = (parse(raw) as { commands?: unknown }).commands;
+    return (Array.isArray(declared) ? declared : []).flatMap(entry => {
+      const parsed = commandSchema.safeParse(entry);
+      return parsed.success ? [parsed.data] : [];
+    });
+  } catch { return []; }
 }
 program.command('init').description('create an explicit configuration and empty wiki')
   .requiredOption('--include <glob...>', 'source glob(s)')
@@ -151,6 +169,25 @@ program.command('install').description('install agent-neutral skills and a compo
   .action(() => { try { output(install(root())); } catch (error) { fail(error); } });
 program.command('uninstall').description('remove Wikipoke-managed skills and hooks, preserving knowledge')
   .action(() => { try { output(uninstall(root())); } catch (error) { fail(error); } });
+// Project commands are declared in the configuration, so they have to exist before the parser runs -
+// which means finding the root one flag ahead of the parser that would otherwise find it. A bad
+// declaration is skipped rather than thrown: a typo in one command must not take the other eighteen
+// down with it, and `doctor` is where a project goes to be told what it got wrong.
+const builtin = new Set(program.commands.map(command => command.name()));
+for (const declared of projectCommands(declaredRoot())) {
+  if (builtin.has(declared.name)) continue;
+  program.command(`${declared.name} [arguments...]`).description(`${declared.description} (project command)`)
+    .allowUnknownOption().action((args: string[]) => {
+      const path = root();
+      // Stdio is inherited: an agent runs this to read what it printed, and a captured pipe would
+      // turn a project's own tool into something only Wikipoke can see.
+      const result = spawnSync('sh', ['-c', `${declared.run} "$@"`, declared.name, ...args],
+        { cwd: path, stdio: 'inherit', timeout: declared.timeout * 1000,
+          env: { ...process.env, WIKIPOKE_ROOT: path, WIKIPOKE_COMMAND: declared.name } });
+      if (result.error) fail(result.error);
+      else process.exitCode = result.status ?? 1;
+    });
+}
 program.command('doctor').description('report environment and configured capabilities, with or without a wiki')
   .action(async () => {
     const path = root(), version = git('--version'), repo = repository(path), problems: string[] = [];
@@ -159,7 +196,7 @@ program.command('doctor').description('report environment and configured capabil
       config: configured ? 'wikipoke.config.yaml' : null, wiki: null,
       hook: '.wikipoke/hooks/post-commit', hookComposed: hookActive(path),
       briefing: '.wikipoke/hooks/session-start', briefingComposed: briefingActive(path),
-      extensions: [] as unknown[], pending: null, problems };
+      extensions: [] as unknown[], commands: [] as unknown[], pending: null, problems };
     if (Number(process.versions.node.split('.')[0]) < 22) problems.push(`Node 22 or later is required; running ${process.version}.`);
     if (!version) problems.push('Git is not on PATH; Wikipoke reads every source from Git.');
     else if (!repo) problems.push(`No Git repository with at least one commit at ${path}.`);
@@ -168,7 +205,7 @@ program.command('doctor').description('report environment and configured capabil
     if (!report.briefingComposed) problems.push('No agent harness runs .wikipoke/hooks/session-start; an agent will open a session without the attention signal.');
     if (configured) {
       try {
-        const raw = parse(readFileSync(configPath, 'utf8')) as { wiki?: string; extensions?: unknown };
+        const raw = parse(readFileSync(configPath, 'utf8')) as { wiki?: string; extensions?: unknown; commands?: unknown };
         report.wiki = raw.wiki ?? 'wiki';
         // Extensions are third-party scripts this project asked Wikipoke to run. Listing them is the
         // point of declaring them: a machine an operator is diagnosing should say what will fire and
@@ -182,6 +219,23 @@ program.command('doctor').description('report environment and configured capabil
           }
           return [{ event: parsed.data.event, run: parsed.data.run,
             timeout: parsed.data.timeout, blocking: parsed.data.blocking }];
+        });
+        // A project command that never registered is the failure nobody can see: the verb simply is
+        // not there, and `wikipoke <name>` reports an unknown command as if the project had never
+        // declared one. So the two ways that happens - a malformed entry and a name Wikipoke already
+        // owns - are named here, which is the one place a project goes to ask why.
+        const verbs = raw.commands;
+        report.commands = (Array.isArray(verbs) ? verbs : []).flatMap((entry, position) => {
+          const parsed = commandSchema.safeParse(entry);
+          if (!parsed.success) {
+            problems.push(`commands[${position}] is not a valid command: ${parsed.error.issues.map(i => i.message).join('; ')}`);
+            return [];
+          }
+          if (builtin.has(parsed.data.name)) {
+            problems.push(`commands[${position}] is named ${parsed.data.name}, which is a Wikipoke command; it was not registered. Rename it.`);
+            return [];
+          }
+          return [{ name: parsed.data.name, run: parsed.data.run, timeout: parsed.data.timeout }];
         });
       }
       catch (error) { problems.push(`Unreadable configuration: ${(error as Error).message}`); }

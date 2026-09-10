@@ -141,3 +141,51 @@ test('a project with no extensions spawns nothing and behaves exactly as before'
   assert.equal(result.stderr, '');
   assert.equal(existsSync(join(root, 'seen.json')), false);
 });
+
+// A project verb is the other half of the extension surface: extensions react to Wikipoke's
+// lifecycle and can only ever answer, while this is something an agent decides to run.
+function declare(root: string, ...commands: Record<string, unknown>[]) {
+  const path = join(root, 'wikipoke.config.yaml');
+  const config = parse(readFileSync(path, 'utf8'));
+  config.commands = [...(config.commands ?? []), ...commands];
+  writeFileSync(path, stringify(config));
+}
+
+test('a project command becomes a wikipoke verb, with its arguments and the root', () => {
+  const root = repository();
+  declare(root, { name: 'incident', description: 'Record an incident',
+    run: script(root, 'incident.sh', 'printf "%s|%s\\n" "$1" "$2" > "$WIKIPOKE_ROOT/ran"; echo "$WIKIPOKE_COMMAND" > "$WIKIPOKE_ROOT/verb"') });
+  // It is listed, so an agent that knows Wikipoke finds the project's own verb without being told.
+  assert.match(run(root, '--help').stdout, /incident .*Record an incident \(project command\)/s);
+  const result = run(root, 'incident', 'pool-drained', 'src/main.ts');
+  assert.equal(result.status, 0);
+  assert.equal(readFileSync(join(root, 'ran'), 'utf8').trim(), 'pool-drained|src/main.ts');
+  assert.equal(readFileSync(join(root, 'verb'), 'utf8').trim(), 'incident');
+});
+
+test('a project command generates a page of its own type through publish', () => {
+  const root = repository();
+  declare(root, { name: 'incident', run: script(root, 'incident.sh',
+    'dir="$WIKIPOKE_ROOT/.wikipoke/tmp/incidents"; mkdir -p "$dir"\n'
+    + 'printf -- "---\\ntype: incident\\ntitle: %s\\nsources:\\n  - src\\n---\\n\\nWhat happened.\\n" "$1" > "$dir/one.md"\n'
+    + `cd "${resolve(import.meta.dirname, "..")}" && "${process.execPath}" --import tsx "${cli}" --root "$WIKIPOKE_ROOT" publish --pages "$dir"`) });
+  const result = run(root, 'incident', 'The pool drained');
+  assert.equal(result.status, 0);
+  const page = readFileSync(join(root, 'wiki/one.md'), 'utf8');
+  // The script owns the shape; Wikipoke owns identity, the resolved pattern and the digest.
+  assert.match(page, /type: incident/);
+  assert.match(page, /uid: one/);
+  assert.match(page, /- id: src\n {4}revision: [0-9a-f]{12}\n {4}hash: [0-9a-f]{16}/);
+  assert.deepEqual(JSON.parse(run(root, 'status').stdout).uncovered, []);
+});
+
+test('a project command cannot shadow a Wikipoke command, and doctor says so', () => {
+  const root = repository();
+  declare(root, { name: 'publish', run: 'true' }, { name: 'Bad Name', run: 'true' });
+  const report = JSON.parse(run(root, 'doctor').stdout);
+  assert.deepEqual(report.commands, []);
+  assert.ok(report.problems.some((p: string) => p.includes('named publish, which is a Wikipoke command')));
+  assert.ok(report.problems.some((p: string) => p.includes('commands[1] is not a valid command')));
+  // The built-in still works: a project cannot take a Wikipoke verb away by declaring one.
+  assert.match(run(root, 'publish', '--pages', 'nowhere').stderr, /No \.md pages in/);
+});

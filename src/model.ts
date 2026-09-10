@@ -55,12 +55,35 @@ export const extensionSchema = z.object({
       message: `Only a .before event can refuse an action; ${extension.event} fires once it is already done` });
 });
 export type Extension = z.infer<typeof extensionSchema>;
+// A verb the project adds to Wikipoke's own. Extensions react to the lifecycle and can only ever
+// answer; this is the other half - something an agent can decide to run. It is what lets a project
+// have a page type of its own that is generated rather than written by hand: the script owns the
+// shape, writes Markdown, and hands it to `publish` like any other page.
+export const commandSchema = z.object({
+  name: z.string().regex(/^[a-z][a-z0-9-]*$/, 'A command name is lower-case letters, digits and hyphens'),
+  description: z.string().default('project command'),
+  run: z.string().min(1),
+  // Arguments reach the script as positional parameters. Stdio is the agent's, not a captured pipe:
+  // a project command is something an agent runs and reads, not an observer of a command it did not
+  // start, so its output has to arrive where the agent is looking.
+  timeout: z.number().int().positive().max(3600).default(120),
+});
+export type ProjectCommand = z.infer<typeof commandSchema>;
 export const configSchema = z.object({
   version: z.literal(1), wiki: z.string().default('wiki'), language: z.string().default('en'),
   include: z.array(z.string()).min(1), exclude: z.array(z.string()).default([]),
   // Empty by default and empty in most projects: Wikipoke does the deterministic work itself, and
   // whatever a particular team wants to happen around it is theirs to attach, not the tool's to guess.
+  // A malformed extension fails the whole configuration on purpose: a project that believes
+  // publication is gated must not have the gate quietly not exist. A malformed command is the
+  // opposite - nothing depends on it being there, and a typo in one verb taking every other command
+  // down with it is a far worse trade. So it is skipped, and `doctor` is where it gets named.
   extensions: z.array(extensionSchema).default([]),
+  commands: z.array(z.unknown()).default([])
+    .transform(list => list.flatMap(entry => {
+      const parsed = commandSchema.safeParse(entry);
+      return parsed.success ? [parsed.data] : [];
+    })),
   limits: z.object({ batchFiles: z.number().int().positive(),
     batchBytes: z.number().int().positive().default(64 * 1024) }),
 });
