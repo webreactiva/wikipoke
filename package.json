@@ -1,0 +1,22 @@
+{
+  "name": "wikipoke",
+  "version": "0.2.0",
+  "description": "A code wiki that agents maintain: three skills write it, one read-only CLI checks it",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "wikipoke": "bin/wikipoke.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "templates",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

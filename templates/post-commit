@@ -1,0 +1,5 @@
+#!/bin/sh
+# managed by wikipoke: runs the wiki's notifier after each commit, and never fails the commit.
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/{{WIKI}}/.wikipoke-hook.sh" ] && sh "$root/{{WIKI}}/.wikipoke-hook.sh"
+exit 0
