@@ -13,7 +13,7 @@ related:
 ---
 
 ```
-wikipoke init [--claude] [--dir docs/wiki]
+wikipoke init [--dir docs/wiki]
    │
    ├─ --dir given?  → validWiki()  → write/remove .wikipoke.json     (only when not "wiki")
    │

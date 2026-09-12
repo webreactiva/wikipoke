@@ -2,7 +2,7 @@
 // wikipoke: a code wiki that agents maintain. Three skills write it; this CLI sets it up and
 // checks it, and never writes a page.
 //
-//   wikipoke init [--claude]              the schema, the ignore list and the skills
+//   wikipoke init [--dir <path>]          the schema, the ignore list and the skills
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
@@ -21,7 +21,7 @@ import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
 import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, STATE_FILE, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 
@@ -66,7 +66,6 @@ try {
       json: { type: "boolean" },
       strict: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
-      claude: { type: "boolean" }, // accepted and ignored: the Claude skills are always written
       dir: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean" },
@@ -148,6 +147,15 @@ function hookNames(names: string[]): HookName[] {
 }
 
 if (command === "init") {
+  // Before anything is written: an init that cannot place the wiki must not go on to print the
+  // hook invitation and "next, seed the wiki", least of all exit 0 for an agent to believe.
+  if (flags.dir !== undefined) {
+    const choice = chooseWiki(flags.dir, root);
+    if (!choice.ok) {
+      console.error(choice.problem);
+      process.exit(2);
+    }
+  }
   print(init(root, flags.dir === undefined ? {} : { dir: flags.dir }));
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);

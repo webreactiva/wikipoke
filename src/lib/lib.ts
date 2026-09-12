@@ -99,11 +99,23 @@ export function wikiDir(root: string): string {
   }
 }
 
-/** A wiki path a project may set: relative, inside the repository, not the repository itself. */
-export function validWiki(value: unknown): string | null {
+/** A `--dir` path: the wiki directory it names, or why it cannot hold one. */
+export type WikiChoice = { ok: true; wiki: string } | { ok: false; problem: string };
+
+/**
+ * A wiki path a project may set: relative, inside the repository, not the repository itself, and
+ * not a path something else already occupies. The last one is checked here rather than left to
+ * `mkdir`, so a bad `--dir` is a sentence the caller can print instead of a stack trace from
+ * halfway through writing the files.
+ */
+export function chooseWiki(value: unknown, root: string): WikiChoice {
   const clean = String(value ?? "").trim().replace(/^\.\//, "").replace(/\/+$/, "");
-  if (!clean || clean === "." || clean.startsWith("/") || clean.split("/").includes("..")) return null;
-  return clean;
+  if (!clean || clean === "." || clean.startsWith("/") || clean.split("/").includes(".."))
+    return { ok: false, problem: `Not a usable wiki directory: ${String(value)}. Give a path inside the repository, such as docs/wiki.` };
+  const full = join(root, clean);
+  if (existsSync(full) && !statSync(full).isDirectory())
+    return { ok: false, problem: `${clean} is a file, not a directory: the wiki needs a directory of its own.` };
+  return { ok: true, wiki: clean };
 }
 
 /** The page types a wiki gets when its CONVENTIONS.md does not list its own. */
@@ -433,11 +445,14 @@ export function markdownLinks(body: string, pageRel: string, wikiDir: string, ro
  * `path:line` references in prose: the way CONVENTIONS.md says to point at code instead of copying
  * it. Fenced blocks are stripped, because a diagram or an example is not a claim; inline code is
  * kept, since a citation is normally written as `src/lib/lib.ts:96`.
+ *
+ * Lines are numbered from 1, so `file.js:0` points at nothing and is not a citation at all: it is
+ * left to the prose rather than reported as a pointer that rotted.
  */
 export function codeCitations(body: string): Citation[] {
   const prose = body.replace(/```[\s\S]*?```/g, "");
   const out: Citation[] = [];
-  for (const m of prose.matchAll(/(?<![\w:/.-])([\w.-]+(?:\/[\w.-]+)*\.[A-Za-z]\w{0,9}):(\d+)/g))
+  for (const m of prose.matchAll(/(?<![\w:/.-])([\w.-]+(?:\/[\w.-]+)*\.[A-Za-z]\w{0,9}):([1-9]\d*)/g))
     out.push({ raw: m[0], path: m[1] as string, line: Number(m[2]) });
   return out;
 }

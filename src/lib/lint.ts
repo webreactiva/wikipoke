@@ -188,8 +188,11 @@ function checkCitation({ raw, path, line }: Citation, { root, trackedSet, readSo
     return;
   }
   const body = readSource(path);
-  if (line > body.length) add("warn", `\`${raw}\` is past the end of ${path} (${body.length} lines): the code moved`, page);
-  else if (!(body[line - 1] as string).trim()) add("warn", `\`${raw}\` lands on a blank line: the code moved`, page);
+  // Indexed, not compared against the length: the line either is there or it is not, and asserting
+  // it is there because a regexp elsewhere only ever captures 1 upwards is how this once crashed.
+  const text = body[line - 1];
+  if (text === undefined) add("warn", `\`${raw}\` is past the end of ${path} (${body.length} lines): the code moved`, page);
+  else if (!text.trim()) add("warn", `\`${raw}\` lands on a blank line: the code moved`, page);
 }
 
 function readIfExists(path: string): string {

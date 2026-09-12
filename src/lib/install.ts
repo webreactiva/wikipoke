@@ -18,7 +18,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, writ
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, gitOrNull, validWiki, wikiDir } from "./lib.ts";
+import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, chooseWiki, gitOrNull, wikiDir } from "./lib.ts";
 
 export const MARKER = "managed by wikipoke";
 export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint"];
@@ -160,12 +160,12 @@ export function init(root: string, { dir }: InitOptions = {}): Report {
   const out = report();
   let wiki = wikiDir(root);
   if (dir !== undefined) {
-    const wanted = validWiki(dir);
-    if (!wanted) {
-      out.manual.push(`Not a usable wiki directory: ${dir}. Give a path inside the repository, such as docs/wiki.`);
-      return out;
-    }
-    wiki = wanted;
+    // The CLI rejects a bad `--dir` before it gets here, so this only catches a programmatic
+    // caller. It throws rather than reporting: a report that says nothing went wrong while none
+    // of the files were written is worse than no report at all.
+    const choice = chooseWiki(dir, root);
+    if (!choice.ok) throw new Error(choice.problem);
+    wiki = choice.wiki;
     const path = join(root, CONFIG_FILE);
     const current = read(path);
     // The default needs no configuration; anything else is written down so nothing has to guess.
