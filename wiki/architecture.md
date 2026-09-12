@@ -3,9 +3,9 @@ title: Architecture
 type: architecture
 responsibility: The map of wikipoke: who writes the wiki, who only measures it, and where the boundary between them is drawn.
 sources:
-  - bin/wikipoke.mjs
-  - lib/lib.mjs
-synced: 19b233f
+  - src/bin/wikipoke.ts
+  - src/lib/lib.ts
+synced: df4db0e
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -23,9 +23,9 @@ never writes a page. Everything else here follows from that split.
       wiki/**  ── pages, index.md, log.md, .wikipoke-state.json
             ▲
             │  reads, never writes
-   bin/wikipoke.mjs  ──►  lib/drift.mjs · lib/coverage.mjs · lib/lint.mjs
-            │                        └── lib/lib.mjs (git, frontmatter, globs, pages)
-            └──►  lib/install.mjs  ──►  templates/**  (copied, never generated)
+   src/bin/wikipoke.ts  ──►  src/lib/{drift,coverage,lint}.ts
+            │                        └── src/lib/lib.ts (git, frontmatter, globs, pages)
+            └──►  src/lib/install.ts  ──►  templates/**  (copied, never generated)
 ```
 
 ## The layers
@@ -34,24 +34,30 @@ never writes a page. Everything else here follows from that split.
 `CONVENTIONS.md` schema, the notifier and one file per hook. They are plain files copied
 verbatim with `{{WIKI}}` substituted, never strings built in code — a rule the project states in
 [AGENTS.md](../AGENTS.md) and which keeps the behaviour readable in the file that carries it. So
-most of wikipoke's behaviour is not in `lib/`: it is in prose an agent reads. See
+most of wikipoke's behaviour is not in `src/lib/`: it is in prose an agent reads. See
 [the skill contract](concepts/skills-as-product.md).
 
-**`lib/install.mjs` is the only writer.** `init`, `hooks add|remove` and `uninstall` copy
+**`src/lib/install.ts` is the only writer.** `init`, `hooks add|remove` and `uninstall` copy
 templates into place, add and remove wikipoke's own entries inside files the project shares
 (`.claude/settings.json`, `AGENTS.md`), and refuse to overwrite anything without the
 `managed by wikipoke` marker. It is documented in [components/install.md](components/install.md)
 and its ownership rule in [concepts/file-ownership.md](concepts/file-ownership.md).
 
-**The three checks are read-only and deterministic.** `lib/drift.mjs` answers "is the wiki behind
-the code?", `lib/coverage.mjs` "is all the code in the wiki?", and `lib/lint.mjs` "is the wiki
-internally sound?". They share `lib/lib.mjs`, which is where git shells out, frontmatter is parsed
-and globs are compiled. Each check exports the same `run(ctx)` / `report(result, opts)` pair, which
-is what lets `bin/wikipoke.mjs` treat them as a table rather than three special cases
-(`bin/wikipoke.mjs:23`).
+**The three checks are read-only and deterministic.** `src/lib/drift.ts` answers "is the wiki
+behind the code?", `src/lib/coverage.ts` "is all the code in the wiki?", and `src/lib/lint.ts` "is
+the wiki internally sound?". They share `src/lib/lib.ts`, which is where git shells out,
+frontmatter is parsed and globs are compiled. Each check exports the same `run(ctx)` /
+`report(result, opts)` pair, and each returns a different shape.
 
-**`bin/wikipoke.mjs` is argument parsing and exit codes.** It resolves the repository root and the
-wiki directory, dispatches, and decides what failure means: lint errors fail a plain run, while
+Until `df4db0e` the CLI kept the three in one object and indexed it by name, which worked because
+nothing had to know which shape came back. Under TypeScript that erases every result to the same
+type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
+name (`src/bin/wikipoke.ts:36`) — and counting, printing and `--json` each narrow it back
+(`src/bin/wikipoke.ts:198`). The uniform `run`/`report` contract is unchanged; what changed is that
+the uniformity is no longer allowed to lose the result's shape.
+
+**`src/bin/wikipoke.ts` is argument parsing and exit codes.** It resolves the repository root and
+the wiki directory, dispatches, and decides what failure means: lint errors fail a plain run, while
 staleness and coverage — which are debt, not breakage — do not. `--strict` makes every finding
 fail, for CI. See [flows/check.md](flows/check.md).
 
@@ -68,10 +74,15 @@ explains the one piece of state that does matter: the checkpoint and each page's
 
 | Path | What it is |
 | --- | --- |
-| `bin/wikipoke.mjs` | the CLI: `init`, `hooks`, `check`, `uninstall` |
-| `lib/install.mjs` | the installer: everything that writes outside `wiki/` |
-| `lib/{drift,coverage,lint}.mjs` | the three checks |
+| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `uninstall` |
+| `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
+| `src/lib/{drift,coverage,lint}.ts` | the three checks |
 | `templates/skills/*/SKILL.md` | the three skills: where the actual behaviour is |
 | `templates/CONVENTIONS.md` | the page schema, copied into every wiki and then owned by it |
 
-Node 22 or later, no dependencies, no build step. `npm test` runs `node --test test/*.test.mjs`.
+Node 22.18 or later, and no runtime dependencies: everything the CLI uses is in Node's standard
+library. Until `df4db0e` there was no build step either and the sources were `.mjs` under `bin/`
+and `lib/`; they are now TypeScript under `src/`, read from source in development and shipped
+compiled, for the reasons in
+[decisions/typescript-two-ways.md](decisions/typescript-two-ways.md). `npm test` runs
+`node --test test/*.test.ts`.

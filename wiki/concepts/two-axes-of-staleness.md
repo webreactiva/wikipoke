@@ -3,9 +3,9 @@ title: Two axes of staleness
 type: concept
 responsibility: Why the wiki tracks both a repository checkpoint and a per-page `synced:`, and what each one catches that the other misses.
 sources:
-  - lib/drift.mjs
+  - src/lib/drift.ts
   - templates/CONVENTIONS.md
-synced: 19b233f
+synced: df4db0e
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
@@ -38,6 +38,6 @@ There is deliberately no date field on a page. `git show -s --format=%cs <synced
 of the commit the page was verified against, which is the date that actually matters, and cannot
 drift from the sha the way a hand-written date can.
 
-Both axes measure against the **working tree**, not the last commit (`lib/lib.mjs:96`): a page is
+Both axes measure against the **working tree**, not the last commit (`src/lib/lib.ts:163`): a page is
 stale the moment its source is edited. A page with no `sources:` or no `synced:` is on neither
 axis — `drift` puts it in `skipped[]`, because a page with no contract cannot be called fresh.

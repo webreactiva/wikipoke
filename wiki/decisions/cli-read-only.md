@@ -4,8 +4,8 @@ type: decision
 responsibility: Why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
 sources:
   - README.md
-  - bin/wikipoke.mjs
-synced: 19b233f
+  - src/bin/wikipoke.ts
+synced: df4db0e
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md

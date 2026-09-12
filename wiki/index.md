@@ -16,7 +16,7 @@ What this repository knows about itself. Start at
 
 ## Components
 
-- [components/cli.md](./components/cli.md) — how `bin/wikipoke.mjs` dispatches the four commands and what each exit code means.
+- [components/cli.md](./components/cli.md) — how `src/bin/wikipoke.ts` dispatches the four commands and what each exit code means.
 - [components/checks.md](./components/checks.md) — what drift, coverage and lint each decide, and why all three are deterministic and read-only.
 - [components/lib.md](./components/lib.md) — the git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
 - [components/install.md](./components/install.md) — how init, hooks add/remove and uninstall write files without ever taking something the project owns.
@@ -37,3 +37,4 @@ What this repository knows about itself. Start at
 - [decisions/cli-read-only.md](./decisions/cli-read-only.md) — why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
 - [decisions/notify-never-write.md](./decisions/notify-never-write.md) — why no hook updates the wiki automatically, and why the notifier can never fail.
 - [decisions/plain-markdown-links.md](./decisions/plain-markdown-links.md) — why the wiki uses `[text](./page.md)` and reports `[[term]]` instead of resolving it.
+- [decisions/typescript-two-ways.md](./decisions/typescript-two-ways.md) — why the CLI runs from its TypeScript sources in development but ships compiled, and what that costs.

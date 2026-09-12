@@ -3,16 +3,16 @@ title: Coverage is debt, not failure
 type: concept
 responsibility: Why uncovered code never fails a check, and what that buys.
 sources:
-  - lib/coverage.mjs
-  - bin/wikipoke.mjs
-synced: 19b233f
+  - src/lib/coverage.ts
+  - src/bin/wikipoke.ts
+synced: df4db0e
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md
 ---
 
 `wikipoke check coverage` lists tracked files no page's `sources:` claims, and a plain run exits 0
-no matter how long that list is (`bin/wikipoke.mjs:198`). Only lint errors — a malformed page, a
+no matter how long that list is (`src/bin/wikipoke.ts:235`). Only lint errors — a malformed page, a
 dead source, a broken link — fail. The list is a backlog, and a long backlog on a large repository
 is the normal state of a wiki that was seeded honestly.
 

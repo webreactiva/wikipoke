@@ -3,8 +3,8 @@ title: Who owns which file
 type: concept
 responsibility: The `managed by wikipoke` marker, and the three ownership rules every write goes through.
 sources:
-  - lib/install.mjs
-synced: 68c8fa3
+  - src/lib/install.ts
+synced: df4db0e
 related:
   - ../components/install.md
   - ../flows/install.md
@@ -16,10 +16,10 @@ buckets, and the rule for each is decided before anything is written.
 **Wikipoke's, and refreshed.** The skills, the notifier, the OpenCode plugin, the Cursor rule.
 Each carries the line `managed by wikipoke` and is rewritten by `init` or `hooks add`. Find that
 marker, rewrite freely; do not find it, leave the file alone and print a `by hand` line saying what
-to add (`lib/install.mjs:64`). There is no `--force`.
+to add (`src/lib/install.ts:104`). There is no `--force`.
 
 **The project's from birth.** `wiki/CONVENTIONS.md` and `wiki/.wikipokeignore` are written once and
-then `kept` forever, even by a later `init` (`lib/install.mjs:131`). They are the schema and the
+then `kept` forever, even by a later `init` (`src/lib/install.ts:177`). They are the schema and the
 ignore list: the project is expected to edit them, and
 [when they disagree with the code, they win](./schema-lives-in-the-wiki.md). An upgrade that
 silently reset a project's conventions would be the worst bug wikipoke could ship.

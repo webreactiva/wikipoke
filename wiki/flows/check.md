@@ -3,11 +3,11 @@ title: A check run, end to end
 type: flow
 responsibility: What happens between typing `wikipoke check` and the exit code, across the CLI and the three checks.
 sources:
-  - bin/wikipoke.mjs
-  - lib/drift.mjs
-  - lib/coverage.mjs
-  - lib/lint.mjs
-synced: 19b233f
+  - src/bin/wikipoke.ts
+  - src/lib/drift.ts
+  - src/lib/coverage.ts
+  - src/lib/lint.ts
+synced: df4db0e
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -22,12 +22,12 @@ wikipoke check [names…] [--json] [--strict] [-v]
      ├─ no CONVENTIONS.md?        → "run wikipoke init first", exit 1
      ├─ no state and no pages?    → "unseeded", exit 0          (only on a plain run)
      │
-     ├─ for each named check: CHECKS[name].run({ root, wikiDir, wiki })
+     ├─ for each named check: runCheck(name, { root, wikiDir, wiki })  → { name, result }
      │       drift    ── git rev-list / git diff       → { repo, stale[], skipped[], fresh[] }
      │       coverage ── git ls-files + sources globs  → { unclaimed[], clusters[] }
      │       lint     ── read every page               → { errors[], warnings[] }
      │
-     ├─ total = Σ findings[name](result)
+     ├─ total = Σ countFindings(ran)
      │
      └─ --json ? print the raw result(s)
         all three and nothing found ? one green line

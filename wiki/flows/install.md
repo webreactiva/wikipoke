@@ -3,9 +3,9 @@ title: Installing into a repository
 type: flow
 responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in what order, and what they refuse to touch.
 sources:
-  - lib/install.mjs
-  - bin/wikipoke.mjs
-synced: 68c8fa3
+  - src/lib/install.ts
+  - src/bin/wikipoke.ts
+synced: df4db0e
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -31,7 +31,7 @@ safe to re-run — files that already match are skipped, so an upgrade refreshes
 reports only the difference — and it never overwrites the two files the project owns from the
 moment they exist.
 
-Hook detection is a hint, not a decision (`lib/install.mjs:153`): a `.cursor/` directory marks the
+Hook detection is a hint, not a decision (`src/lib/install.ts:199`): a `.cursor/` directory marks the
 `cursor` hook as `used here` in the listing, and nothing more. The hooks change what a terminal and
 other agents' sessions do, so they are only ever installed by name.
 
@@ -41,7 +41,7 @@ other agents' sessions do, so they are only ever installed by name.
 template is rendered with that path substituted for `{{WIKI}}` — the skills say `docs/wiki`, the
 hooks run `docs/wiki/.wikipoke-hook.sh`, and `CONVENTIONS.md` documents `docs/wiki`. Passing the
 default back (`--dir wiki`) removes the config file rather than writing a redundant one
-(`lib/install.mjs:120`).
+(`src/lib/install.ts:166`).
 
 Moving an existing wiki is therefore three steps and no magic: move the folder, edit
 `.wikipoke.json`, run `init` again to re-render the skills. Nothing scans for a wiki, so nothing

@@ -36,6 +36,21 @@ once (`templates/opencode-plugin.js:8`); the Cursor rule and the `AGENTS.md` blo
 agent to run it, because neither tool offers a place to run a command. The Claude hook sits in
 between: Claude Code runs the command, and what it prints reaches the session.
 
+## Only one of the five cannot travel
+
+The table's first column decides more than which tool is told: it decides whether a clone gets the
+hook at all. `git` writes into `.git/hooks/`, which git never versions, so it is per-clone by
+construction — every checkout has to run `wikipoke hooks add git` again, and nothing about the
+repository can carry it. The other four write ordinary repository files (`.claude/settings.json`,
+`.opencode/plugin/wikipoke.js`, `.cursor/rules/wikipoke.mdc`, a block in `AGENTS.md`), so committing
+them makes the notice arrive for everyone who clones, with nobody installing anything.
+
+That matters because hooks are never installed by default and `init` only offers them at a TTY
+(see [the entry point](./cli.md)): a repository set up through an agent gets none, and drift then
+goes unreported until a person happens to run `wikipoke check` by hand. A repository that wants the
+notice to survive its own setup should install and commit at least one of the four, `agents` being
+the cheapest since it needs no tool-specific file.
+
 Silence is the design. The notifier prints nothing when the wiki is current, so a current wiki adds
 nothing to any prompt and costs nobody attention. When it does speak it says what is owed and
 names the skill — and stops there. **No hook ever writes the wiki**: ingesting is a person's call,
