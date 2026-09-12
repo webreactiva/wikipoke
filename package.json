@@ -1,22 +1,28 @@
 {
   "name": "wikipoke",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A code wiki that agents maintain: three skills write it, one read-only CLI checks it",
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "bin": {
-    "wikipoke": "bin/wikipoke.mjs"
+    "wikipoke": "dist/bin/wikipoke.js"
   },
   "files": [
-    "bin",
-    "lib",
+    "dist",
     "templates",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').chmodSync('dist/bin/wikipoke.js', 0o755)\"",
+    "typecheck": "tsc",
+    "test": "node --test test/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.3"
   }
 }

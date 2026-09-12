@@ -14,14 +14,32 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 
-import * as coverage from "../lib/coverage.mjs";
-import * as drift from "../lib/drift.mjs";
-import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.mjs";
-import { IGNORE_FILE, STATE_FILE, color, listPages, repoRoot, wikiDir } from "../lib/lib.mjs";
-import * as lint from "../lib/lint.mjs";
+import type { CoverageResult } from "../lib/coverage.ts";
+import * as coverage from "../lib/coverage.ts";
+import type { DriftResult } from "../lib/drift.ts";
+import * as drift from "../lib/drift.ts";
+import type { HookName, Report } from "../lib/install.ts";
+import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
+import type { CheckContext, ReportOptions } from "../lib/lib.ts";
+import { IGNORE_FILE, STATE_FILE, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import type { LintResult } from "../lib/lint.ts";
+import * as lint from "../lib/lint.ts";
 
-const CHECKS = { drift, coverage, lint };
-const HOOK_NAMES = Object.keys(HOOKS);
+const CHECKS = ["drift", "coverage", "lint"] as const;
+type CheckName = (typeof CHECKS)[number];
+const isCheck = (name: string): name is CheckName => (CHECKS as readonly string[]).includes(name);
+
+/**
+ * One check, run. Tagging the result with the name it came from is what lets the three shapes
+ * travel together through counting, printing and `--json` without any of them being widened away.
+ */
+type Ran =
+  | { name: "drift"; result: DriftResult }
+  | { name: "coverage"; result: CoverageResult }
+  | { name: "lint"; result: LintResult };
+
+const HOOK_NAMES = Object.keys(HOOKS) as HookName[];
+const isHook = (name: string): name is HookName => (HOOK_NAMES as string[]).includes(name);
 
 const HELP = `wikipoke: a code wiki that agents maintain
 
@@ -56,14 +74,14 @@ try {
     },
   });
 } catch (error) {
-  console.error(`${error.message}\n\n${HELP}`);
+  console.error(`${(error as Error).message}\n\n${HELP}`);
   process.exit(2);
 }
 const { values: flags, positionals } = args;
 const [command, ...rest] = positionals;
 
 if (flags.version) {
-  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
   console.log(manifest.version);
   process.exit(0);
 }
@@ -72,7 +90,7 @@ if (flags.help || !command) {
   process.exit(command || flags.help ? 0 : 2);
 }
 
-let root;
+let root: string;
 try {
   root = repoRoot();
 } catch {
@@ -82,26 +100,26 @@ try {
 let wiki = wikiDir(root);
 let wikiPath = join(root, wiki);
 
-function print(report) {
-  for (const label of ["created", "updated", "removed", "kept"])
+function print(report: Report): void {
+  for (const label of ["created", "updated", "removed", "kept"] as const)
     for (const path of report[label]) console.log(`${color.dim(label.padEnd(8))} ${path}`);
   for (const step of report.manual) console.log(`${color.yellow("by hand")}  ${step}`);
 }
 
-function printHooks() {
+function printHooks(): void {
   for (const hook of hookStatus(root, wiki)) {
     const state = hook.installed ? color.green("installed") : hook.detected ? color.dim("used here") : "";
     console.log(`  ${hook.name.padEnd(9)} ${hook.when.padEnd(52)} ${state}`);
   }
 }
 
-function hookNames(names) {
-  const unknown = names.filter((name) => !HOOKS[name]);
+function hookNames(names: string[]): HookName[] {
+  const unknown = names.filter((name) => !isHook(name));
   if (!names.length || unknown.length) {
     console.error(`${unknown.length ? `unknown hook: ${unknown.join(", ")}. ` : ""}Name one or more of: ${HOOK_NAMES.join(", ")}`);
     process.exit(2);
   }
-  return [...new Set(names)];
+  return [...new Set(names.filter(isHook))];
 }
 
 if (command === "init") {
@@ -153,9 +171,9 @@ if (command !== "check") {
   process.exit(2);
 }
 
-const unknown = rest.filter((name) => !CHECKS[name]);
+const unknown = rest.filter((name) => !isCheck(name));
 if (unknown.length) {
-  console.error(`unknown check: ${unknown.join(", ")} (expected: ${Object.keys(CHECKS).join(", ")})`);
+  console.error(`unknown check: ${unknown.join(", ")} (expected: ${CHECKS.join(", ")})`);
   process.exit(2);
 }
 
@@ -174,25 +192,44 @@ if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).lengt
   process.exit(flags.strict ? 1 : 0);
 }
 
-const names = all ? Object.keys(CHECKS) : [...new Set(rest)];
-const ctx = { root, wikiDir: wikiPath, wiki };
-const results = Object.fromEntries(names.map((name) => [name, CHECKS[name].run(ctx)]));
+const names: CheckName[] = all ? [...CHECKS] : [...new Set(rest.filter(isCheck))];
+const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
 
-const findings = {
-  lint: (r) => r.errors.length + r.warnings.length,
-  drift: (r) => r.stale.length + r.skipped.length + (r.repo.status === "current" ? 0 : 1),
-  coverage: (r) => r.unclaimed.length,
+const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
+  name === "drift"
+    ? { name, result: drift.run(ctx) }
+    : name === "coverage"
+      ? { name, result: coverage.run(ctx) }
+      : { name, result: lint.run(ctx) };
+
+const countFindings = (ran: Ran): number =>
+  ran.name === "drift"
+    ? ran.result.stale.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
+    : ran.name === "coverage"
+      ? ran.result.unclaimed.length
+      : ran.result.errors.length + ran.result.warnings.length;
+
+const reportOne = (ran: Ran, opts: ReportOptions): void => {
+  if (ran.name === "drift") drift.report(ran.result, opts);
+  else if (ran.name === "coverage") coverage.report(ran.result, opts);
+  else lint.report(ran.result);
 };
-const total = names.reduce((sum, name) => sum + findings[name](results[name]), 0);
+
+const results = names.map((name) => runCheck(name, ctx));
+const total = results.reduce((sum, ran) => sum + countFindings(ran), 0);
+const lintResult = results.find((ran) => ran.name === "lint")?.result as LintResult | undefined;
 
 if (flags.json) {
-  console.log(JSON.stringify(names.length === 1 ? results[names[0]] : results, null, 2));
+  const first = results[0];
+  console.log(
+    JSON.stringify(results.length === 1 && first ? first.result : Object.fromEntries(results.map((r) => [r.name, r.result])), null, 2),
+  );
 } else if (all && !total) {
-  console.log(color.green(`✓ wiki: current, covered and sound (${results.lint.pages} pages)`));
+  console.log(color.green(`✓ wiki: current, covered and sound (${lintResult?.pages ?? 0} pages)`));
 } else {
-  for (const name of names)
-    if (findings[name](results[name]) || (name === "lint" && !all)) CHECKS[name].report(results[name], { verbose: flags.verbose });
+  for (const ran of results)
+    if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
 }
 
-const errors = results.lint?.errors.length ?? 0;
+const errors = lintResult?.errors.length ?? 0;
 process.exit(flags.strict ? (total ? 1 : 0) : errors ? 1 : 0);

@@ -19,13 +19,80 @@ export const STATE_FILE = ".wikipoke-state.json";
 export const HOOK_FILE = ".wikipoke-hook.sh";
 
 /**
+ * What `check` hands every check: the repository root, the wiki's absolute path, and the wiki's
+ * path relative to the root, which is the one that goes into messages a person reads.
+ */
+export interface CheckContext {
+  root: string;
+  wikiDir: string;
+  wiki: string;
+}
+
+/** `-v` is the only thing a report reads; each check decides what it means for its own output. */
+export interface ReportOptions {
+  verbose?: boolean | undefined;
+}
+
+/**
+ * A page as `listPages` finds it, before its text is read. `id` is what messages and links use;
+ * `rel` is the path inside the wiki; `path` is absolute.
+ */
+export interface Page {
+  id: string;
+  rel: string;
+  path: string;
+}
+
+/** One frontmatter value: the flat contract allows scalars and lists of scalars, nothing deeper. */
+export type FrontmatterValue = string | string[];
+
+/** Parsed frontmatter. Pages may carry keys the checks never look at, so this stays open. */
+export type Frontmatter = Record<string, FrontmatterValue | undefined>;
+
+/** A page with its text read and its frontmatter parsed. `meta` is null when there is none. */
+export interface LoadedPage extends Page {
+  meta: Frontmatter | null;
+  body: string;
+  raw: string;
+}
+
+/** Where a link points, as far as the checks are concerned. */
+export type LinkKind = "page" | "repo" | "external";
+
+/** A Markdown link out of a page. `target` is null only when nothing can be resolved. */
+export interface Link {
+  raw: string;
+  target: string | null;
+  kind: LinkKind;
+}
+
+/** A `path:line` pointer in prose. */
+export interface Citation {
+  raw: string;
+  path: string;
+  line: number;
+}
+
+/** `.wikipokeignore`, split into what it takes out and what a `!` line brings back. */
+export interface IgnoreRules {
+  excludes: string[];
+  includes: string[];
+}
+
+/** The repository checkpoint the ingest skill writes and only it advances. */
+export interface State {
+  version?: number;
+  last_indexed_commit?: string;
+}
+
+/**
  * The wiki directory, relative to the repository root: `wiki`, or whatever `.wikipoke.json` says.
  * Everything else takes it as an argument, so a repository can keep its wiki wherever it wants.
  */
-export function wikiDir(root) {
+export function wikiDir(root: string): string {
   try {
     const raw = readFileSync(join(root, CONFIG_FILE), "utf8");
-    const value = JSON.parse(raw).wiki;
+    const value: unknown = (JSON.parse(raw) as { wiki?: unknown }).wiki;
     return typeof value === "string" && value.trim() ? value.replace(/\/+$/, "") : DEFAULT_WIKI;
   } catch {
     return DEFAULT_WIKI;
@@ -33,7 +100,7 @@ export function wikiDir(root) {
 }
 
 /** A wiki path a project may set: relative, inside the repository, not the repository itself. */
-export function validWiki(value) {
+export function validWiki(value: unknown): string | null {
   const clean = String(value ?? "").trim().replace(/^\.\//, "").replace(/\/+$/, "");
   if (!clean || clean === "." || clean.startsWith("/") || clean.split("/").includes("..")) return null;
   return clean;
@@ -67,15 +134,15 @@ const MANIFESTS = [
   "Gemfile", "pom.xml", "build.gradle", "build.gradle.kts", "mix.exs", "deno.json",
 ];
 
-export function repoRoot(cwd = process.cwd()) {
+export function repoRoot(cwd: string = process.cwd()): string {
   return git(cwd, ["rev-parse", "--show-toplevel"]).trim();
 }
 
-export function git(root, args, opts = {}) {
+export function git(root: string, args: string[], opts: Record<string, unknown> = {}): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, ...opts });
 }
 
-export function gitOrNull(root, args) {
+export function gitOrNull(root: string, args: string[]): string | null {
   try {
     return git(root, args, { stdio: ["ignore", "pipe", "ignore"] });
   } catch {
@@ -83,33 +150,33 @@ export function gitOrNull(root, args) {
   }
 }
 
-export function commitExists(root, sha) {
+export function commitExists(root: string, sha: string): boolean {
   return gitOrNull(root, ["cat-file", "-e", `${sha}^{commit}`]) !== null;
 }
 
-const lines = (s) => (s ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+const lines = (s: string | null): string[] => (s ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
 
 /**
  * Files changed between `sha` and the working tree, new files included. Uncommitted work counts:
  * a page is stale the moment its source is edited, not only once it is committed.
  */
-export function changedSince(root, sha) {
+export function changedSince(root: string, sha: string): string[] {
   const tracked = gitOrNull(root, ["diff", "--name-only", sha, "--"]);
   const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
   return [...new Set([...lines(tracked), ...lines(untracked)])].sort();
 }
 
-export function commitsSince(root, sha) {
+export function commitsSince(root: string, sha: string): number {
   const out = gitOrNull(root, ["rev-list", "--count", `${sha}..HEAD`]);
   return out ? Number(out.trim()) : 0;
 }
 
-export function shortSha(sha) {
+export function shortSha(sha: string | undefined): string {
   return (sha ?? "").slice(0, 7);
 }
 
 /** Every tracked file in the repository. */
-export function trackedFiles(root) {
+export function trackedFiles(root: string): string[] {
   return lines(gitOrNull(root, ["ls-files"]));
 }
 
@@ -118,9 +185,9 @@ export function trackedFiles(root) {
  * order-independent — every `!` line wins over every plain one — because these are git pathspecs
  * applied in two passes, not gitignore rules read top to bottom.
  */
-export function ignoreRules(wikiDir) {
-  const excludes = [];
-  const includes = [];
+export function ignoreRules(wikiDir: string): IgnoreRules {
+  const excludes: string[] = [];
+  const includes: string[] = [];
   for (const line of readIgnore(wikiDir)) {
     if (!line.startsWith("!")) excludes.push(line);
     else if (line.slice(1).trim()) includes.push(line.slice(1).trim());
@@ -129,7 +196,7 @@ export function ignoreRules(wikiDir) {
 }
 
 /** `.wikipokeignore`'s plain lines as git exclude pathspecs. */
-export function ignoreSpecs(wikiDir) {
+export function ignoreSpecs(wikiDir: string): string[] {
   return ignoreRules(wikiDir).excludes.map((p) => `:(exclude)${p}`);
 }
 
@@ -138,7 +205,7 @@ export function ignoreSpecs(wikiDir) {
  * lines bring back. Git does the matching in both passes, so one pathspec dialect decides
  * everything: a plain `*` crosses directories, exactly as the ignore file says it does.
  */
-function indexablePaths(root, wikiDir, args) {
+function indexablePaths(root: string, wikiDir: string, args: string[]): string[] {
   const { excludes, includes } = ignoreRules(wikiDir);
   const kept = lines(gitOrNull(root, [...args, "--", ".", ...excludes.map((p) => `:(exclude)${p}`)]));
   if (!includes.length) return kept;
@@ -147,12 +214,12 @@ function indexablePaths(root, wikiDir, args) {
 }
 
 /** Tracked files minus wiki/.wikipokeignore: what coverage and the repo axis are measured against. */
-export function indexableFiles(root, wikiDir) {
+export function indexableFiles(root: string, wikiDir: string): string[] {
   return indexablePaths(root, wikiDir, ["ls-files"]);
 }
 
 /** Files changed in a git range, filtered the same way: the repo axis of drift. */
-export function indexableChanges(root, wikiDir, range) {
+export function indexableChanges(root: string, wikiDir: string, range: string): string[] {
   return indexablePaths(root, wikiDir, ["diff", "--name-only", range]);
 }
 
@@ -161,24 +228,24 @@ export function indexableChanges(root, wikiDir, range) {
  * never code and would drown the list. Ignoring is a conscious call, so the number is reported
  * rather than left to be discovered by its absence.
  */
-export function ignoredFiles(root, wikiDir) {
+export function ignoredFiles(root: string, wikiDir: string): string[] {
   const indexable = new Set(indexableFiles(root, wikiDir));
   const wiki = `${relative(root, wikiDir).split(sep).join(posix.sep)}/`;
   return trackedFiles(root).filter((f) => !indexable.has(f) && !f.startsWith(wiki));
 }
 
-export function readIgnore(wikiDir) {
+export function readIgnore(wikiDir: string): string[] {
   const file = join(wikiDir, IGNORE_FILE);
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
 }
 
 /** The repository checkpoint: { version, last_indexed_commit }. */
-export function readState(wikiDir) {
+export function readState(wikiDir: string): State | null {
   const file = join(wikiDir, STATE_FILE);
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    return JSON.parse(readFileSync(file, "utf8")) as State;
   } catch {
     return null;
   }
@@ -189,13 +256,13 @@ export function readState(wikiDir) {
  * heading in CONVENTIONS.md, so a project adds a type by adding a row. Falls back to the defaults
  * when the file or the table is missing.
  */
-export function pageTypes(wikiDir) {
+export function pageTypes(wikiDir: string): string[] {
   const file = join(wikiDir, "CONVENTIONS.md");
   if (!existsSync(file)) return DEFAULT_TYPES;
   const text = readFileSync(file, "utf8").split("\n");
   const start = text.findIndex((line) => /^##\s.*page types/i.test(line));
   if (start === -1) return DEFAULT_TYPES;
-  const types = [];
+  const types: string[] = [];
   let body = false; // rows count only after the header separator
   for (const line of text.slice(start + 1)) {
     if (/^##\s/.test(line)) break;
@@ -210,9 +277,9 @@ export function pageTypes(wikiDir) {
 }
 
 /** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */
-export function listPages(wikiDir) {
-  const out = [];
-  const walk = (dir) => {
+export function listPages(wikiDir: string): Page[] {
+  const out: Page[] = [];
+  const walk = (dir: string): void => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.name.startsWith(".")) continue;
@@ -234,24 +301,26 @@ export function listPages(wikiDir) {
  * limited: it is the contract CONVENTIONS.md documents, and a parser that accepts more than the
  * contract lets pages drift out of it.
  */
-export function parseFrontmatter(raw) {
+export function parseFrontmatter(raw: string): { data: Frontmatter | null; body: string } {
   if (!raw.startsWith("---")) return { data: null, body: raw };
   const end = raw.indexOf("\n---", 3);
   if (end === -1) return { data: null, body: raw };
   const block = raw.slice(raw.indexOf("\n") + 1, end);
   const body = raw.slice(end + 4);
-  const data = {};
-  let currentKey = null;
+  const data: Frontmatter = {};
+  let currentKey: string | null = null;
   for (const line of block.split("\n")) {
     if (!line.trim() || line.trim().startsWith("#")) continue;
     const item = line.match(/^\s+-\s+(.*)$/);
-    if (item && currentKey) {
-      data[currentKey].push(unquote(item[1]));
+    if (item?.[1] !== undefined && currentKey) {
+      // A `- item` line only ever follows the empty `key:` that opened the list.
+      (data[currentKey] as string[]).push(unquote(item[1]));
       continue;
     }
     const pair = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
     if (!pair) continue;
-    const [, key, rest] = pair;
+    const key = pair[1] as string;
+    const rest = pair[2] as string;
     if (rest === "") {
       currentKey = key;
       data[key] = [];
@@ -266,18 +335,24 @@ export function parseFrontmatter(raw) {
   return { data, body };
 }
 
-function unquote(value) {
+function unquote(value: string): string {
   return value.replace(/^["']|["']$/g, "").trim();
 }
 
-export function readPage(page) {
+export function readPage(page: Page): LoadedPage {
   const raw = readFileSync(page.path, "utf8");
   const { data, body } = parseFrontmatter(raw);
   return { ...page, meta: data, body, raw };
 }
 
+/** One frontmatter key as the list it may also be written as: `sources:`, `related:`. */
+export function asList(value: FrontmatterValue | undefined): string[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 /** A wildcard-free source pointing at a directory means `dir/**`. */
-export function normalizeSource(source, root) {
+export function normalizeSource(source: string, root: string): string {
   if (/[*?]/.test(source)) return source;
   const full = join(root, source);
   if (existsSync(full) && statSync(full).isDirectory()) return `${source.replace(/\/$/, "")}/**`;
@@ -288,7 +363,7 @@ export function normalizeSource(source, root) {
  * Does this `sources:` entry claim a whole package (a directory with its own manifest) or the whole
  * repository? Such a claim makes coverage read green for code nobody wrote up.
  */
-export function isOverBroad(source, root) {
+export function isOverBroad(source: string, root: string): boolean {
   if (/^(\.|\*\*?)(\/\*\*?)*\/?$/.test(source)) return true;
   const dir = source.replace(/\/\*\*$/, "").replace(/\/$/, "");
   if (/[*?]/.test(dir)) return false;
@@ -297,7 +372,7 @@ export function isOverBroad(source, root) {
   return MANIFESTS.some((m) => existsSync(join(full, m)));
 }
 
-export function globToRegExp(glob) {
+export function globToRegExp(glob: string): RegExp {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i];
@@ -316,19 +391,19 @@ export function globToRegExp(glob) {
     } else if (c === "?") {
       re += "[^/]";
     } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      re += (c as string).replace(/[.+^${}()|[\]\\]/g, "\\$&");
     }
   }
   return new RegExp(`^${re}$`);
 }
 
-export function matchesAny(file, patterns) {
+export function matchesAny(file: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(file));
 }
 
 /** Compiled matchers for one page's `sources:`. */
-export function sourcePatterns(meta, root) {
-  return [].concat(meta?.sources ?? []).map((s) => globToRegExp(normalizeSource(s, root)));
+export function sourcePatterns(meta: Frontmatter | null, root: string): RegExp[] {
+  return asList(meta?.sources).map((s) => globToRegExp(normalizeSource(s, root)));
 }
 
 /**
@@ -340,11 +415,11 @@ export function sourcePatterns(meta, root) {
  * Plain Markdown on purpose: it is checkable here, and `[[term]]` tends to collide with whatever
  * the host project already uses double brackets for.
  */
-export function markdownLinks(body, pageRel, wikiDir, root) {
+export function markdownLinks(body: string, pageRel: string, wikiDir: string, root: string): Link[] {
   const prose = body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
-  const out = [];
+  const out: Link[] = [];
   for (const m of prose.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
-    const raw = m[1];
+    const raw = m[1] as string;
     if (/^(?:https?:|mailto:|#)/.test(raw)) {
       out.push({ raw, target: null, kind: "external" });
       continue;
@@ -357,31 +432,31 @@ export function markdownLinks(body, pageRel, wikiDir, root) {
 /**
  * `path:line` references in prose: the way CONVENTIONS.md says to point at code instead of copying
  * it. Fenced blocks are stripped, because a diagram or an example is not a claim; inline code is
- * kept, since a citation is normally written as `lib/lib.mjs:96`.
+ * kept, since a citation is normally written as `src/lib/lib.ts:96`.
  */
-export function codeCitations(body) {
+export function codeCitations(body: string): Citation[] {
   const prose = body.replace(/```[\s\S]*?```/g, "");
-  const out = [];
+  const out: Citation[] = [];
   for (const m of prose.matchAll(/(?<![\w:/.-])([\w.-]+(?:\/[\w.-]+)*\.[A-Za-z]\w{0,9}):(\d+)/g))
-    out.push({ raw: m[0], path: m[1], line: Number(m[2]) });
+    out.push({ raw: m[0], path: m[1] as string, line: Number(m[2]) });
   return out;
 }
 
 /** `[[...]]` in prose. Never resolved: reported, so a page written for another tool shows up. */
-export function wikilinks(body) {
+export function wikilinks(body: string): string[] {
   const prose = body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
   return [...prose.matchAll(/\[\[([^\]\n]+)\]\]/g)].map((m) => m[0]);
 }
 
 /** `related:` entries are declared links and get checked exactly like body links. */
-export function relatedLinks(meta, pageRel, wikiDir, root) {
-  return [].concat(meta?.related ?? [])
+export function relatedLinks(meta: Frontmatter | null, pageRel: string, wikiDir: string, root: string): Link[] {
+  return asList(meta?.related)
     .filter((r) => r.endsWith(".md"))
     .map((r) => classifyLink(r, pageRel, wikiDir, root));
 }
 
-function classifyLink(raw, pageRel, wikiDir, root) {
-  let clean = raw.split("#")[0];
+function classifyLink(raw: string, pageRel: string, wikiDir: string, root: string): Link {
+  let clean = raw.split("#")[0] as string;
   try {
     clean = decodeURI(clean);
   } catch {
@@ -397,6 +472,15 @@ function classifyLink(raw, pageRel, wikiDir, root) {
   return { raw, target: relative(root, abs).split(sep).join(posix.sep), kind: "repo" };
 }
 
+/** Paints a string for a terminal, and leaves it alone when the output is not one. */
+export type Paint = (s: string | number) => string;
+
 const tty = process.stdout.isTTY;
-const paint = (code) => (s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : String(s));
-export const color = { dim: paint(2), red: paint(31), yellow: paint(33), green: paint(32), bold: paint(1) };
+const paint = (code: number): Paint => (s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : String(s));
+export const color: Record<"dim" | "red" | "yellow" | "green" | "bold", Paint> = {
+  dim: paint(2),
+  red: paint(31),
+  yellow: paint(33),
+  green: paint(32),
+  bold: paint(1),
+};

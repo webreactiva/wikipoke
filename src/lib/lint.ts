@@ -6,12 +6,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import type { CheckContext, Citation, Link } from "./lib.ts";
 import {
   CONFIDENCE,
   INDEX_SCALE_LIMIT,
   NON_PAGES,
   REQUIRED_KEYS,
   STATE_FILE,
+  asList,
   codeCitations,
   color,
   commitExists,
@@ -26,11 +28,33 @@ import {
   relatedLinks,
   trackedFiles,
   wikilinks,
-} from "./lib.mjs";
+} from "./lib.ts";
 
-export function run({ root, wikiDir, wiki }) {
-  const findings = [];
-  const add = (level, message, page) => findings.push({ level, message, page });
+/** An error breaks the wiki; a warning is debt. Only errors fail a plain `check`. */
+export type Level = "error" | "warn";
+
+/** One thing lint found. `page` is a page id, or undefined for a finding about the wiki itself. */
+export interface Finding {
+  level: Level;
+  message: string;
+  page: string | undefined;
+}
+
+export interface LintResult {
+  errors: Finding[];
+  warnings: Finding[];
+  pages: number;
+}
+
+/** Records a finding. Everything in this file reports through one of these. */
+type Add = (level: Level, message: string, page?: string) => void;
+
+/** Reads a repository file, split into lines, once per file however often it is cited. */
+type ReadSource = (path: string) => string[];
+
+export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
+  const findings: Finding[] = [];
+  const add: Add = (level, message, page) => void findings.push({ level, message, page });
 
   const pages = listPages(wikiDir).map(readPage);
   const types = pageTypes(wikiDir);
@@ -71,16 +95,16 @@ export function run({ root, wikiDir, wiki }) {
         add("error", `missing \`${key}:\``, page.id);
     }
 
-    if (meta.type && !types.includes(meta.type))
+    if (typeof meta.type === "string" && meta.type && !types.includes(meta.type))
       add("error", `unknown type \`${meta.type}\` (valid: ${types.join(", ")}; CONVENTIONS.md lists them)`, page.id);
 
-    if (meta.confidence && !CONFIDENCE.includes(meta.confidence))
+    if (typeof meta.confidence === "string" && meta.confidence && !CONFIDENCE.includes(meta.confidence))
       add("error", `unknown confidence \`${meta.confidence}\` (valid: ${CONFIDENCE.join(", ")})`, page.id);
 
-    if (meta.synced && !commitExists(root, meta.synced))
+    if (typeof meta.synced === "string" && meta.synced && !commitExists(root, meta.synced))
       add("error", `\`synced: ${meta.synced}\` is not a commit in this repository`, page.id);
 
-    for (const source of [].concat(meta.sources ?? [])) {
+    for (const source of asList(meta.sources)) {
       const re = globToRegExp(normalizeSource(source, root));
       if (!tracked.some((f) => re.test(f))) {
         add("error", `dead source (matches no tracked file): \`${source}\``, page.id);
@@ -132,13 +156,22 @@ export function run({ root, wikiDir, wiki }) {
 }
 
 /** Reads a repository file once, split into lines. Pages cite the same file many times over. */
-function sourceReader(root) {
-  const cache = new Map();
+function sourceReader(root: string): ReadSource {
+  const cache = new Map<string, string[]>();
   return (path) => {
     // The trailing newline is not a line: "past the end of a 5-line file" must say 5.
-    if (!cache.has(path)) cache.set(path, readFileSync(join(root, path), "utf8").replace(/\n$/, "").split("\n"));
-    return cache.get(path);
+    let body = cache.get(path);
+    if (!body) cache.set(path, (body = readFileSync(join(root, path), "utf8").replace(/\n$/, "").split("\n")));
+    return body;
   };
+}
+
+interface CitationContext {
+  root: string;
+  trackedSet: Set<string>;
+  readSource: ReadSource;
+  add: Add;
+  page: string;
 }
 
 /**
@@ -147,7 +180,7 @@ function sourceReader(root) {
  * wikipoke-lint skill's deep pass — but "the file lost 40 lines" it can see, and that is the shape
  * a citation usually rots into. A warning, never an error: a pointer that drifted is debt.
  */
-function checkCitation({ raw, path, line }, { root, trackedSet, readSource, add, page }) {
+function checkCitation({ raw, path, line }: Citation, { root, trackedSet, readSource, add, page }: CitationContext): void {
   if (!trackedSet.has(path)) {
     // No directory means it is probably prose, not a path. A missing directory means an example.
     if (path.includes("/") && existsSync(join(root, dirname(path))))
@@ -156,16 +189,25 @@ function checkCitation({ raw, path, line }, { root, trackedSet, readSource, add,
   }
   const body = readSource(path);
   if (line > body.length) add("warn", `\`${raw}\` is past the end of ${path} (${body.length} lines): the code moved`, page);
-  else if (!body[line - 1].trim()) add("warn", `\`${raw}\` lands on a blank line: the code moved`, page);
+  else if (!(body[line - 1] as string).trim()) add("warn", `\`${raw}\` lands on a blank line: the code moved`, page);
 }
 
-function readIfExists(path) {
+function readIfExists(path: string): string {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
-function checkLinks(links, { pageFiles, root, add, page, self, inbound }) {
+interface LinkContext {
+  pageFiles: Set<string>;
+  root: string;
+  add: Add;
+  page: string;
+  self: string;
+  inbound?: Map<string, number>;
+}
+
+function checkLinks(links: Link[], { pageFiles, root, add, page, self, inbound }: LinkContext): void {
   for (const link of links) {
-    if (link.kind === "external") continue;
+    if (link.kind === "external" || link.target === null) continue;
     if (link.kind === "repo") {
       if (!existsSync(join(root, link.target))) add("error", `broken link to a repository file: \`${link.raw}\``, page);
       continue;
@@ -180,7 +222,7 @@ function checkLinks(links, { pageFiles, root, add, page, self, inbound }) {
 }
 
 /** Human report. Prints an OK line when clean: this one is run by a person. */
-export function report(res) {
+export function report(res: LintResult): number {
   if (!res.errors.length && !res.warnings.length) {
     console.log(color.green(`✓ lint: OK (${res.pages} pages)`));
     return 0;

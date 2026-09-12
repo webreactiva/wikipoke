@@ -5,7 +5,9 @@
 //
 // The two answer different questions and neither replaces the other: the repo axis catches code
 // nobody has looked at yet, the page axis catches pages that lie. It counts; it does not judge.
+import type { CheckContext, ReportOptions } from "./lib.ts";
 import {
+  asList,
   changedSince,
   color,
   commitExists,
@@ -17,28 +19,59 @@ import {
   readState,
   shortSha,
   sourcePatterns,
-} from "./lib.mjs";
+} from "./lib.ts";
 
-export function run({ root, wikiDir }) {
+/**
+ * The repository axis. The four states are exclusive, and only the last two know a commit count:
+ * without a usable checkpoint there is nothing to count from.
+ */
+export type RepoAxis =
+  | { status: "no-checkpoint" }
+  | { status: "unknown-checkpoint"; last: string }
+  | { status: "current" | "behind"; last: string; commits: number; files: number };
+
+/** A page whose own `sources:` moved past its own `synced:`. */
+export interface StalePage {
+  id: string;
+  synced: string;
+  files: string[];
+}
+
+/** A page drift cannot judge, because its contract with the code is broken. */
+export interface SkippedPage {
+  id: string;
+  reason: string;
+}
+
+export interface DriftResult {
+  repo: RepoAxis;
+  stale: StalePage[];
+  skipped: SkippedPage[];
+  fresh: string[];
+  pages: number;
+}
+
+export function run({ root, wikiDir }: CheckContext): DriftResult {
   const repo = repoAxis(root, wikiDir);
   const pages = listPages(wikiDir).map(readPage);
 
   // One `git diff` per distinct sha, not one per page.
-  const cache = new Map();
-  const changesFor = (sha) => {
-    if (!cache.has(sha)) cache.set(sha, changedSince(root, sha));
-    return cache.get(sha);
+  const cache = new Map<string, string[]>();
+  const changesFor = (sha: string): string[] => {
+    let changes = cache.get(sha);
+    if (!changes) cache.set(sha, (changes = changedSince(root, sha)));
+    return changes;
   };
 
-  const stale = [];
-  const skipped = [];
-  const fresh = [];
+  const stale: StalePage[] = [];
+  const skipped: SkippedPage[] = [];
+  const fresh: string[] = [];
 
   for (const page of pages) {
     const meta = page.meta ?? {};
-    const sources = [].concat(meta.sources ?? []);
+    const sources = asList(meta.sources);
     const synced = meta.synced;
-    if (!sources.length || !synced) {
+    if (!sources.length || typeof synced !== "string" || !synced) {
       skipped.push({ id: page.id, reason: "no contract (missing sources or synced)" });
       continue;
     }
@@ -55,7 +88,7 @@ export function run({ root, wikiDir }) {
   return { repo, stale, skipped, fresh, pages: pages.length };
 }
 
-function repoAxis(root, wikiDir) {
+function repoAxis(root: string, wikiDir: string): RepoAxis {
   const last = readState(wikiDir)?.last_indexed_commit;
   if (!last) return { status: "no-checkpoint" };
   if (!commitExists(root, last)) return { status: "unknown-checkpoint", last };
@@ -68,7 +101,7 @@ function repoAxis(root, wikiDir) {
 }
 
 /** Human report. Silent when everything is current: the hooks depend on it. */
-export function report(res, { verbose } = {}) {
+export function report(res: DriftResult, { verbose }: ReportOptions = {}): number {
   let found = 0;
 
   if (res.repo.status === "behind") {

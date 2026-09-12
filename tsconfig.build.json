@@ -1,0 +1,13 @@
+{
+  // Emitting, for `npm run build` and the `prepare` that runs on install: src/ into dist/.
+  // Both trees are two levels deep, so `../../templates/` resolves the same from either.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts"]
+}

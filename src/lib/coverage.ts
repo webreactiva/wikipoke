@@ -3,15 +3,30 @@
 // Tracked code that no page's `sources:` claims, filtered by wiki/.wikipokeignore. It is debt, not
 // breakage: resolve each cluster by adding a page (usually a module page) or, when the code is
 // genuinely out of scope, by ignoring it in .wikipokeignore, a conscious call rather than silence.
-import { IGNORE_FILE, color, ignoredFiles, indexableFiles, listPages, matchesAny, readPage, sourcePatterns } from "./lib.mjs";
+import type { CheckContext, ReportOptions } from "./lib.ts";
+import { IGNORE_FILE, color, ignoredFiles, indexableFiles, listPages, matchesAny, readPage, sourcePatterns } from "./lib.ts";
 
-export function run({ root, wikiDir }) {
+/** Uncovered files grouped by the folder they sit in, so a gap reads as one place to go. */
+export interface Cluster {
+  dir: string;
+  count: number;
+}
+
+export interface CoverageResult {
+  unclaimed: string[];
+  clusters: Cluster[];
+  ignored: string[];
+  indexable: number;
+  pages: number;
+}
+
+export function run({ root, wikiDir }: CheckContext): CoverageResult {
   const pages = listPages(wikiDir).map(readPage);
   const patterns = pages.flatMap((p) => sourcePatterns(p.meta, root));
   const indexable = indexableFiles(root, wikiDir);
   const unclaimed = patterns.length ? indexable.filter((f) => !matchesAny(f, patterns)) : indexable;
 
-  const byDir = new Map();
+  const byDir = new Map<string, number>();
   for (const f of unclaimed) {
     const parts = f.split("/");
     const dir = parts.length > 3 ? parts.slice(0, 3).join("/") : parts.slice(0, -1).join("/") || ".";
@@ -28,7 +43,7 @@ export function run({ root, wikiDir }) {
 }
 
 /** Human report. Silent when coverage is complete: the hooks depend on it. */
-export function report(res, { verbose } = {}) {
+export function report(res: CoverageResult, { verbose }: ReportOptions = {}): number {
   if (!res.unclaimed.length) return 0;
   console.log(
     `${color.yellow("uncovered")} ${res.unclaimed.length} of ${res.indexable} tracked code file(s) ` +

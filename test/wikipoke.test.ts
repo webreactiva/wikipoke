@@ -6,25 +6,27 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const cli = fileURLToPath(new URL("../bin/wikipoke.mjs", import.meta.url));
+// The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
+// `npm run build` first and the tests exercise exactly the file a contributor edits.
+const cli = fileURLToPath(new URL("../src/bin/wikipoke.ts", import.meta.url));
 
-function put(root, path, content) {
+function put(root: string, path: string, content: string): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), content);
 }
 
-function git(root, ...args) {
+function git(root: string, ...args: string[]): string {
   // Piped, so the post-commit notifier that init installs does not print into the test report.
   return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: "pipe" }).trim();
 }
 
 /** A small repository with some code, committed. */
-function repo(files = {}) {
+function repo(files: Record<string, string> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "wikipoke-"));
   git(root, "init", "-q");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "test");
-  const all = {
+  const all: Record<string, string> = {
     "README.md": "# demo\n",
     "docs/guide.md": "guide\n",
     "src/billing/invoice.js": "export const total = 1;\n",
@@ -39,12 +41,21 @@ function repo(files = {}) {
   return root;
 }
 
-function wikipoke(root, ...args) {
+function wikipoke(root: string, ...args: string[]): { code: number | null; out: string } {
   const res = spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: "utf8" });
   return { code: res.status, out: res.stdout + res.stderr };
 }
 
-function page(root, path, { type = "entity", sources = ["src/billing"], synced, body = "", wiki = "wiki" } = {}) {
+interface PageOptions {
+  type?: string;
+  sources?: string[];
+  synced?: string;
+  body?: string;
+  wiki?: string;
+}
+
+function page(root: string, path: string, options: PageOptions = {}): void {
+  const { type = "entity", sources = ["src/billing"], synced, body = "", wiki = "wiki" } = options;
   put(
     root,
     `${wiki}/${path}`,
@@ -55,7 +66,7 @@ function page(root, path, { type = "entity", sources = ["src/billing"], synced, 
 }
 
 /** Seeds the wiki the way the ingest skill would: pages, index, log, checkpoint. */
-function seed(root, wiki = "wiki") {
+function seed(root: string, wiki = "wiki"): void {
   wikipoke(root, "init", ...(wiki === "wiki" ? [] : ["--dir", wiki]));
   page(root, "architecture.md", { type: "architecture", sources: ["src/cli.js"], body: "See [billing](./components/billing.md).", wiki });
   page(root, "components/billing.md", { body: "Back to [the map](../architecture.md).", wiki });
@@ -67,7 +78,23 @@ function seed(root, wiki = "wiki") {
   // The checkpoint and every page now point at the commit before the seed, which only touched wiki/.
 }
 
-const read = (root, path) => readFileSync(join(root, path), "utf8");
+/** The shapes `check --json` returns, as far as the assertions below read them. */
+interface DriftJson {
+  repo: { status: string; commits?: number; files?: number };
+  stale: { id: string; files: string[] }[];
+  fresh: string[];
+}
+interface CoverageJson {
+  unclaimed: string[];
+  ignored: string[];
+}
+interface LintJson {
+  errors: { page?: string; message: string }[];
+  warnings: { page?: string; message: string }[];
+}
+
+const json = <T>(root: string, ...args: string[]): T => JSON.parse(wikipoke(root, ...args).out) as T;
+const read = (root: string, path: string): string => readFileSync(join(root, path), "utf8");
 const ALL_HOOKS = ["git", "claude", "opencode", "cursor", "agents"];
 
 test("init writes the schema, the ignore list and the neutral skills, and no hook unless asked", () => {
@@ -120,7 +147,7 @@ test("hooks add wires every agent, keeps what the files already hold, and is ide
 
   assert.doesNotMatch(wikipoke(root, "hooks", "add", ...ALL_HOOKS).out, /created|updated/);
   assert.equal(JSON.parse(read(root, ".claude/settings.json")).hooks.SessionStart.length, 1);
-  assert.equal(read(root, "AGENTS.md").match(/wikipoke:start/g).length, 1);
+  assert.equal(read(root, "AGENTS.md").match(/wikipoke:start/g)?.length, 1);
 });
 
 test("hooks remove takes out one hook at a time, and the notifier goes with the last one", () => {
@@ -202,7 +229,7 @@ test("before seeding, check says so, and coverage still runs for the seed to rea
   assert.equal(all.code, 0);
   assert.match(all.out, /unseeded/);
 
-  const cov = JSON.parse(wikipoke(root, "check", "coverage", "--json").out);
+  const cov = json<CoverageJson>(root, "check", "coverage", "--json");
   // `*.md` in .wikipokeignore reaches README.md at the root and docs/guide.md alike.
   assert.deepEqual(cov.unclaimed, ["src/billing/invoice.js", "src/billing/tax.js", "src/cli.js"]);
 });
@@ -220,7 +247,7 @@ test("drift finds the pages whose code moved, and the commits nobody indexed", (
   seed(root);
   put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
   git(root, "commit", "-qam", "raise tax");
-  const drift = JSON.parse(wikipoke(root, "check", "drift", "--json").out);
+  const drift = json<DriftJson>(root, "check", "drift", "--json");
   assert.equal(drift.repo.status, "behind");
   assert.deepEqual(drift.stale.map((s) => [s.id, s.files]), [["components/billing", ["src/billing/tax.js"]]]);
   assert.deepEqual(drift.fresh, ["architecture"]);
@@ -239,7 +266,7 @@ test("lint catches broken links, dead sources, orphans and wikilinks, and fails 
   });
   const { code } = wikipoke(root, "check", "lint");
   assert.equal(code, 1);
-  const lint = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const lint = json<LintJson>(root, "check", "lint", "--json");
   const messages = [...lint.errors, ...lint.warnings].map((f) => `${f.page}: ${f.message}`);
   for (const expected of [
     /concepts\/money: dead source/,
@@ -256,7 +283,7 @@ test("the page types come from the CONVENTIONS.md table, so a project can add it
   const root = repo();
   seed(root);
   page(root, "runbooks/deploy.md", { type: "runbook", sources: ["src/cli.js"], body: "[map](../architecture.md)" });
-  const before = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const before = json<LintJson>(root, "check", "lint", "--json");
   assert.ok(before.errors.some((f) => /unknown type `runbook`/.test(f.message)));
 
   const conventions = readFileSync(join(root, "wiki/CONVENTIONS.md"), "utf8").replace(
@@ -264,7 +291,7 @@ test("the page types come from the CONVENTIONS.md table, so a project can add it
     "| `runbook`      | how to operate something in production    | `runbooks/deploy.md`       |\n| `decision`",
   );
   writeFileSync(join(root, "wiki/CONVENTIONS.md"), conventions);
-  const after = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const after = json<LintJson>(root, "check", "lint", "--json");
   assert.ok(!after.errors.some((f) => /unknown type/.test(f.message)), JSON.stringify(after.errors));
   assert.ok(!after.errors.some((f) => /unknown type `type`/.test(f.message)));
 });
@@ -274,8 +301,8 @@ test("a source claiming a whole package or the whole repository is over-broad; a
   seed(root);
   page(root, "components/api.md", { sources: ["packages/api", "src/billing"], body: "[map](../architecture.md)" });
   page(root, "concepts/all.md", { type: "concept", sources: ["**"], body: "[map](../architecture.md)" });
-  const lint = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
-  const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message.match(/`([^`]+)`/)[1]);
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message.match(/`([^`]+)`/)?.[1]);
   assert.deepEqual(broad.sort(), ["**", "packages/api"]);
 });
 
@@ -283,6 +310,8 @@ test("the notifier is silent when the wiki is current, and the git hook speaks a
   const root = repo();
   seed(root);
   mkdirSync(join(root, "node_modules/.bin"), { recursive: true });
+  // A symlink, the way npm links a dependency's bin. Node follows it to the real path before it
+  // decides whether it may strip types, so the .ts entry point runs from there just as it does here.
   symlinkSync(cli, join(root, "node_modules/.bin/wikipoke"));
   wikipoke(root, "hooks", "add", "git");
   git(root, "add", "-A");
@@ -300,13 +329,13 @@ test("a `!` line in .wikipokeignore brings paths back, and coverage says how man
   const root = repo({ "prompts/agent.md": "do the thing\n" });
   seed(root);
   // The starting ignore list drops every .md, product or not.
-  const hidden = JSON.parse(wikipoke(root, "check", "coverage", "--json").out);
+  const hidden = json<CoverageJson>(root, "check", "coverage", "--json");
   assert.equal(hidden.unclaimed.includes("prompts/agent.md"), false);
   assert.equal(hidden.ignored.includes("prompts/agent.md"), true);
   assert.equal(hidden.ignored.includes("wiki/index.md"), false, "the wiki's own pages are not code it hid");
 
   writeFileSync(join(root, "wiki/.wikipokeignore"), "wiki/**\n*.md\n!prompts/**\n");
-  const back = JSON.parse(wikipoke(root, "check", "coverage", "--json").out);
+  const back = json<CoverageJson>(root, "check", "coverage", "--json");
   assert.equal(back.unclaimed.includes("prompts/agent.md"), true, "a ! line wins over the plain one above it");
   assert.equal(back.ignored.includes("prompts/agent.md"), false);
   assert.match(wikipoke(root, "check", "coverage").out, /file\(s\) ignored by \.wikipokeignore/);
@@ -320,7 +349,7 @@ test("a re-included path counts for the repo axis of drift too", () => {
   git(root, "commit", "-qm", "re-include the prompts");
   put(root, "prompts/agent.md", "do the other thing\n");
   git(root, "commit", "-qam", "edit a prompt");
-  const drift = JSON.parse(wikipoke(root, "check", "drift", "--json").out);
+  const drift = json<DriftJson>(root, "check", "drift", "--json");
   assert.equal(drift.repo.status, "behind");
   assert.equal(drift.repo.files, 1);
 });
@@ -337,16 +366,16 @@ test("lint re-reads every path:line citation and reports the ones the code moved
       "[map](../architecture.md)",
     ].join("\n\n"),
   });
-  const lint = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const lint = json<LintJson>(root, "check", "lint", "--json");
   const cites = lint.warnings.filter((f) => f.page === "components/cited" && /src\//.test(f.message)).map((f) => f.message);
   assert.equal(cites.length, 1, `one citation is wrong, got: ${cites.join(" | ")}`);
-  assert.match(cites[0], /`src\/cli\.js:99` is past the end of src\/cli\.js \(5 lines\)/);
+  assert.match(cites[0] as string, /`src\/cli\.js:99` is past the end of src\/cli\.js \(5 lines\)/);
   assert.equal(lint.errors.length, 0, "a drifted pointer is debt, not a broken wiki");
 
   // A file the repository does not have is an example; one whose folder exists is a dead pointer.
   put(root, "src/old/other.js", "//\n");
   git(root, "add", "-A");
   git(root, "commit", "-qm", "add src/old");
-  const after = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const after = json<LintJson>(root, "check", "lint", "--json");
   assert.ok(after.warnings.some((f) => /`src\/old\/gone\.js:4` points at a file that is not tracked/.test(f.message)));
 });

@@ -24,7 +24,9 @@ optional hooks ──► wiki/.wikipoke-hook.sh                "the wiki is 3 co
 
 ## Install
 
-Node 22 or later and git. Wikipoke has no dependencies and no build step.
+Node 22.18 or later and git. Wikipoke has no runtime dependencies: the CLI is TypeScript
+compiled to plain ESM on install, and everything it needs at run time is in Node's standard
+library.
 
 ```sh
 npm install -g github:delineas/wikipoke        # any repository, any language
@@ -157,6 +159,20 @@ version keeps the writing in the skills and the CLI read-only.
 
 ## Development
 
+The CLI is TypeScript under `src/`, and it is read two different ways.
+
 ```sh
-npm test
+npm test         # node --test test/*.test.ts — runs the sources, no build first
+npm run typecheck
+npm run build    # tsc -> dist/, the ESM that actually ships
 ```
+
+Node runs a `.ts` file by stripping the types out of it, so during development there is nothing
+to build and the tests exercise the same file you just edited. It refuses to do that for anything
+under `node_modules/`, though, which is exactly where an installed wikipoke lives — so what ships
+is compiled: `prepare` runs `tsc` on install, and `bin` points at `dist/bin/wikipoke.js`.
+
+Two consequences for anyone editing `src/`: imports name the `.ts` file (`./lib.ts`; `tsc`
+rewrites the specifier to `.js` when it emits), and only syntax that erases to nothing is allowed —
+no `enum`, no `namespace`, no parameter properties. `erasableSyntaxOnly` in `tsconfig.json` fails
+the check rather than letting one through.
