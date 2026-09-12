@@ -2,8 +2,23 @@
   "name": "wikipoke",
   "version": "0.3.0",
   "description": "A code wiki that agents maintain: three skills write it, one read-only CLI checks it",
+  "keywords": [
+    "wiki",
+    "documentation",
+    "agents",
+    "claude",
+    "skills",
+    "cli"
+  ],
+  "homepage": "https://github.com/delineas/wikipoke#readme",
+  "bugs": "https://github.com/delineas/wikipoke/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/delineas/wikipoke.git"
+  },
+  "license": "MIT",
+  "author": "Daniel Primo",
   "type": "module",
-  "private": true,
   "engines": {
     "node": ">=22.18"
   },
@@ -13,10 +28,13 @@
   "files": [
     "dist",
     "templates",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node -e \"require('fs').chmodSync('dist/bin/wikipoke.js', 0o755)\"",
+    "link": "npm run build && npm link",
+    "unlink": "npm rm -g wikipoke",
     "typecheck": "tsc",
     "test": "node --test test/*.test.ts",
     "prepare": "npm run build"

@@ -29,9 +29,13 @@ compiled to plain ESM on install, and everything it needs at run time is in Node
 library.
 
 ```sh
-npm install -g github:delineas/wikipoke        # any repository, any language
-npm install -D github:delineas/wikipoke        # or as a dependency of a JavaScript project
+npm install -g wikipoke        # any repository, any language
+npm install -D wikipoke        # or as a dependency of a JavaScript project
 ```
+
+Before the first npm release, or to run a checkout, `github:delineas/wikipoke` works in either
+command, and `npm run link` inside this repository compiles it and puts `wikipoke` on your `PATH`
+(`npm run unlink` takes it off again).
 
 Then, in the repository:
 
@@ -179,6 +183,8 @@ The CLI is TypeScript under `src/`, and it is read two different ways.
 npm test         # node --test test/*.test.ts — runs the sources, no build first
 npm run typecheck
 npm run build    # tsc -> dist/, the ESM that actually ships
+npm run link     # build, then `npm link`: the working copy becomes your global wikipoke
+npm run unlink   # take it off the PATH again
 ```
 
 Node runs a `.ts` file by stripping the types out of it, so during development there is nothing
