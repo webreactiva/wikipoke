@@ -52,7 +52,9 @@ practice.
 
 No: signatures, parameter lists, export enumerations, option tables. The code and its types
 already say that, and a copy guarantees it rots. To point at code, **link to it with a line**:
-`src/billing/invoice.ts:42`.
+`src/billing/invoice.ts:42`. Take that number from the file itself, at the moment you write the
+page; `wikipoke check lint` re-reads every citation and says when one has drifted past the end of
+its file or onto a blank line.
 
 ## Layout
 
@@ -176,11 +178,15 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
   against the working tree, so uncommitted edits count.
 - **coverage**: tracked files no page's `sources` claims, minus `.wikipokeignore`. Resolve a
-  cluster by writing a page or, when it is out of scope, by ignoring it on purpose.
+  cluster by writing a page or, when it is out of scope, by ignoring it on purpose. The report ends
+  with how many files the ignore list took out, so a rule that hides too much is visible rather
+  than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
+  repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
 - **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, over-broad sources, broken links (body, `related:` and `index.md`),
-  orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
-  `index.md` first stops telling pages apart.
+  `path:line` citations that now land past the end of a file or on a blank line, orphan pages,
+  pages missing from `index.md`, and a warning past 80 pages, where reading `index.md` first stops
+  telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt.
 

@@ -50,7 +50,7 @@ terminal, `init` installs no hooks and tells the agent to ask you which ones you
 | File | Owner | Purpose |
 | --- | --- | --- |
 | `wiki/CONVENTIONS.md`¹ | the project | the schema: page types, the template, the writing rules |
-| `wiki/.wikipokeignore`¹ | the project | files that never count for coverage (tests, lockfiles, …) |
+| `wiki/.wikipokeignore`¹ | the project | files that never count for coverage (tests, lockfiles, …); a `!` line brings some back |
 | `.agents/skills/wikipoke-*/SKILL.md` | wikipoke | the three skills, for agents that read the neutral folder |
 | `.claude/skills/wikipoke-*/SKILL.md` | wikipoke | the same skills for Claude Code, when the repository uses it |
 
@@ -110,7 +110,7 @@ wikipoke adds and removes only its own entry.
 wikipoke check              # all three
 wikipoke check drift        # commits not indexed, pages whose sources moved since their `synced:`
 wikipoke check coverage     # tracked files no page's `sources:` claims
-wikipoke check lint         # fields, types, links, dead and over-broad sources, orphans, index
+wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
 ```
 
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
@@ -133,7 +133,8 @@ Invoices round per line, not per total, because… See [the checkout flow](../fl
 
 `sources:` ties the page to the code and `synced:` to the commit it was checked against; together
 they are how `drift` knows the page is stale. Links are plain Markdown, so `check` can verify every
-one. The full contract is in the `CONVENTIONS.md` that `init` writes, and the valid `type:` values
+one, and so are the `path:line` citations in the body: `lint` re-reads each one and reports those
+that now fall past the end of their file or on a blank line. The full contract is in the `CONVENTIONS.md` that `init` writes, and the valid `type:` values
 are the rows of its page-type table.
 
 ## Uninstall
