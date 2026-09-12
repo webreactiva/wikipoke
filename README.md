@@ -44,8 +44,10 @@ agent, run the `wikipoke-ingest` skill to seed the wiki. It draws the avenues (a
 main flows, one page per subsystem) and stops; later passes grow it one part at a time.
 
 **Installing through an agent.** An agent can run `wikipoke init` for you. With nobody at the
-terminal, `init` installs no hooks and tells the agent to ask you which ones you want, then run
-`wikipoke hooks add <name>...`.
+terminal there is no one to answer the hook question, so `init` installs none and hands the
+decision to the agent instead of dropping it: it prints what is missing, what each hook would do,
+and the command. Which one fits is something the agent knows about itself and `init` cannot see —
+so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on its own.
 
 ## What `init` writes
 
@@ -54,13 +56,19 @@ terminal, `init` installs no hooks and tells the agent to ask you which ones you
 | `wiki/CONVENTIONS.md`¹ | the project | the schema: page types, the template, the writing rules |
 | `wiki/.wikipokeignore`¹ | the project | files that never count for coverage (tests, lockfiles, …); a `!` line brings some back |
 | `.agents/skills/wikipoke-*/SKILL.md` | wikipoke | the three skills, for agents that read the neutral folder |
-| `.claude/skills/wikipoke-*/SKILL.md` | wikipoke | the same skills for Claude Code, when the repository uses it |
+| `.claude/skills/wikipoke-*/SKILL.md` | wikipoke | the same skills, for Claude Code, which reads only this one |
 
 ¹ Or the directory `--dir` set, see below.
 
-Claude Code is detected by a `.claude/` folder or a `CLAUDE.md` file; `--claude` adds its skills
-anyway. `init` never writes pages, `index.md`, `log.md` or `.wikipoke-state.json`: the first
-ingest pass does.
+Both skill homes are always written. Claude Code reads only `.claude/skills` and runs perfectly
+well against a checkout with no `.claude/` and no `CLAUDE.md` in it, so there is nothing in a
+repository to detect it by; writing the skills for an agent that never comes costs three inert
+Markdown files, and not writing them costs the agent every skill it has. A skill is inert either
+way — nothing runs one until a person names it — which is the whole reason hooks are treated
+differently below.
+
+`init` never writes pages, `index.md`, `log.md` or `.wikipoke-state.json`: the first ingest pass
+does.
 
 **Somewhere other than `wiki/`.** `wikipoke init --dir docs/wiki` puts the wiki there and writes a
 one-line `.wikipoke.json` so every later command agrees. The skills, the hooks and the schema are
@@ -73,6 +81,12 @@ A hook tells you or your agent, at the right moment, that the wiki has fallen be
 runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` and `coverage` find,
 stays silent when the wiki is current, and never fails or calls a model. None of them writes the
 wiki.
+
+**Install at least one.** Without a hook nothing ever tells you the wiki is stale — `wikipoke check`
+speaks only when someone runs it — and a wiki nobody is told about is one that quietly stops being
+true. `wikipoke hooks` says so whenever none is installed. Only `git` has to be installed again in
+every clone, because `.git/hooks` is not versioned; the other four are ordinary repository files,
+so committing one covers everyone who clones.
 
 ```sh
 wikipoke hooks                        # the list, and which are installed

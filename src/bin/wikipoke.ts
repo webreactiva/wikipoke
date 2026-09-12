@@ -43,11 +43,10 @@ const isHook = (name: string): name is HookName => (HOOK_NAMES as string[]).incl
 
 const HELP = `wikipoke: a code wiki that agents maintain
 
-  wikipoke init [--claude] [--dir <path>]
-                               write CONVENTIONS.md, ${IGNORE_FILE} and the three skills. The wiki
-                               lives in wiki/ unless --dir moves it, which is then remembered in
-                               .wikipoke.json; --claude adds the skills for Claude Code even
-                               without a CLAUDE.md
+  wikipoke init [--dir <path>]
+                               write CONVENTIONS.md, ${IGNORE_FILE} and the three skills, into
+                               .agents/skills/ and .claude/skills/ both. The wiki lives in wiki/
+                               unless --dir moves it, which is then remembered in .wikipoke.json
   wikipoke hooks               list the optional hooks and which are installed
   wikipoke hooks add <name>... install hooks: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
@@ -67,7 +66,7 @@ try {
       json: { type: "boolean" },
       strict: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
-      claude: { type: "boolean" },
+      claude: { type: "boolean" }, // accepted and ignored: the Claude skills are always written
       dir: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean" },
@@ -106,11 +105,37 @@ function print(report: Report): void {
   for (const step of report.manual) console.log(`${color.yellow("by hand")}  ${step}`);
 }
 
-function printHooks(): void {
-  for (const hook of hookStatus(root, wiki)) {
+function printHooks(): { installed: number } {
+  const hooks = hookStatus(root, wiki);
+  for (const hook of hooks) {
     const state = hook.installed ? color.green("installed") : hook.detected ? color.dim("used here") : "";
     console.log(`  ${hook.name.padEnd(9)} ${hook.when.padEnd(52)} ${state}`);
   }
+  return { installed: hooks.filter((hook) => hook.installed).length };
+}
+
+/**
+ * What `init` says when there is nobody at the terminal to ask. It never installs a hook on its
+ * own — a hook changes what a person's terminal and other sessions do, and that is theirs to
+ * agree to — but leaving with a shrug is how a repository ends up with no notifier at all and
+ * discovers its wiki is stale months later. So it says plainly what is missing, that the reader
+ * is the one who knows which row is theirs, and the exact command.
+ */
+function invitation(): string {
+  return [
+    ``,
+    `No hook was installed. Hooks are the only thing that ever tells you the wiki has fallen`,
+    `behind — \`wikipoke check\` speaks only when someone runs it — but each one changes what a`,
+    `terminal or an agent session does, so wikipoke never adds one on its own.`,
+    ``,
+    `${color.bold("If you are an agent reading this")}: you know which of the rows above is you. Ask the person`,
+    `whether they want it, and then run:`,
+    ``,
+    `    wikipoke hooks add <name>`,
+    ``,
+    `${color.dim("git is per clone: .git/hooks is not versioned, so every checkout installs it again.")}`,
+    `${color.dim("The other four are ordinary repository files — commit one and everyone who clones has it.")}`,
+  ].join("\n");
 }
 
 function hookNames(names: string[]): HookName[] {
@@ -123,7 +148,7 @@ function hookNames(names: string[]): HookName[] {
 }
 
 if (command === "init") {
-  print(init(root, { ...(flags.claude ? { claude: true } : {}), ...(flags.dir === undefined ? {} : { dir: flags.dir }) }));
+  print(init(root, flags.dir === undefined ? {} : { dir: flags.dir }));
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);
   console.log(`\nHooks are optional. Each one tells you or your agent when the wiki falls behind the code:\n`);
@@ -135,8 +160,10 @@ if (command === "init") {
     const names = answer.split(/[\s,]+/).filter(Boolean);
     if (names.length) print(addHooks(root, hookNames(names)));
   } else {
-    // Run by an agent, or piped: nobody to ask here, so the agent asks the person.
-    console.log(`\nNone was installed. Ask the person which they want, then run: wikipoke hooks add <name>...`);
+    // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
+    // Which hook fits is something the agent knows about itself and this command cannot see, so
+    // the invitation names the choice and the command instead of guessing at one.
+    console.log(invitation());
   }
   console.log(
     existsSync(join(wikiPath, STATE_FILE))
@@ -148,7 +175,9 @@ if (command === "init") {
 
 if (command === "hooks") {
   const [action, ...names] = rest;
-  if (!action) printHooks();
+  if (!action) {
+    if (!printHooks().installed) console.log(invitation());
+  }
   else if (action === "add") print(addHooks(root, hookNames(names)));
   else if (action === "remove") print(removeHooks(root, hookNames(names)));
   else {

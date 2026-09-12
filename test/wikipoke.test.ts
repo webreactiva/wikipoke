@@ -97,31 +97,44 @@ const json = <T>(root: string, ...args: string[]): T => JSON.parse(wikipoke(root
 const read = (root: string, path: string): string => readFileSync(join(root, path), "utf8");
 const ALL_HOOKS = ["git", "claude", "opencode", "cursor", "agents"];
 
-test("init writes the schema, the ignore list and the neutral skills, and no hook unless asked", () => {
+test("init writes the schema, the ignore list and the skills in both homes, and no hook unless asked", () => {
   const root = repo();
   const { code, out } = wikipoke(root, "init");
   assert.equal(code, 0);
-  for (const path of [
-    "wiki/CONVENTIONS.md",
-    "wiki/.wikipokeignore",
-    ".agents/skills/wikipoke-ingest/SKILL.md",
-    ".agents/skills/wikipoke-query/SKILL.md",
-    ".agents/skills/wikipoke-lint/SKILL.md",
-  ])
-    assert.ok(existsSync(join(root, path)), path);
-  for (const path of ["wiki/.wikipoke-hook.sh", ".git/hooks/post-commit", ".claude", "AGENTS.md", "wiki/.wikipoke-state.json"])
+  for (const home of [".agents/skills", ".claude/skills"])
+    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint"])
+      assert.ok(existsSync(join(root, home, skill, "SKILL.md")), `${home}/${skill}`);
+  for (const path of ["wiki/CONVENTIONS.md", "wiki/.wikipokeignore"]) assert.ok(existsSync(join(root, path)), path);
+  // A skill is inert until someone names it; a hook fires on its own. Only the second needs a yes.
+  for (const path of ["wiki/.wikipoke-hook.sh", ".git/hooks/post-commit", ".claude/settings.json", "AGENTS.md", "wiki/.wikipoke-state.json"])
     assert.ok(!existsSync(join(root, path)), path);
-  // Nobody to ask when an agent runs it: the output tells the agent to ask the person.
-  assert.match(out, /None was installed\. Ask the person which they want/);
+  // Nobody to ask when an agent runs it, so the output hands the decision on rather than dropping it.
+  assert.match(out, /No hook was installed/);
+  assert.match(out, /If you are an agent reading this/);
+  assert.match(out, /wikipoke hooks add <name>/);
 });
 
-test("init adds the skills for Claude Code where it is used, and leaves its settings alone", () => {
+test("the skills reach Claude Code even in a repository that shows no sign of it", () => {
+  // Claude Code reads only .claude/skills and runs fine against a checkout with no CLAUDE.md and
+  // no .claude/ in it, so detection cannot decide this: the skills go to both homes always.
+  const bare = repo();
+  wikipoke(bare, "init");
+  assert.ok(existsSync(join(bare, ".claude/skills/wikipoke-ingest/SKILL.md")));
+  assert.doesNotMatch(wikipoke(bare, "hooks").out, /claude .* used here/, "and .claude/skills is not itself a sign");
+
   const settings = '{"permissions":{"allow":["Bash(ls)"]}}';
   const root = repo({ "CLAUDE.md": "# rules\n", ".claude/settings.json": settings });
   const { out } = wikipoke(root, "init");
-  assert.ok(existsSync(join(root, ".claude/skills/wikipoke-ingest/SKILL.md")));
-  assert.equal(read(root, ".claude/settings.json"), settings);
+  assert.equal(read(root, ".claude/settings.json"), settings, "init never touches the settings");
   assert.match(out, /claude .* used here/);
+});
+
+test("a repository with no hook installed is told so, and told what to run", () => {
+  const root = repo();
+  wikipoke(root, "init");
+  assert.match(wikipoke(root, "hooks").out, /No hook was installed/);
+  wikipoke(root, "hooks", "add", "agents");
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /No hook was installed/, "silent once one is in");
 });
 
 test("hooks add wires every agent, keeps what the files already hold, and is idempotent", () => {

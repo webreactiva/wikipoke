@@ -58,7 +58,6 @@ export interface HookState extends Hook {
 }
 
 export interface InitOptions {
-  claude?: boolean;
   dir?: string;
 }
 
@@ -71,7 +70,9 @@ const notify = (wiki: string): string => `sh ${notifier(wiki)}`;
 /** The optional hooks: where each one lives, when it speaks, and what suggests the project uses it. */
 export const HOOKS: Record<HookName, Hook> = {
   git: { where: ".git/hooks/post-commit", when: "after each commit, in your terminal", signs: [] },
-  claude: { where: SETTINGS, when: "when a Claude Code session starts", signs: [".claude", "CLAUDE.md"] },
+  // Not a bare `.claude`: init writes .claude/skills itself, so the directory's existence would
+  // only prove wikipoke had run. These are files a project puts there, or does not.
+  claude: { where: SETTINGS, when: "when a Claude Code session starts", signs: ["CLAUDE.md", SETTINGS, ".claude/settings.local.json"] },
   opencode: { where: ".opencode/plugin/wikipoke.js", when: "when an OpenCode session starts", signs: [".opencode", "opencode.json"] },
   cursor: { where: ".cursor/rules/wikipoke.mdc", when: "a rule Cursor reads in every session", signs: [".cursor", ".cursorrules"] },
   agents: { where: AGENTS, when: "a note for Codex and any agent that reads AGENTS.md", signs: [AGENTS] },
@@ -137,10 +138,15 @@ function postCommitPath(root: string): string | null {
   return hooks ? join(resolve(root, hooks), "post-commit") : null;
 }
 
-/** Claude Code reads `.claude/skills`; OpenCode, Codex and the rest read the neutral `.agents/skills`. */
-export function usesClaude(root: string): boolean {
-  return HOOKS.claude.signs.some((sign) => existsSync(join(root, sign)));
-}
+/**
+ * The homes an agent looks in. Claude Code reads only `.claude/skills`; OpenCode, Codex and the
+ * rest read the neutral `.agents/skills`. Both are written every time, because a skill nobody can
+ * see is a skill that does not exist, and detecting Claude Code from the repository does not work:
+ * it runs perfectly well against a checkout with no `.claude/` and no `CLAUDE.md` in it. They are
+ * inert Markdown either way — nothing runs them until a person names one — which is the whole
+ * difference between a skill and a hook.
+ */
+const SKILL_HOMES = [NEUTRAL_SKILLS, CLAUDE_SKILLS];
 
 function writeSkills(root: string, home: string, wiki: string, out: Report): void {
   for (const skill of SKILLS) place(root, join(root, home, skill, "SKILL.md"), template(`skills/${skill}/SKILL.md`, wiki), out);
@@ -150,7 +156,7 @@ function writeSkills(root: string, home: string, wiki: string, out: Report): voi
  * The schema, the ignore list and the skills. No hooks: those are asked for separately.
  * `dir` moves the wiki, and is remembered in .wikipoke.json so every later command agrees.
  */
-export function init(root: string, { claude = usesClaude(root), dir }: InitOptions = {}): Report {
+export function init(root: string, { dir }: InitOptions = {}): Report {
   const out = report();
   let wiki = wikiDir(root);
   if (dir !== undefined) {
@@ -182,8 +188,7 @@ export function init(root: string, { claude = usesClaude(root), dir }: InitOptio
       out.created.push(relative(root, path));
     }
   }
-  writeSkills(root, NEUTRAL_SKILLS, wiki, out);
-  if (claude) writeSkills(root, CLAUDE_SKILLS, wiki, out);
+  for (const home of SKILL_HOMES) writeSkills(root, home, wiki, out);
   return out;
 }
 
@@ -282,7 +287,7 @@ export function removeHooks(root: string, names: HookName[], wiki: string = wiki
 export function uninstall(root: string): Report {
   const wiki = wikiDir(root);
   const out = removeHooks(root, Object.keys(HOOKS) as HookName[], wiki);
-  for (const home of [NEUTRAL_SKILLS, CLAUDE_SKILLS])
+  for (const home of SKILL_HOMES)
     for (const skill of SKILLS) unplace(root, join(root, home, skill, "SKILL.md"), out);
   return out;
 }
