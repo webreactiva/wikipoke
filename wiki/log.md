@@ -49,3 +49,25 @@ The CLI moved from `.mjs` to TypeScript (`df4db0e`), so every page that named a 
   `.git/`. Written after this repository turned out to have no notifier installed at all, so its
   own drift went unreported until someone ran `check` by hand.
 - Not done: `templates/wikipokeignore` is still uncovered, as it was before this pass.
+
+## 2026-09-12 · wikipoke-ingest
+
+`08177b5` changed what `init` writes and what it says when nobody is at the terminal. Nine pages
+stale; reconciled and re-stamped. Twelve `path:line` citations had also rotted from the line shifts
+in `df4db0e` and `08177b5` — none of them caught by `lint`, since the lines still exist and are not
+blank. Re-pointed all forty-seven after checking each against the line it now lands on.
+
+- concepts/file-ownership.md: new section. Ownership decides whether wikipoke may rewrite a file;
+  a second rule decides whether it may add one at all, and it turns on whether the file acts on its
+  own. Skills do not, so both homes are written unasked; hooks do, so none is. This is the page the
+  rest now point at for that question.
+- components/cli.md: `init`'s no-TTY branch used to print one line and leave. Recorded what that
+  cost here — three commits with no notifier — and that the invitation is addressed to the agent
+  because the CLI cannot see which agent is running it.
+- components/skills.md, components/install.md, flows/install.md: the skills go to `.agents/skills/`
+  and `.claude/skills/` both, always. Detection was tried and cannot work.
+- flows/install.md: the `claude` detection sign had become self-fulfilling once `init` started
+  writing `.claude/skills` — a bare `.claude/` proved only that wikipoke had run.
+- components/skills.md also still said `lib/`, which `df4db0e` removed. Its sources are templates
+  that did not change, so drift never flagged it: a page can rot on code it does not claim.
+- Not done: `templates/wikipokeignore` is still uncovered, unchanged from the last two passes.

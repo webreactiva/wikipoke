@@ -12,10 +12,12 @@ related:
   - ../flows/ingest-pass.md
 ---
 
-Three Markdown files that no Node code ever reads. They are copied into `.agents/skills/` (and
-`.claude/skills/` where Claude Code is used), an agent follows them, and the wiki appears. Most of
-wikipoke's behaviour is here rather than in `lib/`; see
-[why that is the design](../concepts/skills-as-product.md).
+Three Markdown files that no Node code ever reads. They are copied into `.agents/skills/` and
+`.claude/skills/` alike — since `08177b5` both, always, because Claude Code reads only the second
+and nothing in a repository reliably says it is used — an agent follows them, and the wiki appears.
+Most of wikipoke's behaviour is here rather than in `src/lib/`; see
+[why that is the design](../concepts/skills-as-product.md) and
+[why a skill needs no permission and a hook does](../concepts/file-ownership.md).
 
 **`wikipoke-ingest`** takes code into the wiki, and picks one of three modes from the arguments and
 the filesystem: an argument means *ingest that part*, no argument and no `.wikipoke-state.json`

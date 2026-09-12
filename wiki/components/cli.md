@@ -4,7 +4,7 @@ type: entity
 responsibility: How `src/bin/wikipoke.ts` dispatches the four commands and what each exit code means.
 sources:
   - src/bin/wikipoke.ts
-synced: df4db0e
+synced: 08177b5
 related:
   - ../architecture.md
   - ../flows/check.md
@@ -12,7 +12,7 @@ related:
 
 A single file, no framework, `node:util`'s `parseArgs` and a handful of `if` blocks that each end
 in `process.exit`. It resolves two things before anything else happens — the repository root and
-the wiki directory (`src/bin/wikipoke.ts:95`) — and hands both to whatever runs next, so no other
+the wiki directory (`src/bin/wikipoke.ts:94`) — and hands both to whatever runs next, so no other
 module has to find them again.
 
 Four commands: `init`, `hooks`, `check`, `uninstall`. Only `check` has real logic here, and it is
@@ -29,7 +29,7 @@ indexed by name, and it worked because nothing downstream cared what came back. 
 typing: indexing that object collapses three unrelated result types into their union, and every
 later use has to be told which one it really got. So the results now travel tagged — `Ran`, one
 variant per check, discriminated by its own name (`src/bin/wikipoke.ts:36`) — and `runCheck`,
-`countFindings` and `reportOne` each narrow it back (`src/bin/wikipoke.ts:205`). `CHECKS` survives
+`countFindings` and `reportOne` each narrow it back (`src/bin/wikipoke.ts:234`). `CHECKS` survives
 as the list of valid names, which is all the argument parsing ever needed it for
 (`src/bin/wikipoke.ts:28`).
 
@@ -49,20 +49,26 @@ position that [uncovered code is debt, not breakage](../concepts/coverage-as-deb
 in the only place a script can read it.
 
 Two more deliberate quiets. Before the first ingest, a plain `check` prints `unseeded` and exits 0
-instead of reporting a missing checkpoint and missing index as errors (`src/bin/wikipoke.ts:191`) —
+instead of reporting a missing checkpoint and missing index as errors (`src/bin/wikipoke.ts:220`) —
 there is nothing to be unsound about yet. And a check named explicitly still runs, because seeding
 reads `coverage` to decide what to put in `.wikipokeignore`.
 
-## `init` asks, unless nobody is there
+## `init` asks, and when it cannot ask it invites
 
 `init` ends by listing the hooks and, **only when both stdin and stdout are a TTY**, asking which
-to install (`src/bin/wikipoke.ts:131`). Run by an agent or through a pipe there is nobody to answer,
-so it installs none and prints the instruction for the agent to ask the person and then run
-`wikipoke hooks add`. The hooks change what a person's terminal and other agents' sessions do, so
-they are never a default.
+to install (`src/bin/wikipoke.ts:156`). Run by an agent or through a pipe there is nobody to
+answer, so it installs none: a hook changes what a person's terminal and other agents' sessions do,
+and that is theirs to agree to.
 
-That branch decides more than it looks like. A repository whose `init` was run by an agent — the
-common case now — ends up with no notifier at all unless someone comes back and asks for one, and
-this repository was one of them until `df4db0e`. See
-[components/hooks.md](./hooks.md) for which of the five survive a clone and which cannot, and
-[components/install.md](./install.md) for what each one writes.
+Until `08177b5` the other branch printed one line — *"ask the person which they want"* — and left.
+That is how this repository ran for three commits with no notifier at all and did not notice, which
+is the exact failure the notifier exists to prevent. The branch now prints a real invitation
+(`src/bin/wikipoke.ts:124`): what is missing, that without a hook nothing will ever say the wiki is
+stale because `check` speaks only when run, and the command. It is addressed to the agent on
+purpose — the CLI cannot see whether it is being run by Claude Code or OpenCode, and the agent
+knows, so the choice is handed to the party that can make it rather than guessed at here. Bare
+`wikipoke hooks` says the same whenever nothing is installed, and goes quiet once something is.
+
+The line this draws is not about hooks alone: see
+[what may be written unasked](../concepts/file-ownership.md), which is why the skills need no such
+ceremony. [components/hooks.md](./hooks.md) has which of the five survive a clone.

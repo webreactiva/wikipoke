@@ -5,13 +5,13 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: df4db0e
+synced: 08177b5
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
 ---
 
-Reading `lib/` tells you almost nothing about what wikipoke does. The three checks measure; the
+Reading `src/lib/` tells you almost nothing about what wikipoke does. The three checks measure; the
 installer copies files. The actual behaviour — what counts as a page, when to write one, what to
 read first, when to stop — is prose in `templates/skills/*/SKILL.md`, executed by an agent.
 
@@ -21,7 +21,7 @@ That has a concrete consequence the project states as a rule in
 and read-only. A feature that needs judgement is a paragraph, not a function.
 
 It also explains a smaller rule that looks like style and is not: templates are plain files copied
-as they are, never strings built in code (`src/lib/install.ts:80` is the entire rendering engine — one
+as they are, never strings built in code (`src/lib/install.ts:81` is the entire rendering engine — one
 `replaceAll` of `{{WIKI}}`). A skill kept as a string is a skill nobody diffs, nobody reviews as
 prose, and nobody can open in the repository to see what their agent was told.
 

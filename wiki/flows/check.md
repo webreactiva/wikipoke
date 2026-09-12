@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: df4db0e
+synced: 08177b5
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
