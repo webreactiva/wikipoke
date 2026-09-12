@@ -5,7 +5,7 @@ responsibility: How a too-wide `sources:` entry makes coverage lie, and what the
 sources:
   - lib/lib.mjs
   - lib/lint.mjs
-synced: 68c8fa3
+synced: 19b233f
 related:
   - ./coverage-as-debt.md
   - ../components/checks.md
@@ -17,14 +17,14 @@ directions break the same way — a page that claims `src/` covers every file un
 reports green for code nobody wrote up, and every change anywhere under `src/` marks that one page
 stale, which trains everyone to ignore staleness.
 
-`isOverBroad()` catches the shape (`lib/lib.mjs:247`): a wildcard-free source pointing at a
+`isOverBroad()` catches the shape (`lib/lib.mjs:291`): a wildcard-free source pointing at a
 directory that carries one of the known package manifests (`package.json`, `Cargo.toml`,
 `go.mod`, …), or a source that resolves to the repository root. Claiming a whole *package* is the
 line, not claiming a directory — `src/billing/` is a legitimate module page's source, while a
 monorepo package root almost never is.
 
 It is a **warning**, not an error, and it says how many indexable files the claim swallows
-(`lib/lint.mjs:87`). A wiki can be sound and still be lazily indexed; the number is there so the
+(`lib/lint.mjs:90`). A wiki can be sound and still be lazily indexed; the number is there so the
 reader can judge.
 
 The trap this leaves is one no script can close, and the `wikipoke-lint` skill is told to watch for

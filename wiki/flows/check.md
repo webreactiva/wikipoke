@@ -7,7 +7,7 @@ sources:
   - lib/drift.mjs
   - lib/coverage.mjs
   - lib/lint.mjs
-synced: 68c8fa3
+synced: 19b233f
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md

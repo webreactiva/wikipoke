@@ -5,7 +5,7 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - README.md
   - bin/wikipoke.mjs
-synced: 68c8fa3
+synced: 19b233f
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md

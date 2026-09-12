@@ -5,7 +5,7 @@ responsibility: Why uncovered code never fails a check, and what that buys.
 sources:
   - lib/coverage.mjs
   - bin/wikipoke.mjs
-synced: 68c8fa3
+synced: 19b233f
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md
@@ -26,6 +26,11 @@ a wiki nobody reads.
 So the project states it twice, in prose in `AGENTS.md` — never make full coverage a precondition
 for anything — and in the exit code, where a script can read it. `--strict` exists for projects
 that want CI to fail on any finding, but it is opt-in and it is not what the hooks run.
+
+The ignore list is the one way this can be gamed, so the report ends with how many files it took
+out. Ignoring is meant to be a conscious call recorded in a file; until that number was printed,
+the difference between "this repository has 17 code files" and "this repository has 48 and the
+ignore list ate 31" was invisible to everyone, including the pass that wrote the list.
 
 Coverage earns its place by being *mechanical and finite*: it turns "is the wiki done?", which has
 no answer, into a list of file clusters, which has a next step. Resolve a cluster by writing the

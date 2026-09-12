@@ -37,9 +37,13 @@ It **proposes; it does not rewrite.** Reconciling with the code is
 2. Explain each finding in plain terms: what it means, why it matters, the fix.
    Keep the two scales apart: **errors** are a broken wiki; **staleness and
    coverage are debt**, not breakage.
-3. Watch for the trap the machine cannot see on its own: **green coverage with an
-   over-broad `sources:` is a false green**. Read the over-broad warnings and the
-   coverage total together.
+3. Watch for the two false greens the machine cannot judge on its own. **An
+   over-broad `sources:`** makes coverage read green for code nobody wrote up: read
+   those warnings and the coverage total together. **An ignore list nobody has
+   reviewed** does the same, more quietly — `wikipoke check coverage -v` ends with
+   how many files `.wikipokeignore` took out; when that number is large, or the
+   repository's product is prose the generic `*.md` line swallowed, say so and
+   propose the `!` lines that bring it back.
 
 ## `--deep` pass
 

@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 68c8fa3
+synced: 19b233f
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -44,6 +44,12 @@ than the gap it closed, and coverage will list exactly what was left as
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
 as the other pages teach the agent more. Anything reconstructed rather than read is marked
 `confidence: inferred`.
+
+Seeding also tailors `.wikipokeignore` in both directions, which is the step most easily done
+half-way. The starting list ignores `*.md`, and in a repository whose product is prose — prompts,
+skills, agent instructions, a spec — that hides exactly what should be documented; a `!` line
+brings it back. This wiki is the case in point: the three `SKILL.md` files and `CONVENTIONS.md`
+under `templates/` are most of what wikipoke is, and the generic rule had hidden all four.
 
 The rule that makes a seed finish at all is **write as you go**: read what one page needs, write
 that page, move on. Reading the whole repository first is paid for twice, once now and again after

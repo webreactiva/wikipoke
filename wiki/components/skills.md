@@ -6,7 +6,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 68c8fa3
+synced: 19b233f
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md

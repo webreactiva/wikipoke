@@ -62,10 +62,15 @@ wikipoke check must pass without errors before you are done
 2. **Survey without reading the sources.** `git ls-files`, the manifests, the
    READMEs and the project's agent instructions are enough to name the layers and
    the entry points. Source files come later, one page at a time.
-3. **Tailor `wiki/.wikipokeignore`.** It starts generic. Add what in this repository is
-   not code worth documenting: tests, fixtures, generated files, vendored code,
-   build plumbing. Run `wikipoke check coverage` and read the clusters it lists to
-   see what is left. Ignoring is a conscious call: say in the log what you ignored.
+3. **Tailor `wiki/.wikipokeignore`, in both directions.** It starts generic. Add what
+   in this repository is not code worth documenting: tests, fixtures, generated
+   files, vendored code, build plumbing. Then run `wikipoke check coverage -v` and
+   read **both** ends of it: the clusters still uncovered, and the last line, which
+   says how many files the ignore list took out. The starting list ignores `*.md`,
+   so in a repository whose product is prose — prompts, skills, agent instructions,
+   a spec — it has just hidden the very thing to document. Bring those back with a
+   `!` line (`!prompts/**`), which wins wherever it appears. Ignoring is a conscious
+   call in both directions: say in the log what you ignored and what you brought back.
 4. **Write `architecture.md` now**, from the survey: the map, the layers, the entry
    points. Mark what you have not read in the code yet `confidence: inferred`. Every
    other page links from it, and it gets corrected as later pages teach you more.
@@ -81,7 +86,9 @@ wikipoke check must pass without errors before you are done
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
    what you actually read; never claim a whole package. Mark anything you
    reconstructed rather than read with `confidence: inferred`. Link only to pages
-   that already exist.
+   that already exist. Take every `path:line` citation from that file alone, as you
+   write the page — a number carried over from a listing of several files is wrong
+   by however many lines came before it, and `check lint` will tell you so.
 7. **Write `index.md`** grouped by type, one line per page (its `responsibility`).
 8. **Write `.wikipoke-state.json`** and the first `log.md` entry.
 

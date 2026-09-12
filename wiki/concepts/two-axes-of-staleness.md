@@ -5,7 +5,7 @@ responsibility: Why the wiki tracks both a repository checkpoint and a per-page 
 sources:
   - lib/drift.mjs
   - templates/CONVENTIONS.md
-synced: 68c8fa3
+synced: 19b233f
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
