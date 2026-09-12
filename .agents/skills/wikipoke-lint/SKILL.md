@@ -3,7 +3,7 @@ name: wikipoke-lint
 description: "Check the wiki's health and report what to fix. By default runs the deterministic checks (integrity, staleness, coverage) and explains each finding. With --deep, also reads the pages as a body of text to catch what no script can: contradictions, expired claims, concepts with no page, pages that only restate signatures, undocumented subsystems, wrong confidence. Proposes; fixes nothing without a yes. Use when: (1) the user invokes /wikipoke-lint, (2) the user says 'review the wiki', 'revisa el wiki', '¿está bien el wiki?', (3) every few weeks."
 argument-hint: "[--deep] [--fix-trivial] [--path=<glob>]"
 ---
-<!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->
+<!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in wiki/CONVENTIONS.md. -->
 
 # wikipoke-lint: is the wiki sound, and is it still true?
 
@@ -23,7 +23,7 @@ Two layers under one verb. The first is a machine; the second is a reading.
                       prioritized findings + a proposed fix each
 ```
 
-**Read `{{WIKI}}/CONVENTIONS.md`**: the schema, the writing rules and the `confidence:`
+**Read `wiki/CONVENTIONS.md`**: the schema, the writing rules and the `confidence:`
 contract live there. `wikipoke` is `node_modules/.bin/wikipoke` when the project
 depends on it, `wikipoke` when it is installed globally.
 
@@ -71,7 +71,7 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
 5. **Fix nothing without a yes**, except trivia (a broken link, a missing `index.md`
    line, an obviously wrong `type:`), and only with `--fix-trivial`. List those
    apart from the proposals.
-6. **Log a `--deep` pass** in `{{WIKI}}/log.md`:
+6. **Log a `--deep` pass** in `wiki/log.md`:
    ```
    ## <date> · wikipoke-lint --deep
    - N findings (M critical) · <one line on the state of the wiki>

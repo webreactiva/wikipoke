@@ -295,3 +295,58 @@ test("the notifier is silent when the wiki is current, and the git hook speaks a
   assert.equal(commit.status, 0);
   assert.match(commit.stderr, /behind[\s\S]*stale\s+architecture/);
 });
+
+test("a `!` line in .wikipokeignore brings paths back, and coverage says how many it hid", () => {
+  const root = repo({ "prompts/agent.md": "do the thing\n" });
+  seed(root);
+  // The starting ignore list drops every .md, product or not.
+  const hidden = JSON.parse(wikipoke(root, "check", "coverage", "--json").out);
+  assert.equal(hidden.unclaimed.includes("prompts/agent.md"), false);
+  assert.equal(hidden.ignored.includes("prompts/agent.md"), true);
+  assert.equal(hidden.ignored.includes("wiki/index.md"), false, "the wiki's own pages are not code it hid");
+
+  writeFileSync(join(root, "wiki/.wikipokeignore"), "wiki/**\n*.md\n!prompts/**\n");
+  const back = JSON.parse(wikipoke(root, "check", "coverage", "--json").out);
+  assert.equal(back.unclaimed.includes("prompts/agent.md"), true, "a ! line wins over the plain one above it");
+  assert.equal(back.ignored.includes("prompts/agent.md"), false);
+  assert.match(wikipoke(root, "check", "coverage").out, /file\(s\) ignored by \.wikipokeignore/);
+});
+
+test("a re-included path counts for the repo axis of drift too", () => {
+  const root = repo({ "prompts/agent.md": "do the thing\n" });
+  seed(root);
+  writeFileSync(join(root, "wiki/.wikipokeignore"), "wiki/**\n*.md\n!prompts/**\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "re-include the prompts");
+  put(root, "prompts/agent.md", "do the other thing\n");
+  git(root, "commit", "-qam", "edit a prompt");
+  const drift = JSON.parse(wikipoke(root, "check", "drift", "--json").out);
+  assert.equal(drift.repo.status, "behind");
+  assert.equal(drift.repo.files, 1);
+});
+
+test("lint re-reads every path:line citation and reports the ones the code moved out from under", () => {
+  const root = repo({ "src/cli.js": "a\nb\nc\nd\ne\n" });
+  seed(root);
+  page(root, "components/cited.md", {
+    sources: ["src/cli.js"],
+    body: [
+      "Real: `src/cli.js:3`. Gone: `src/cli.js:99`. Deleted: `src/old/gone.js:4`.",
+      "Not a path at all: 12:30, and version 0.2:1.",
+      "```\nsrc/cli.js:400\n```",
+      "[map](../architecture.md)",
+    ].join("\n\n"),
+  });
+  const lint = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  const cites = lint.warnings.filter((f) => f.page === "components/cited" && /src\//.test(f.message)).map((f) => f.message);
+  assert.equal(cites.length, 1, `one citation is wrong, got: ${cites.join(" | ")}`);
+  assert.match(cites[0], /`src\/cli\.js:99` is past the end of src\/cli\.js \(5 lines\)/);
+  assert.equal(lint.errors.length, 0, "a drifted pointer is debt, not a broken wiki");
+
+  // A file the repository does not have is an example; one whose folder exists is a dead pointer.
+  put(root, "src/old/other.js", "//\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "add src/old");
+  const after = JSON.parse(wikipoke(root, "check", "lint", "--json").out);
+  assert.ok(after.warnings.some((f) => /`src\/old\/gone\.js:4` points at a file that is not tracked/.test(f.message)));
+});

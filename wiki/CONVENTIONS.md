@@ -13,7 +13,7 @@ disagree with it, this file wins.
 | **`wikipoke-query`** | answer a question from the wiki, and file the answer back when it is worth keeping |
 | **`wikipoke-lint`** | is the wiki sound? `wikipoke check` for what a machine decides, a deep pass for what needs reading |
 
-A person launches the skills; the agent follows them and writes the pages directly in `{{WIKI}}/`.
+A person launches the skills; the agent follows them and writes the pages directly in `wiki/`.
 `wikipoke check` sits underneath and only measures: it never writes a page.
 
 ### Growth is deliberate, never a big bang
@@ -37,7 +37,7 @@ holds; rules live in those files and are linked, not copied.
 
 Two boundaries are never crossed:
 
-- **A wiki pass never modifies code.** It touches `{{WIKI}}/**` and nothing else. A bug found along
+- **A wiki pass never modifies code.** It touches `wiki/**` and nothing else. A bug found along
   the way is noted on the page and reported to the person.
 - **`synced:` is never re-stamped without re-reading the page against the code.** That field is
   the only guarantee the wiki is not lying.
@@ -52,14 +52,12 @@ practice.
 
 No: signatures, parameter lists, export enumerations, option tables. The code and its types
 already say that, and a copy guarantees it rots. To point at code, **link to it with a line**:
-`src/billing/invoice.ts:42`. Take that number from the file itself, at the moment you write the
-page; `wikipoke check lint` re-reads every citation and says when one has drifted past the end of
-its file or onto a blank line.
+`src/billing/invoice.ts:42`.
 
 ## Layout
 
 ```
-{{WIKI}}/
+wiki/
   CONVENTIONS.md        # this file: the schema, not a page
   .wikipoke-state.json  # repository checkpoint: {"version":1,"last_indexed_commit":"<sha>"}
   .wikipokeignore       # git pathspecs of files that never count for coverage
@@ -74,7 +72,7 @@ its file or onto a blank line.
 ```
 
 `CONVENTIONS.md`, `index.md` and `log.md` are not pages (no frontmatter); every other `.md` file
-under `{{WIKI}}/` is a page and carries the template below.
+under `wiki/` is a page and carries the template below.
 
 ## Page types
 
@@ -147,7 +145,7 @@ page was verified against, which is the date that matters.
 
 ## State and log
 
-`{{WIKI}}/.wikipoke-state.json` holds the repository checkpoint:
+`wiki/.wikipoke-state.json` holds the repository checkpoint:
 
     {"version": 1, "last_indexed_commit": "<full sha>"}
 
@@ -178,21 +176,17 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
   against the working tree, so uncommitted edits count.
 - **coverage**: tracked files no page's `sources` claims, minus `.wikipokeignore`. Resolve a
-  cluster by writing a page or, when it is out of scope, by ignoring it on purpose. The report ends
-  with how many files the ignore list took out, so a rule that hides too much is visible rather
-  than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
-  repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
+  cluster by writing a page or, when it is out of scope, by ignoring it on purpose.
 - **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, over-broad sources, broken links (body, `related:` and `index.md`),
-  `path:line` citations that now land past the end of a file or on a blank line, orphan pages,
-  pages missing from `index.md`, and a warning past 80 pages, where reading `index.md` first stops
-  telling pages apart.
+  orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
+  `index.md` first stops telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt.
 
 ## The signal
 
-`{{WIKI}}/.wikipoke-hook.sh` runs `drift` and `coverage`, prints nothing when the wiki is current,
+`wiki/.wikipoke-hook.sh` runs `drift` and `coverage`, prints nothing when the wiki is current,
 and never fails. Hooks that run it are optional, installed only on request with
 `wikipoke hooks add <name>` (`wikipoke hooks` lists them):
 

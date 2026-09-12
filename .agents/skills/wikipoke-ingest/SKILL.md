@@ -3,7 +3,7 @@ name: wikipoke-ingest
 description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or code is uncovered, (3) the user says 'update the wiki', 'document <subsystem>', 'actualiza el wiki', 'crea el wiki', 'documenta <subsistema>', typically when closing a feature."
 argument-hint: "[<path> | all]"
 ---
-<!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->
+<!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in wiki/CONVENTIONS.md. -->
 
 # wikipoke-ingest: take the code into the wiki
 
@@ -15,19 +15,19 @@ argument given?
    ├── yes ──► INGEST A PART   that path, whether or not it ever changed
    │           (`all` = the whole outstanding backlog)
    │
-   └── no ──► {{WIKI}}/.wikipoke-state.json exists?
+   └── no ──► wiki/.wikipoke-state.json exists?
                  ├── no  ──► SEED       the avenues, once per repository
                  └── yes ──► RECONCILE  only what changed since the checkpoint
 ```
 
-**Read `{{WIKI}}/CONVENTIONS.md` first.** The layout, the page types, the template,
+**Read `wiki/CONVENTIONS.md` first.** The layout, the page types, the template,
 `confidence:`, the writing rules and the checkpoint contract live there, not here.
 
 `wikipoke` below is the CLI: `node_modules/.bin/wikipoke` when the project depends
 on it, `wikipoke` when it is installed globally. It only measures; you write the
-pages yourself, directly under `{{WIKI}}/`.
+pages yourself, directly under `wiki/`.
 
-Two boundaries, in every mode: **never modify code** (touch `{{WIKI}}/**` and nothing
+Two boundaries, in every mode: **never modify code** (touch `wiki/**` and nothing
 else; running the project's builds, generators or scripts counts, so read them
 instead), and **never re-stamp `synced:` on a page you did not re-read against the
 code**.
@@ -62,7 +62,7 @@ wikipoke check must pass without errors before you are done
 2. **Survey without reading the sources.** `git ls-files`, the manifests, the
    READMEs and the project's agent instructions are enough to name the layers and
    the entry points. Source files come later, one page at a time.
-3. **Tailor `{{WIKI}}/.wikipokeignore`, in both directions.** It starts generic. Add what
+3. **Tailor `wiki/.wikipokeignore`, in both directions.** It starts generic. Add what
    in this repository is not code worth documenting: tests, fixtures, generated
    files, vendored code, build plumbing. Then run `wikipoke check coverage -v` and
    read **both** ends of it: the clusters still uncovered, and the last line, which

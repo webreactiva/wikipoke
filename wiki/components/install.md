@@ -1,0 +1,52 @@
+---
+title: The installer
+type: entity
+responsibility: How init, hooks add/remove and uninstall write files without ever taking something the project owns.
+sources:
+  - lib/install.mjs
+synced: 68c8fa3
+related:
+  - ../concepts/file-ownership.md
+  - ./hooks.md
+---
+
+The only module in wikipoke that writes anything outside the wiki, and it writes nothing it made
+up: every file is a template from `templates/` with `{{WIKI}}` replaced by the repository's real
+wiki path (`lib/install.mjs:41`). That substitution is what lets a project keep its wiki in
+`docs/wiki` and still get skills, hooks and a schema that say `docs/wiki` — nothing downstream has
+to look the path up, so nothing downstream can disagree about it.
+
+Two primitives carry the whole
+[ownership rule](../concepts/file-ownership.md): `place()` writes a file only when it is missing or
+still carries the `managed by wikipoke` marker, and `unplace()` deletes one under the same
+condition (`lib/install.mjs:64`). Anything else is left alone and reported as a line in
+`report.manual` — a step for the person to do by hand, printed in yellow. No flag overrides this.
+
+Three kinds of file, three different rules:
+
+```
+templates copied whole     skills, the notifier, the opencode plugin, the cursor rule
+   └── place() / unplace(), marker-gated
+
+the project's from birth   wiki/CONVENTIONS.md · wiki/.wikipokeignore
+   └── written once, then `kept` forever, even by a later `init`   (install.mjs:131)
+
+shared files, edited       .claude/settings.json · AGENTS.md
+   └── only wikipoke's own entry is added or removed; the rest is preserved
+```
+
+The shared-file cases are where the care shows. `wireClaude()` parses `.claude/settings.json`,
+appends one `SessionStart` entry and writes the JSON back; `unwireClaude()` removes that entry,
+then the now-empty `hooks.SessionStart`, then `hooks`, then the file itself, pruning empty
+directories on the way up (`lib/install.mjs:270`). Unparseable JSON is never overwritten — it
+returns `"manual"` and the person is told what to add. `AGENTS.md` gets the same treatment through
+an HTML-comment delimited block, and is deleted only if removing that block leaves nothing else.
+
+`init` is idempotent by construction: `place()` returns early when the content already matches, so
+re-running it after an upgrade refreshes the skills and reports only what actually changed.
+`uninstall` is `removeHooks(every hook)` plus the skills in both homes, and deliberately keeps
+`wiki/`: the pages are the project's knowledge, not wikipoke's.
+
+One asymmetry worth knowing: `hooks add claude` also writes the Claude skills, because the session
+briefing it installs points at a skill that has to exist; `hooks remove claude` does **not** take
+them away, since skills are not a hook. Only `uninstall` removes them (`lib/install.mjs:198`).

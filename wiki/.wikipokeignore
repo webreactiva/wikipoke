@@ -1,18 +1,16 @@
 # Paths that never count as code the wiki should cover. Git pathspecs, one per line.
 # A plain `*` also crosses directories here: `*.md` matches README.md and docs/a/b.md alike.
-# A line starting with `!` brings paths back, whatever order it appears in: `!docs/adr/**`.
 #
 # This is a starting point. The first wikipoke-ingest pass tailors it to this repository:
 # tests, generated files, fixtures and build plumbing usually belong here. Ignoring something is a
 # conscious call; coverage keeps listing whatever is neither ignored nor documented.
 
 # the wiki itself, documentation and agent configuration
-{{WIKI}}/**
+wiki/**
 .wikipoke.json
-*.md
-# ...but in a repository whose product is prose - prompts, skills, agent instructions, a spec -
-# that Markdown IS the code, and a `!` line brings it back:
-#   !prompts/**
+README.md
+AGENTS.md
+CHANGELOG.md
 .agents/**
 .claude/**
 .codex/**
@@ -38,3 +36,6 @@ go.sum
 .editorconfig
 .npmrc
 .nvmrc
+
+# tests: they verify the CLI, they do not explain it
+test/**
