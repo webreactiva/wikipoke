@@ -6,7 +6,7 @@ sources:
   - tsconfig.json
   - tsconfig.build.json
   - package.json
-synced: df4db0e
+synced: 3a9a8d1
 ---
 
 Node 22.18 runs a `.ts` file by stripping the types out of it and executing what is left. That is
@@ -15,12 +15,12 @@ dependencies and, until `df4db0e`, no build step, and a conversion that put `tsc
 contributor and running the thing would have spent most of what the tool is worth.
 
 So the sources are read two ways. `npm test` runs `node --test test/*.test.ts` against `src/`
-directly (`package.json:21`): no build, and the test exercises the same bytes the contributor just
+directly (`package.json:39`): no build, and the test exercises the same bytes the contributor just
 edited rather than an artefact derived from them. What ships is compiled, because Node **refuses**
 to strip types under `node_modules/` — it throws `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` —
-and `npm install -D github:delineas/wikipoke`, which the README documents, puts wikipoke exactly
-there. `prepare` runs the build on install (`package.json:22`) and `bin` points at
-`dist/bin/wikipoke.js` (`package.json:10`).
+and `npm install -D wikipoke`, the local dependency the README documents, puts wikipoke exactly
+there. `prepare` runs the build on install (`package.json:40`) and `bin` points at
+`dist/bin/wikipoke.js` (`package.json:26`).
 
 ## What was given up, and what was refused
 
@@ -33,8 +33,10 @@ The real cost of compiling is that `dist/` is generated and generated files lose
 executable bit is the one that bit first: `tsc` emits mode 644, the notifier tests its CLI with
 `[ -x node_modules/.bin/wikipoke ]`, and the hook went quiet without failing. npm sets the bit
 itself when it links a bin, so an installed wikipoke was never affected, but a local build was —
-the build now restores it (`package.json:19`). Anything else the shipped tree needs and `tsc` does
-not carry has to be added there too, and will be silent in the same way.
+the build now restores it (`package.json:35`), and `npm run link` (`package.json:36`) builds
+before it links, so a working copy put on the `PATH` cannot skip that step. Anything else the
+shipped tree needs and `tsc` does not carry has to be added there too, and will be silent in the
+same way.
 
 ## The rules this puts on `src/`
 

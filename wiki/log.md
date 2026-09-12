@@ -71,3 +71,9 @@ blank. Re-pointed all forty-seven after checking each against the line it now la
 - components/skills.md also still said `lib/`, which `df4db0e` removed. Its sources are templates
   that did not change, so drift never flagged it: a page can rot on code it does not claim.
 - Not done: `templates/wikipokeignore` is still uncovered, unchanged from the last two passes.
+
+## 2026-09-12 · wikipoke-ingest
+- coverage-as-debt.md: claims templates/wikipokeignore now, with what the default list hides and how a `!` line brings a subtree back
+- typescript-two-ways.md: package.json citations moved with the publish metadata; `npm run link` builds before it links
+- cli-read-only.md: re-read against the README install change, which did not touch what the page claims
+- ignored LICENSE: a licence is not code

@@ -4,8 +4,9 @@ type: concept
 responsibility: Why uncovered code never fails a check, and what that buys.
 sources:
   - src/lib/coverage.ts
+  - templates/wikipokeignore
   - src/bin/wikipoke.ts
-synced: 08177b5
+synced: 3a9a8d1
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md
@@ -31,6 +32,14 @@ The ignore list is the one way this can be gamed, so the report ends with how ma
 out. Ignoring is meant to be a conscious call recorded in a file; until that number was printed,
 the difference between "this repository has 17 code files" and "this repository has 48 and the
 ignore list ate 31" was invisible to everyone, including the pass that wrote the list.
+
+What a new wiki starts with is `templates/wikipokeignore`: the wiki itself, `.wikipoke.json`, every
+`*.md`, the agent folders, the lockfiles and the repository plumbing. It is a starting point the
+first ingest pass is told to tailor, not a policy — and the two lines that matter most are the
+ones that undo it. `*.md` is right for a repository whose product is code and wrong for one whose
+product is prose, so a `!` line brings a subtree back (`templates/wikipokeignore:15`), and because
+both halves are git pathspecs applied in two passes rather than gitignore rules read top to bottom,
+where that line sits in the file does not matter.
 
 Coverage earns its place by being *mechanical and finite*: it turns "is the wiki done?", which has
 no answer, into a list of file clusters, which has a next step. Resolve a cluster by writing the
