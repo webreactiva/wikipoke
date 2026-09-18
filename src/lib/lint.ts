@@ -143,7 +143,8 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
       checkCitation(cite, { root, trackedSet, readSource, add, page: page.id });
 
     // `[event.ts:41](…#L41)` carries its line twice, and re-pointing the anchor leaves the text.
-    for (const m of page.body.replace(/```[\s\S]*?```/g, "").matchAll(/\[[^\]]*?:(\d+)(?:-\d+)?\]\([^)\s]*#L(\d+)[^)\s]*\)/g))
+    // Code is stripped the way markdownLinks() strips it: a link shown in backticks is an example.
+    for (const m of page.body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "").matchAll(/\[[^\]]*?:(\d+)(?:-\d+)?\]\([^)\s]*#L(\d+)[^)\s]*\)/g))
       if (m[1] !== m[2]) add("warn", `\`${m[0]}\` says line ${m[1]} and links to line ${m[2]}: one of them moved`, page.id);
 
     if (indexRaw && !indexRaw.includes(page.rel)) add("warn", "not listed in index.md", page.id);

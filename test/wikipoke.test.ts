@@ -587,7 +587,9 @@ test("lint warns when a link's text and its line anchor disagree", () => {
   const root = repo({ "src/billing/invoice.js": "a\nb\nc\nd\n" });
   seed(root);
   page(root, "components/billing.md", {
-    body: "[invoice.js:2](../../src/billing/invoice.js#L2) and [invoice.js:1](../../src/billing/invoice.js#L3). [map](../architecture.md)",
+    body:
+      "[invoice.js:2](../../src/billing/invoice.js#L2) and [invoice.js:1](../../src/billing/invoice.js#L3). " +
+      "An example is not a link: `[a.js:1](../../src/billing/invoice.js#L4)`. [map](../architecture.md)",
   });
   const lint = json<LintJson>(root, "check", "lint", "--json");
   const found = lint.warnings.filter((f) => f.page === "components/billing").map((f) => f.message);
