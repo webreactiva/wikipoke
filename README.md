@@ -11,11 +11,9 @@ code changes, it tells you which pages went stale and which citations moved, and
 them back in line. Ask how something works and the agent reads a page instead of exploring the
 repository, which is where the tokens go ([measured on two repositories](#does-it-save-tokens)).
 
-
+*Thirty seconds in `wikipoke atlas`, on the wiki this repository keeps of itself: the page list, the graph, a page with its sources, the filter.*
 
 https://github.com/user-attachments/assets/d72063c0-20ba-4632-83ca-31e9e391ba59
-
-
 
 A code wiki that agents maintain. Three skills write it; one small CLI sets it up, checks it and
 shows it, and never writes a page.
