@@ -5,7 +5,7 @@ responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in
 sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
-synced: 87d9fd0
+synced: f4615f9
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md

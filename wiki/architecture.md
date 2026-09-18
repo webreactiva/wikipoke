@@ -5,13 +5,14 @@ responsibility: The map of wikipoke: who writes the wiki, who only measures it, 
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: 87d9fd0
+synced: f4615f9
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
 prose an agent follows to write Markdown pages; the **CLI** is a program that reads git and the
-pages and reports what it finds. The skills write and never measure by hand; the CLI measures and
-never writes a page. Everything else here follows from that split.
+pages and reports what it finds, or shows them in a browser. The skills write and never measure by
+hand; the CLI measures and shows, and never writes a page. Everything else here follows from that
+split.
 
 ```
          a person
@@ -25,6 +26,7 @@ never writes a page. Everything else here follows from that split.
             │  reads, never writes
    src/bin/wikipoke.ts  ──►  src/lib/{drift,coverage,lint}.ts
             │                        └── src/lib/lib.ts (git, frontmatter, globs, pages)
+            ├──►  src/atlas/{snapshot,serve,export}.ts  ──►  a browser, or a folder outside wiki/
             └──►  src/lib/install.ts  ──►  templates/**  (copied, never generated)
 ```
 
@@ -52,9 +54,16 @@ frontmatter is parsed and globs are compiled. Each check exports the same `run(c
 Until `df4db0e` the CLI kept the three in one object and indexed it by name, which worked because
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
-name (`src/bin/wikipoke.ts:36`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:253`). The uniform `run`/`report` contract is unchanged; what changed is that
+name (`src/bin/wikipoke.ts:39`) — and counting, printing and `--json` each narrow it back
+(`src/bin/wikipoke.ts:289`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
+
+**The atlas shows the wiki and writes only outside it.** `src/atlas/` gathers the pages, their
+links and what `drift` says about each into one snapshot, and a browser page renders it — served
+live on `127.0.0.1`, or exported with `--out` to a folder that must not be inside the wiki. It
+borrows lint's link reading and drift's staleness rather than judging anything itself. It is the
+reason `AGENTS.md` stopped saying "the CLI only measures" in `12ff4b8`: CLI code may now go to a
+check or to atlas, and nowhere else. See [components/atlas.md](components/atlas.md).
 
 **`src/bin/wikipoke.ts` is argument parsing and exit codes.** It resolves the repository root and
 the wiki directory, dispatches, and decides what failure means: lint errors fail a plain run, while
@@ -74,14 +83,16 @@ explains the one piece of state that does matter: the checkpoint and each page's
 
 | Path | What it is |
 | --- | --- |
-| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `uninstall` |
+| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `atlas`, `uninstall` |
 | `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |
+| `src/atlas/` | the atlas: the snapshot, the local server, the export, and the page in `web/` |
 | `templates/skills/*/SKILL.md` | the three skills: where the actual behaviour is |
 | `templates/CONVENTIONS.md` | the page schema, copied into every wiki and then owned by it |
 
 Node 22.18 or later, and no runtime dependencies: everything the CLI uses is in Node's standard
-library. Until `df4db0e` there was no build step either and the sources were `.mjs` under `bin/`
+library, and marked, the one library the atlas's page loads, is copied in by the build rather than
+installed alongside. Until `df4db0e` there was no build step either and the sources were `.mjs` under `bin/`
 and `lib/`; they are now TypeScript under `src/`, read from source in development and shipped
 compiled, for the reasons in
 [decisions/typescript-two-ways.md](decisions/typescript-two-ways.md). `npm test` runs

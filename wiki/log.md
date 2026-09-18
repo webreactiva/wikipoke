@@ -169,3 +169,33 @@ about the code, and all three skills keep their trigger phrases in English.
   "one case, one sentence" as the example.
 - CONVENTIONS.md: level with the template. Four more pages re-read against the changed templates
   and README and re-stamped; nothing they claim moved.
+
+## 2026-09-18 · wikipoke-ingest
+
+Seven commits since `60d592f`, four of them about `wikipoke atlas` (`12ff4b8` and the three after
+it). Seven pages stale, every one of them through `src/bin/wikipoke.ts` or the build; reconciled
+from their own diffs and re-stamped at `f4615f9`.
+
+- new: components/atlas.md — the snapshot both the live server and the export hand the browser,
+  the three guards on the local server (Host header, GET only, git-tracked files only), why
+  exported citations point at each page's `synced:` commit, and how `--out` tells a previous export
+  from someone's site by the `managed by wikipoke` marker.
+- decisions/cli-read-only.md: `AGENTS.md` used to say the CLI only measures and CLI code goes only
+  to a check; since `12ff4b8` it says the CLI measures and shows, and atlas is the one other place
+  CLI code may go, on the condition that it writes only outside the wiki. Recorded as a change, not
+  an overwrite. The page never writing is intact.
+- decisions/typescript-two-ways.md: the build's `node -e` chmod became `scripts/build.ts`, which also
+  copies atlas's page and marked into `dist/`. The page had predicted that cost ("anything else the
+  shipped tree needs has to be added there too"); it came due. Also: `scripts/` is type-checked now,
+  and a third tsconfig checks the browser JavaScript.
+- architecture.md, components/cli.md: five commands, not four; the atlas as a layer; atlas's exit
+  codes. Twelve `src/bin/wikipoke.ts` citations re-pointed, each checked against the line it lands on.
+- concepts/coverage-as-debt.md, flows/check.md, flows/install.md: re-read, nothing they claim
+  changed; one citation re-pointed.
+- components/lib.md: one paragraph on atlas reading the same helpers. Its source did not change, so
+  drift never flagged it; not re-stamped, since the rest of the page was not re-read.
+- Found, not fixed: `exportSite` tests "inside the wiki" by comparing paths as strings, so on a
+  case-insensitive filesystem `--out Wiki/site` (or a symlink into the wiki) would get past it.
+  Noted on components/atlas.md; read from the code, not tried.
+- Ignored `*.webp`: the logo in the README and in the atlas header is not code.
+- Not done: `src/atlas/web/atlas.css` stays uncovered, as does a page on what the atlas tests pin down.

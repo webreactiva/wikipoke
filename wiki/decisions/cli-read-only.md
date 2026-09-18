@@ -4,8 +4,9 @@ type: decision
 responsibility: Why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
 sources:
   - README.md
+  - AGENTS.md
   - src/bin/wikipoke.ts
-synced: 60d592f
+synced: f4615f9
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
@@ -31,7 +32,16 @@ half-state a tool has to protect.
 sessions from writing the same page — so the guarantees moved from the process to the *artifact*:
 the frontmatter contract, `sources:`, `synced:` and the link graph are all checkable after the fact
 by `lint`, which is the reason they exist in that shape. The project keeps the line drawn in
-`AGENTS.md`: CLI code is added only for a check that is deterministic and read-only.
+`AGENTS.md`.
+
+That line moved once, in `12ff4b8`. Until then it read "the CLI only measures": CLI code was added
+only for a check that is deterministic and read-only. `wikipoke atlas` is not a check — it renders
+the wiki in a browser and can write a static site — so the rule now reads "the CLI measures it and
+shows it, and never writes in it", with atlas named as the one other place CLI code may go, on the
+condition that it reads the wiki and writes only outside it (`AGENTS.md:5`). The boundary this page
+records is intact: what the CLI may not do is write a page. What changed is that "read-only" now
+means read-only *toward the wiki*, not "prints and exits"; see [the atlas](../components/atlas.md)
+for how `--out` refuses a target inside it.
 
 The pressure comes back from the agents themselves. An OpenCode agent that mistyped the checkpoint
 asked for a `wikipoke seal`, a command that would write it. The fix stayed on this side of the line

@@ -14,6 +14,11 @@ page is, how git is called, how frontmatter is parsed and how a `sources:` glob 
 own header states the rule that keeps it honest — when this file and the wiki's `CONVENTIONS.md`
 disagree about the schema, [CONVENTIONS.md wins and this file is fixed](../concepts/schema-lives-in-the-wiki.md).
 
+Since `12ff4b8` the checks are not its only readers. [The atlas](./atlas.md) builds its snapshot
+from the same page listing, link reading and citation parsing, and serves cited files only from the
+same tracked-file list, so what atlas draws and what `check` reports cannot disagree about what a
+page links to or cites.
+
 **It is also where the vocabulary is declared.** Since `df4db0e` the module exports the types the
 three checks pass around as well as the functions: `Page` and `LoadedPage`, `Frontmatter`, `Link`,
 `Citation`, `CheckContext` (`src/lib/lib.ts:40`). That moves a class of drift from review to the

@@ -40,3 +40,6 @@ LICENSE
 
 # tests: they verify the CLI, they do not explain it
 test/**
+
+# images: the logo, in the README and in the atlas header
+*.webp

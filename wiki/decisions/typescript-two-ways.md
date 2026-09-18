@@ -6,7 +6,9 @@ sources:
   - tsconfig.json
   - tsconfig.build.json
   - package.json
-synced: 3a9a8d1
+  - scripts/build.ts
+  - src/atlas/web/tsconfig.json
+synced: f4615f9
 ---
 
 Node 22.18 runs a `.ts` file by stripping the types out of it and executing what is left. That is
@@ -33,10 +35,16 @@ The real cost of compiling is that `dist/` is generated and generated files lose
 executable bit is the one that bit first: `tsc` emits mode 644, the notifier tests its CLI with
 `[ -x node_modules/.bin/wikipoke ]`, and the hook went quiet without failing. npm sets the bit
 itself when it links a bin, so an installed wikipoke was never affected, but a local build was —
-the build now restores it (`package.json:35`), and `npm run link` (`package.json:36`) builds
-before it links, so a working copy put on the `PATH` cannot skip that step. Anything else the
-shipped tree needs and `tsc` does not carry has to be added there too, and will be silent in the
-same way.
+the build now restores it, and `npm run link` (`package.json:36`) builds before it links, so a
+working copy put on the `PATH` cannot skip that step. Anything else the shipped tree needs and
+`tsc` does not carry has to be added there too, and will be silent in the same way.
+
+That second half came due in `12ff4b8`. Until then the build was `tsc` followed by a one-line
+`node -e` that set the bit. [The atlas](../components/atlas.md) brought files `tsc` never sees —
+its HTML, CSS and browser JavaScript, and marked, which renders the Markdown — so the build became
+`tsc` followed by `scripts/build.ts` (`package.json:35`), which copies the page and marked into
+`dist/atlas/web/` and then sets the bit (`scripts/build.ts:7`). marked is a devDependency, so
+copying it at build time is what keeps the published package free of runtime dependencies.
 
 ## The rules this puts on `src/`
 
@@ -50,9 +58,14 @@ Two, both enforced by `tsconfig.json` rather than by review:
   specifier to `.js` on the way into `dist/`.
 
 There are two configs because the two readings want different things: `tsconfig.json` checks
-`src/` and `test/` and emits nothing, which is also what an editor picks up, and
-`tsconfig.build.json` is the one that writes `dist/`. Tests are checked but never compiled: they
-only ever run from source.
+`src/`, `test/` and, since `12ff4b8`, `scripts/` (`tsconfig.json:31`), and emits nothing, which is
+also what an editor picks up; `tsconfig.build.json` is the one that writes `dist/`. Tests and the
+build script are checked but never compiled: they only ever run from source.
+
+A third config, `src/atlas/web/tsconfig.json`, exists for code neither reading applies to: the
+atlas's browser JavaScript, which runs as it is and is never stripped or compiled. It only checks,
+with `checkJs` and the DOM's types (`src/atlas/web/tsconfig.json:11`), and `npm run typecheck`
+runs it after the main one (`package.json:38`).
 
 See [components/cli.md](../components/cli.md) for what the types changed inside the CLI, and
 [the architecture](../architecture.md) for where the sources sit.
