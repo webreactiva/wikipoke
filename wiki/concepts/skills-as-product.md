@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: 87d9fd0
+synced: 60d592f
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -29,3 +29,9 @@ The trade is real. Prose cannot be unit-tested, and two agents will follow the s
 differently. What the project does instead is make the *result* checkable: every page carries a
 frontmatter contract, and `wikipoke check` decides mechanically whether the pages a skill produced
 are sound, current and linked. The skill is free-form; its output is not.
+
+The prose starts working before the skill is read, too: a skill's `description:` is all an agent
+sees when it decides whether to reach for one. The query skill's first description fired on "how
+does X work" and "where does Y live", and an agent with the wiki installed opened it in 3 of 9
+runs on one repository. Widened to any question about how the code behaves (`34f14a3`), it was
+opened in 9 of 9.

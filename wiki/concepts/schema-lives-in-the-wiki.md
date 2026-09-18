@@ -5,7 +5,7 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 87d9fd0
+synced: 60d592f
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -31,6 +31,11 @@ The reason to put the schema *in* the wiki rather than in the tool is that the t
 before writing anything. A project that documents in Spanish, adds a `runbook` type or forbids
 ASCII diagrams changes one Markdown file, and the agent follows the change on its next pass —
 without a wikipoke release, and without the tool having to anticipate what any project wanted.
+
+The writing rules are where a measured failure goes. One page explained two cases in one
+paragraph, and agents answering from it merged them in four of six runs; `34f14a3` added "one case,
+one sentence, with its outcome" to the template, and the same page rewritten that way was read
+right six times out of six.
 
 The price is that a new wikipoke cannot hand the file its new rules. Since `87d9fd0` it at least
 says so: `init` names the template when the project's copy differs from it, and the project decides

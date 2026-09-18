@@ -6,7 +6,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 87d9fd0
+synced: 60d592f
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -36,6 +36,15 @@ offers to file the answer back. That offer is the point: it grows the wiki *wher
 ask*, which is a better prior than where the index looks thin. It writes only on a yes, and never
 moves the checkpoint. Its sharpest line is the last one — for inventory questions ("every place we
 do X"), never accept an answer that rests on the wiki's silence.
+
+How it reads is what makes the wiki cheaper than the code, and `34f14a3` changed it after measuring.
+Every step an agent takes re-sends the whole conversation, so an answer costs roughly its number of
+steps. The first version read the wiki and then explored the source anyway, and saved nothing on a
+well-commented repository. Now it reads `index.md` and then every candidate page in one step, and
+treats a current page's citations as the evidence: code is opened only for what the page lacks, or
+at the one cited line the answer turns on. The README has the numbers. The same commit widened its
+description from "how does X work, where does Y live" to any question about how the code behaves,
+and kept every trigger phrase in English (`a02c873`).
 
 **`wikipoke-lint`** reads `wikipoke check` and explains it, and with `--deep` reads the pages as a
 body of text through six lenses no script can apply: contradiction, expired claim, orphan concept,

@@ -155,3 +155,17 @@ one inside a diagram in components/install.md that drift does not read, fixed by
 
 - components/checks.md: two lint.ts citations re-pointed after the inline-code fix; three more
   pages re-read against it and re-stamped, nothing they claim changed.
+
+## 2026-09-18 · wikipoke-ingest
+
+`34f14a3`, `a02c873` and the README's token section. The query skill was measured against the code
+on two repositories and rewritten to answer in fewer steps; its description now covers any question
+about the code, and all three skills keep their trigger phrases in English.
+
+- components/skills.md: how the query skill reads now, and why the step count is the cost.
+- concepts/skills-as-product.md: a description decides whether the skill is used at all — 3 of 9
+  runs with the old one, 9 of 9 with the new.
+- concepts/schema-lives-in-the-wiki.md: the writing rules as the place a measured failure goes, with
+  "one case, one sentence" as the example.
+- CONVENTIONS.md: level with the template. Four more pages re-read against the changed templates
+  and README and re-stamped; nothing they claim moved.
