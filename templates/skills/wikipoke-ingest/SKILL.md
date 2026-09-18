@@ -208,5 +208,8 @@ over are debt: report them, do not chase them in the same pass.
 
 - On a large job, log what you deferred so it does not read as "covered everything".
 - This never runs from a hook. The hooks only notify; a person launches this skill.
+- wikipoke itself was upgraded? `wikipoke init` refreshes these skills and lists the
+  hooks that are outdated. Updating a hook (`wikipoke hooks add <name>`) is the
+  person's call: ask. Never copy templates by hand.
 - Found a bug in the code? Note it on the page and tell the person. Don't fix it.
 - Close by summarising **what the wiki now knows that it didn't**, not a file list.

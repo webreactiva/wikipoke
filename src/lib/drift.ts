@@ -234,13 +234,13 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     const shown = verbose ? item.files : item.files.slice(0, 8);
     for (const f of shown) console.log(`    ${color.dim(f)}`);
     if (!verbose && item.files.length > shown.length) console.log(color.dim(`    …and ${item.files.length - shown.length} more`));
-    printCitations(item.citations);
+    printCitations(item.citations, verbose);
   }
 
   for (const item of res.moved) {
     found++;
     console.log(`${color.yellow("moved")}     ${color.bold(item.id)} ${color.dim("(fresh, but the code moved under its citations)")}`);
-    printCitations(item.citations);
+    printCitations(item.citations, verbose);
   }
 
   for (const item of res.skipped) {
@@ -251,7 +251,11 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
   return found;
 }
 
-function printCitations(citations: MovedCitation[]): void {
-  for (const { raw, now } of citations)
+/** Capped like the file list: the notifier puts this into an agent's prompt, and a refactor moves dozens. */
+function printCitations(citations: MovedCitation[], verbose: boolean | undefined): void {
+  const shown = verbose ? citations : citations.slice(0, 8);
+  for (const { raw, now } of shown)
     console.log(`    ${color.dim(`${raw} ${now === null ? "— that line changed, re-read it" : `is now line ${now}`}`)}`);
+  if (shown.length < citations.length)
+    console.log(color.dim(`    …and ${citations.length - shown.length} more citation(s): wikipoke check drift --json`));
 }

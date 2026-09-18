@@ -2,7 +2,7 @@
 // wikipoke: a code wiki that agents maintain. Three skills write it; this CLI sets it up and
 // checks it, and never writes a page.
 //
-//   wikipoke init [--dir <path>]          the schema, the ignore list and the skills
+//   wikipoke init [--dir <path>]          the schema, the ignore list and the skills; re-run to refresh
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
@@ -46,9 +46,11 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke init [--dir <path>]
                                write CONVENTIONS.md, ${IGNORE_FILE} and the three skills, into
                                .agents/skills/ and .claude/skills/ both. The wiki lives in wiki/
-                               unless --dir moves it, which is then remembered in .wikipoke.json
-  wikipoke hooks               list the optional hooks and which are installed
-  wikipoke hooks add <name>... install hooks: ${HOOK_NAMES.join(", ")}
+                               unless --dir moves it, which is then remembered in .wikipoke.json.
+                               Re-run after upgrading wikipoke: it refreshes the skills, and says
+                               which hooks are outdated without touching them
+  wikipoke hooks               list the optional hooks, which are installed, which are outdated
+  wikipoke hooks add <name>... install hooks, or update installed ones: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
   wikipoke check [lint|drift|coverage]...
       --json                   machine-readable, for the skills
@@ -107,9 +109,24 @@ function print(report: Report): void {
 function printHooks(): { installed: number } {
   const hooks = hookStatus(root, wiki);
   for (const hook of hooks) {
-    const state = hook.installed ? color.green("installed") : hook.detected ? color.dim("used here") : "";
+    const state = hook.outdated
+      ? color.yellow("installed, outdated")
+      : hook.installed
+        ? color.green("installed")
+        : hook.detected
+          ? color.dim("used here")
+          : "";
     console.log(`  ${hook.name.padEnd(9)} ${hook.when.padEnd(52)} ${state}`);
   }
+  // Said, not done: a hook changes what someone's terminal or agent sees, so the update is theirs
+  // to ask for, and they should know it is coming.
+  const stale = hooks.filter((hook) => hook.outdated).map((hook) => hook.name);
+  if (stale.length)
+    console.log(
+      `
+${stale.join(", ")}: installed by an older wikipoke and left as they are. ` +
+        `\`wikipoke hooks add ${stale.join(" ")}\` updates them.`,
+    );
   return { installed: hooks.filter((hook) => hook.installed).length };
 }
 

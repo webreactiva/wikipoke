@@ -197,7 +197,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
 - **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, over-broad sources (a whole package, or more than half the indexable files), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
-  or on a lone closing bracket, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
+  or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
   `index.md` first stops telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt.

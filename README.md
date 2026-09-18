@@ -99,8 +99,8 @@ every clone, because `.git/hooks` is not versioned; the other four are ordinary 
 so committing one covers everyone who clones.
 
 ```sh
-wikipoke hooks                        # the list, and which are installed
-wikipoke hooks add git claude         # install some
+wikipoke hooks                        # the list: which are installed, which are outdated
+wikipoke hooks add git claude         # install some, or update installed ones
 wikipoke hooks remove claude          # take one out
 ```
 
@@ -117,10 +117,16 @@ The notifier is written with the first hook and removed with the last.
 ## Files wikipoke manages
 
 Files owned by the project (`CONVENTIONS.md`, `.wikipokeignore`) are written once and never
-overwritten. Files owned by wikipoke carry a `managed by wikipoke` line and are refreshed by
-running `init` or `hooks add` again. A file in their place that lacks that line is left alone, and
-the command says what to add by hand. In shared files (`.claude/settings.json`, `AGENTS.md`)
-wikipoke adds and removes only its own entry.
+overwritten; when `CONVENTIONS.md` differs from the template a newer wikipoke ships, `init` says so
+and names the template, so the project can carry over what it wants. Files owned by wikipoke carry
+a `managed by wikipoke` line. A file in their place that lacks that line is left alone, and the
+command says what to add by hand. In shared files (`.claude/settings.json`, `AGENTS.md`) wikipoke
+adds and removes only its own entry.
+
+**After upgrading wikipoke**, run `wikipoke init`. It refreshes the skills, which are inert until
+someone names one. It does not refresh the hooks, which act on their own: it lists the ones an
+older version installed as `outdated`, with the command that updates them, and leaves them as they
+are until someone runs it.
 
 ## The skills
 

@@ -50,10 +50,14 @@ export interface Hook {
 
 export type HookName = "git" | "claude" | "opencode" | "cursor" | "agents";
 
-/** A hook plus what this repository says about it right now. */
+/**
+ * A hook plus what this repository says about it right now. `outdated` means installed, but its
+ * file or the notifier it runs differs from what this version of wikipoke would write.
+ */
 export interface HookState extends Hook {
   name: HookName;
   installed: boolean;
+  outdated: boolean;
   detected: boolean;
 }
 
@@ -188,8 +192,38 @@ export function init(root: string, { dir }: InitOptions = {}): Report {
       out.created.push(relative(root, path));
     }
   }
+  // Kept, but not in silence: a schema that fell behind the skills reading it is how rules go
+  // missing. The ignore list is left out on purpose — every project tailors it, so it always differs.
+  const conventions = join(root, wiki, "CONVENTIONS.md");
+  if (out.kept.includes(relative(root, conventions)) && read(conventions) !== template("CONVENTIONS.md", wiki))
+    out.manual.push(
+      `${relative(root, conventions)} differs from the template this version ships, ${join(templates, "CONVENTIONS.md")} ` +
+        `({{WIKI}} stands for ${wiki}). It is the project's and was kept: carry over what you want from the template.`,
+    );
   for (const home of SKILL_HOMES) writeSkills(root, home, wiki, out);
   return out;
+}
+
+/** Where each hook's own file is, and what this version would put there; claude has no file of its own. */
+const HOOK_FILES: Record<HookName, (root: string, wiki: string) => { path: string | null; content: string } | null> = {
+  git: (root, wiki) => ({ path: postCommitPath(root), content: template("post-commit", wiki) }),
+  claude: () => null,
+  opencode: (root, wiki) => ({ path: join(root, HOOKS.opencode.where), content: template("opencode-plugin.js", wiki) }),
+  cursor: (root, wiki) => ({ path: join(root, HOOKS.cursor.where), content: template("cursor-rule.mdc", wiki) }),
+  agents: (root, wiki) => ({ path: join(root, AGENTS), content: template("agents-block.md", wiki) }),
+};
+
+/**
+ * Whether an installed hook differs from what `hooks add` would write now. Nothing here writes:
+ * a hook changes what someone's terminal or agent sees, so updating it waits for them to ask.
+ */
+function outdated(root: string, wiki: string, name: HookName): boolean {
+  if (read(join(root, notifier(wiki))) !== template("wikipoke-hook.sh", wiki)) return true;
+  const file = HOOK_FILES[name](root, wiki);
+  if (!file) return false;
+  const current = read(file.path) ?? "";
+  // AGENTS.md is shared: only wikipoke's block is compared.
+  return name === "agents" ? current.match(BLOCK)?.[0] !== file.content.match(BLOCK)?.[0] : current !== file.content;
 }
 
 const INSTALLED: Record<HookName, (root: string, wiki: string) => boolean> = {
@@ -202,12 +236,16 @@ const INSTALLED: Record<HookName, (root: string, wiki: string) => boolean> = {
 
 /** Every optional hook, whether it is installed, and whether the project shows signs of using it. */
 export function hookStatus(root: string, wiki: string = wikiDir(root)): HookState[] {
-  return (Object.entries(HOOKS) as [HookName, Hook][]).map(([name, hook]) => ({
-    name,
-    ...hook,
-    installed: INSTALLED[name](root, wiki),
-    detected: hook.signs.some((sign) => existsSync(join(root, sign))),
-  }));
+  return (Object.entries(HOOKS) as [HookName, Hook][]).map(([name, hook]) => {
+    const installed = INSTALLED[name](root, wiki);
+    return {
+      name,
+      ...hook,
+      installed,
+      outdated: installed && outdated(root, wiki, name),
+      detected: hook.signs.some((sign) => existsSync(join(root, sign))),
+    };
+  });
 }
 
 const ADD: Record<HookName, HookAction> = {

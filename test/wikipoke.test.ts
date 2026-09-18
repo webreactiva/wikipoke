@@ -537,3 +537,59 @@ test("a page re-stamped without re-pointing its citations is still reported", ()
   assert.match(out.out, /moved\s+components\/billing[\s\S]*invoice\.js:5 is now line 8/);
   assert.equal(wikipoke(root, "check").code, 0, "debt, not breakage");
 });
+
+test("an outdated hook is reported by init and hooks, and only hooks add changes it", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "opencode", "agents");
+  const plugin = ".opencode/plugin/wikipoke.js";
+  const old = "// managed by wikipoke: an older plugin\n";
+  writeFileSync(join(root, plugin), old);
+
+  for (const args of [["hooks"], ["init"]]) {
+    const out = wikipoke(root, ...args).out;
+    assert.match(out, /opencode .* installed, outdated/, args.join(" "));
+    assert.match(out, /opencode: installed by an older wikipoke .* `wikipoke hooks add opencode` updates them/);
+    assert.doesNotMatch(out, /agents .* outdated/);
+  }
+  assert.equal(read(root, plugin), old, "reported, never rewritten");
+
+  wikipoke(root, "hooks", "add", "opencode");
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /outdated/);
+});
+
+test("init says when the project's CONVENTIONS.md differs from the template, and keeps it", () => {
+  const root = repo();
+  wikipoke(root, "init");
+  assert.doesNotMatch(wikipoke(root, "init").out, /differs from the template/, "a copy still equal to the template is news to nobody");
+  writeFileSync(join(root, "wiki/CONVENTIONS.md"), "# our own schema\n");
+  const out = wikipoke(root, "init").out;
+  assert.match(out, /wiki\/CONVENTIONS\.md differs from the template this version ships/);
+  assert.equal(read(root, "wiki/CONVENTIONS.md"), "# our own schema\n");
+});
+
+test("drift caps the moved citations it prints, like the files", () => {
+  const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(20) });
+  seed(root);
+  const cites = Array.from({ length: 10 }, (_, i) => `\`src/billing/invoice.js:${i + 1}\``).join(", ");
+  page(root, "components/billing.md", { body: `${cites}. [map](../architecture.md)` });
+  git(root, "commit", "-qam", "cite");
+  put(root, "src/billing/invoice.js", "top\n" + lines(20));
+  git(root, "commit", "-qam", "one line on top");
+  const out = wikipoke(root, "check", "drift").out;
+  assert.equal(out.match(/is now line/g)?.length, 8);
+  assert.match(out, /…and 2 more citation\(s\)/);
+  assert.equal(wikipoke(root, "check", "drift", "-v").out.match(/is now line/g)?.length, 10);
+});
+
+test("lint warns when a link's text and its line anchor disagree", () => {
+  const root = repo({ "src/billing/invoice.js": "a\nb\nc\nd\n" });
+  seed(root);
+  page(root, "components/billing.md", {
+    body: "[invoice.js:2](../../src/billing/invoice.js#L2) and [invoice.js:1](../../src/billing/invoice.js#L3). [map](../architecture.md)",
+  });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const found = lint.warnings.filter((f) => f.page === "components/billing").map((f) => f.message);
+  assert.deepEqual(found, ["`[invoice.js:1](../../src/billing/invoice.js#L3)` says line 1 and links to line 3: one of them moved"]);
+});
