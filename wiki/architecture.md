@@ -5,7 +5,7 @@ responsibility: The map of wikipoke: who writes the wiki, who only measures it, 
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: 4943a76
+synced: 87d9fd0
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -53,7 +53,7 @@ Until `df4db0e` the CLI kept the three in one object and indexed it by name, whi
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
 name (`src/bin/wikipoke.ts:36`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:236`). The uniform `run`/`report` contract is unchanged; what changed is that
+(`src/bin/wikipoke.ts:253`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
 
 **`src/bin/wikipoke.ts` is argument parsing and exit codes.** It resolves the repository root and

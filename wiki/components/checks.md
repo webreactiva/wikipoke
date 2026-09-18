@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 4943a76
+synced: 87d9fd0
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -44,7 +44,9 @@ re-pointed but not yet re-stamped, got moved a second time. Since `4943a76` each
 by the commit that last wrote its page line (`git blame`, `src/lib/drift.ts:161`), and a line not
 committed yet counts as current. A checkpoint that is not a commit is printed in full
 (`src/lib/drift.ts:225`), because the usual cause is a sha typed by hand whose first seven
-characters are right, and seven characters that match HEAD read as a contradiction.
+characters are right, and seven characters that match HEAD read as a contradiction. The report
+prints at most eight moved citations per page without `-v`, like the file list, because the
+notifier puts it into an agent's prompt (`src/lib/drift.ts:255`).
 
 **coverage** is drift's mirror: tracked files, minus `.wikipokeignore`, that no page's `sources:`
 claims. It groups what is left into clusters by folder so the backlog reads as "five files in
@@ -63,9 +65,11 @@ page because a broken map is as bad as a broken page (`src/lib/lint.ts:83`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
 the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
-(`src/lib/lint.ts:194`). Nobody cites a closing brace, so that one is almost always code that moved
+(`src/lib/lint.ts:198`). Nobody cites a closing brace, so that one is almost always code that moved
 underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
-and it catches some of what a reconcile re-stamped without re-pointing.
+and it catches some of what a reconcile re-stamped without re-pointing. A link that carries its
+line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:146`):
+re-pointing the anchor and not the text is the usual way they part.
 
 Both checks read citations in both forms agents write: `path:line` in prose, and a link into the
 repository with a GitHub line anchor, `[event.ts](../src/core/event.ts#L12)`. The second form was

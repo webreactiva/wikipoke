@@ -5,7 +5,7 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - README.md
   - src/bin/wikipoke.ts
-synced: 4943a76
+synced: 87d9fd0
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
@@ -37,7 +37,9 @@ The pressure comes back from the agents themselves. An OpenCode agent that misty
 asked for a `wikipoke seal`, a command that would write it. The fix stayed on this side of the line
 (`aafa306`): the skills write the checkpoint with a `printf` around `git rev-parse HEAD`, which
 takes the typing away from the agent without giving the CLI its first write. A command that writes
-one file is how 0.1 started.
+one file is how 0.1 started. The next ask was a `wikipoke refresh`; `init` already refreshed the
+skills, and what was missing was saying so, and listing the outdated hooks instead of rewriting
+them.
 
 This page is `confidence: inferred` about the reasoning: the outcome is documented in the README's
 "Where this comes from", but the repository was squashed to a single commit, so the 0.1 code and

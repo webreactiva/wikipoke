@@ -132,3 +132,21 @@ where the file did not exist. Fourteen pages stale; six citations carried, one `
   clock of their own now.
 - flows/check.md, components/skills.md: `moved[]` beside `stale[]`.
 - CONVENTIONS.md: level with the template.
+
+## 2026-09-18 · wikipoke-ingest
+
+`87d9fd0`: `init` and `wikipoke hooks` report outdated hooks without rewriting them, `init` says
+when CONVENTIONS.md differs from the template, drift caps the citations it prints, and lint checks
+that a link's text and line anchor agree. Sixteen pages stale; twenty-three citations carried, plus
+one inside a diagram in components/install.md that drift does not read, fixed by hand.
+
+- concepts/file-ownership.md, components/install.md, flows/install.md, components/cli.md: updating a
+  hook waits for the person, like installing one; the upgrade path is `init`, which says so.
+- concepts/schema-lives-in-the-wiki.md: the project's schema is still never rewritten, but a copy
+  behind the template is now reported.
+- decisions/cli-read-only.md: the `wikipoke refresh` an agent asked for turned out to be `init`
+  plus saying so.
+- components/checks.md, components/skills.md: the capped report, the text/anchor check, and the
+  upgrade note in the ingest skill.
+- Written with an invented sha in five places first, caught before the commit: the same failure
+  the skills now prevent for the checkpoint. Prose shas are not checked by anything yet.

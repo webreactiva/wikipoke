@@ -6,7 +6,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 4943a76
+synced: 87d9fd0
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -45,6 +45,10 @@ reconciling is ingest's job — and
 `--fix-trivial` is the narrow exception for broken links and missing index lines. Two rules keep it
 from generating noise: a finding you cannot back with a page quote or a `path:line` is an opinion,
 and "no findings" is a real outcome.
+
+The ingest skill also says what to do when wikipoke itself was upgraded: `wikipoke init`, which
+refreshes the skills and lists the outdated hooks, then ask before updating a hook — never copy the
+templates by hand.
 
 Four boundaries every one of them repeats, because a skill is read by an agent that has not read
 the others:
