@@ -1,6 +1,6 @@
 ---
 name: wikipoke-ingest
-description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or code is uncovered, (3) the user says 'update the wiki', 'document <subsystem>', 'actualiza el wiki', 'crea el wiki', 'documenta <subsistema>', typically when closing a feature."
+description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'document <subsystem>', 'actualiza el wiki', 'crea el wiki', 'documenta <subsistema>', typically when closing a feature."
 argument-hint: "[<path> | all]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->
@@ -56,9 +56,11 @@ index.md · log.md (first entry) · .wikipoke-state.json { last_indexed_commit: 
 wikipoke check must pass without errors before you are done
 ```
 
-1. **Record the base SHA:** `git rev-parse HEAD`. Short form for every page's
-   `synced:`; full form for `last_indexed_commit`. Read `git log --oneline`: the
-   history explains why the code looks like this and lives in no file.
+1. **Record the base SHA:** `git rev-parse --short HEAD` for every page's `synced:`,
+   copied from the command's output. The full form goes into the checkpoint at the
+   end, written by a command rather than by hand (step 8). Read
+   `git log --oneline`: the history explains why the code looks like this and lives
+   in no file.
 2. **Survey without reading the sources.** `git ls-files`, the manifests, the
    READMEs and the project's agent instructions are enough to name the layers and
    the entry points. Source files come later, one page at a time.
@@ -86,11 +88,20 @@ wikipoke check must pass without errors before you are done
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
    what you actually read; never claim a whole package. Mark anything you
    reconstructed rather than read with `confidence: inferred`. Link only to pages
-   that already exist. Take every `path:line` citation from that file alone, as you
-   write the page — a number carried over from a listing of several files is wrong
-   by however many lines came before it, and `check lint` will tell you so.
+   that already exist. **Cite only files you opened in this pass**, and take every
+   `path:line` from that file alone, as you write the page — a number carried over
+   from a listing of several files is wrong by however many lines came before it.
+   A claim about code you did not open (from a README, a commit message, a file
+   name) is `confidence: inferred` and carries no `path:line`: a line number you
+   never read is a guess that lands on real code, and no check can tell it apart
+   from a true one.
 7. **Write `index.md`** grouped by type, one line per page (its `responsibility`).
-8. **Write `.wikipoke-state.json`** and the first `log.md` entry.
+8. **Write the first `log.md` entry, then the checkpoint**, with this exact command —
+   never type the sha yourself; a hand-copied sha keeps its first seven characters
+   and invents the rest:
+   ```sh
+   printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > {{WIKI}}/.wikipoke-state.json
+   ```
 
 **Seeding stops at the avenues, on purpose**: the map, two or three flows, one page
 per main subsystem — a dozen or so pages in a single package, one or two more per
@@ -108,8 +119,10 @@ Reconcile, don't accumulate: the code moved, bring the pages back in line.
 wikipoke check drift --json
    │  repo: commits since the checkpoint
    │  stale[]: pages whose sources moved past their own synced:
+   │           + citations[]: their path:line pointers the diff moved
    ▼
-   read ONLY each stale page's diff ──► rewrite the stale sections, re-stamp synced:
+   read ONLY each stale page's diff ──► rewrite the stale sections
+   re-point every moved citation ──► only then re-stamp synced:
    new code → propose a page  ·  moved/deleted code → fix or retire the page
    ▼
 index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the check passes)
@@ -125,13 +138,22 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
 3. **Reconcile.** Rewrite only the stale sections, so hand-written notes survive.
    When the change **contradicts** what the page claimed, say what it used to be and
    what changed it, with the SHA. Re-check `confidence:` while you are there.
-4. **New and moved code.** Changed files no page covers: propose a page, or leave
+4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]` lists
+   its `path:line` pointers the diff moved: `now` is the line they point at today,
+   and `now: null` means the cited line itself was edited or deleted, so open the
+   file and find what the sentence was about. Fix every one **before** setting
+   `synced:` to `git rev-parse --short HEAD`: re-stamping is the last moment drift
+   can see where a cited line went, and after it a stale pointer reads as current.
+5. **New and moved code.** Changed files no page covers: propose a page, or leave
    them to coverage. Sources pointing at moved or deleted files: fix or retire the
    page.
-5. **Refresh `index.md`** for any page added, retitled or with a new
+6. **Refresh `index.md`** for any page added, retitled or with a new
    `responsibility`.
-6. **Seal.** Append a `log.md` entry, then set `last_indexed_commit` in
-   `.wikipoke-state.json` to `git rev-parse HEAD`, **only after the final check passes**.
+7. **Seal.** Append a `log.md` entry and, **only after the final check passes**,
+   advance the checkpoint with the same command as a seed — never by typing the sha:
+   ```sh
+   printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > {{WIKI}}/.wikipoke-state.json
+   ```
 
 ---
 
@@ -172,9 +194,9 @@ index.md · inbound links · log.md      (checkpoint untouched)
 
 ## Every mode ends here
 
-7. **Verify:** `wikipoke check`. Fix every error. Warnings about orphans, the index
-   or over-broad sources are yours to fix too. Coverage and staleness left over are
-   debt: report them, do not chase them in the same pass.
+**Verify:** `wikipoke check`. Fix every error. Warnings about orphans, the index,
+over-broad sources or citations are yours to fix too. Coverage and staleness left
+over are debt: report them, do not chase them in the same pass.
 
 ## Notes
 

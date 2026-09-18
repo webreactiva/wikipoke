@@ -53,7 +53,8 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
 - **Contradiction**: two pages asserting incompatible things. Name both, and which
   one the code supports.
 - **Expired claim**: true once, not now. Verify against the code before calling it,
-  and cite `path:line`.
+  and cite `path:line`. Open the citations the pages already carry, too: `check`
+  knows a cited line exists, not that it still says what the sentence claims.
 - **Orphan concept**: a term used across pages with no page of its own.
 - **Density**: a page that only restates signatures, parameters or exports. It
   breaks "the wiki holds what the code cannot say". Also flag pages longer than two

@@ -80,8 +80,8 @@ function seed(root: string, wiki = "wiki"): void {
 
 /** The shapes `check --json` returns, as far as the assertions below read them. */
 interface DriftJson {
-  repo: { status: string; commits?: number; files?: number };
-  stale: { id: string; files: string[] }[];
+  repo: { status: string; commits?: number; files?: number; last?: string };
+  stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   fresh: string[];
 }
 interface CoverageJson {
@@ -135,6 +135,7 @@ test("a repository with no hook installed is told so, and told what to run", () 
   assert.match(wikipoke(root, "hooks").out, /No hook was installed/);
   wikipoke(root, "hooks", "add", "agents");
   assert.doesNotMatch(wikipoke(root, "hooks").out, /No hook was installed/, "silent once one is in");
+  assert.doesNotMatch(wikipoke(root, "init").out, /No hook was installed/, "and so is a re-run of init");
 });
 
 test("hooks add wires every agent, keeps what the files already hold, and is idempotent", () => {
@@ -331,6 +332,16 @@ test("the notifier is silent when the wiki is current, and the git hook speaks a
   git(root, "commit", "-qm", "add the notifier");
   assert.equal(execFileSync("sh", ["wiki/.wikipoke-hook.sh"], { cwd: root, encoding: "utf8" }), "");
 
+  // Uncovered code is a backlog meant to outlive every pass: the notifier leaves it to `check`,
+  // or it would never be silent again.
+  put(root, "src/extra.js", "//\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "add uncovered code");
+  put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
+  git(root, "commit", "-qam", "index it");
+  assert.match(wikipoke(root, "check", "coverage").out, /uncovered 1 of/);
+  assert.equal(execFileSync("sh", ["wiki/.wikipoke-hook.sh"], { cwd: root, encoding: "utf8" }), "");
+
   put(root, "src/cli.js", "console.log('bye');\n");
   // Git runs hooks with their output on stderr.
   const commit = spawnSync("git", ["commit", "-qam", "change cli"], { cwd: root, encoding: "utf8" });
@@ -391,4 +402,52 @@ test("lint re-reads every path:line citation and reports the ones the code moved
   git(root, "commit", "-qm", "add src/old");
   const after = json<LintJson>(root, "check", "lint", "--json");
   assert.ok(after.warnings.some((f) => /`src\/old\/gone\.js:4` points at a file that is not tracked/.test(f.message)));
+});
+
+test("drift carries a stale page's citations through the diff, so re-stamping cannot hide them", () => {
+  const lines = (n: number, tag: string): string => Array.from({ length: n }, (_, i) => `${tag} ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10, "line") });
+  seed(root);
+  page(root, "components/billing.md", {
+    body: [
+      "Totals: `src/billing/invoice.js:2`. Rounding: `src/billing/invoice.js:5`.",
+      "Tax: `src/billing/invoice.js:8`. Rate: `src/billing/tax.js:1`.",
+      "Back to [the map](../architecture.md).",
+    ].join("\n\n"),
+  });
+  git(root, "commit", "-qam", "cite");
+  // Three lines in above line 5, line 8 rewritten; line 2 and tax.js stay where they were.
+  const text = lines(10, "line").split("\n");
+  text.splice(7, 1, "rewritten");
+  text.splice(3, 0, "new a", "new b", "new c");
+  put(root, "src/billing/invoice.js", text.join("\n"));
+  git(root, "commit", "-qam", "reshape invoice");
+
+  const drift = json<DriftJson>(root, "check", "drift", "--json");
+  const billing = drift.stale.find((s) => s.id === "components/billing");
+  assert.deepEqual(billing?.citations, [
+    { raw: "src/billing/invoice.js:5", now: 8 },
+    { raw: "src/billing/invoice.js:8", now: null },
+  ]);
+  const out = wikipoke(root, "check", "drift").out;
+  assert.match(out, /src\/billing\/invoice\.js:5 is now line 8/);
+  assert.match(out, /src\/billing\/invoice\.js:8 — that line changed, re-read it/);
+});
+
+test("lint warns about a citation that lands on the end of a block", () => {
+  const root = repo({ "src/cli.js": "function a() {\n  return 1;\n}\n" });
+  seed(root);
+  page(root, "components/cli.md", { sources: ["src/cli.js"], body: "`src/cli.js:1` and `src/cli.js:3`. [map](../architecture.md)" });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const cites = lint.warnings.filter((f) => f.page === "components/cli" && /src\/cli\.js/.test(f.message)).map((f) => f.message);
+  assert.deepEqual(cites, ["`src/cli.js:3` lands on `}`, the end of a block: the code moved"]);
+});
+
+test("a checkpoint that is not a commit is shown in full, since its first characters may be right", () => {
+  const root = repo();
+  seed(root);
+  const head = git(root, "rev-parse", "HEAD");
+  const invented = head.slice(0, 7) + "0".repeat(33);
+  put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: invented }));
+  assert.match(wikipoke(root, "check", "drift").out, new RegExp(`checkpoint points at ${invented}, which is not a commit here`));
 });

@@ -35,7 +35,11 @@ npm install -D wikipoke        # or as a dependency of a JavaScript project
 
 Before the first npm release, or to run a checkout, `github:delineas/wikipoke` works in either
 command, and `npm run link` inside this repository compiles it and puts `wikipoke` on your `PATH`
-(`npm run unlink` takes it off again).
+(`npm run unlink` takes it off again). Don't point a project at a checkout with
+`npm install -D ../wikipoke`: npm links the folder and runs its `prepare` there, which fails
+unless the checkout already has its own devDependencies, and the project's `package.json` ends up
+naming a path that exists only on your machine. Link it globally instead; the hooks find a global
+`wikipoke` as well as a local one.
 
 Then, in the repository:
 
@@ -82,9 +86,11 @@ the folder, edit `.wikipoke.json` and run `init` again to refresh the skills.
 ## Hooks (optional)
 
 A hook tells you or your agent, at the right moment, that the wiki has fallen behind. Every hook
-runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` and `coverage` find,
-stays silent when the wiki is current, and never fails or calls a model. None of them writes the
-wiki.
+runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` finds, stays silent
+when the wiki is current, and never fails or calls a model. None of them writes the wiki. Coverage
+stays out of it on purpose: that backlog is meant to outlive every pass, and a notifier that
+repeats it at every commit and every session start is never silent, which is how a notifier gets
+muted.
 
 **Install at least one.** Without a hook nothing ever tells you the wiki is stale — `wikipoke check`
 speaks only when someone runs it — and a wiki nobody is told about is one that quietly stops being
@@ -128,7 +134,7 @@ wikipoke adds and removes only its own entry.
 
 ```sh
 wikipoke check              # all three
-wikipoke check drift        # commits not indexed, pages whose sources moved since their `synced:`
+wikipoke check drift        # commits not indexed, stale pages, and where their citations moved
 wikipoke check coverage     # tracked files no page's `sources:` claims
 wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
 ```
@@ -153,9 +159,12 @@ Invoices round per line, not per total, because… See [the checkout flow](../fl
 
 `sources:` ties the page to the code and `synced:` to the commit it was checked against; together
 they are how `drift` knows the page is stale. Links are plain Markdown, so `check` can verify every
-one, and so are the `path:line` citations in the body: `lint` re-reads each one and reports those
-that now fall past the end of their file or on a blank line. The full contract is in the `CONVENTIONS.md` that `init` writes, and the valid `type:` values
-are the rows of its page-type table.
+one, and so are the `path:line` citations in the body. While a page is stale, `drift` carries each
+of its citations through the diff and says which line it points at now, so the pass that re-stamps
+`synced:` can re-point them first; after that, `lint` re-reads each one and reports those that fall
+past the end of their file, on a blank line or on a lone closing bracket. The full contract is in
+the `CONVENTIONS.md` that `init` writes, and the valid `type:` values are the rows of its page-type
+table.
 
 ## Uninstall
 

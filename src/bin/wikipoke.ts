@@ -160,17 +160,18 @@ if (command === "init") {
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);
   console.log(`\nHooks are optional. Each one tells you or your agent when the wiki falls behind the code:\n`);
-  printHooks();
+  const { installed } = printHooks();
   if (process.stdin.isTTY && process.stdout.isTTY) {
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
     const answer = await prompt.question(`\nInstall which? Names separated by spaces, Enter for none: `).catch(() => ""); // Ctrl+D or Ctrl+C: none
     prompt.close();
     const names = answer.split(/[\s,]+/).filter(Boolean);
     if (names.length) print(addHooks(root, hookNames(names)));
-  } else {
+  } else if (!installed) {
     // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
     // Which hook fits is something the agent knows about itself and this command cannot see, so
-    // the invitation names the choice and the command instead of guessing at one.
+    // the invitation names the choice and the command instead of guessing at one. A re-run on a
+    // repository that already has one says nothing: "no hook was installed" would read as none is.
     console.log(invitation());
   }
   console.log(

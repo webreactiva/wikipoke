@@ -53,8 +53,11 @@ practice.
 No: signatures, parameter lists, export enumerations, option tables. The code and its types
 already say that, and a copy guarantees it rots. To point at code, **link to it with a line**:
 `src/billing/invoice.ts:42`. Take that number from the file itself, at the moment you write the
-page; `wikipoke check lint` re-reads every citation and says when one has drifted past the end of
-its file or onto a blank line.
+page, and only from a file you opened: a number from memory, a commit message or another page
+lands on real code and looks true. While a page is stale, `wikipoke check drift` carries each of
+its citations through the diff and says where the line went; `wikipoke check lint` re-reads every
+citation and says when one has drifted past the end of its file, onto a blank line or onto a lone
+closing bracket.
 
 ## Layout
 
@@ -153,7 +156,10 @@ page was verified against, which is the date that matters.
 
 It means "every commit up to here is reflected in the wiki". Only `wikipoke-ingest` moves it: when
 seeding, and when reconciling, after the touched pages pass `wikipoke check`. Ingesting a part,
-answering a query and linting never move it.
+answering a query and linting never move it. It is written by a command, never typed, because a
+hand-copied sha keeps its first seven characters and invents the rest:
+
+    printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > {{WIKI}}/.wikipoke-state.json
 
 `log.md` is append-only, one entry per pass:
 
@@ -176,7 +182,9 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
 
 - **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
-  against the working tree, so uncommitted edits count.
+  against the working tree, so uncommitted edits count. For each stale page it also lists the
+  `path:line` citations the diff moved, with the line they point at now, or a note that the cited
+  line itself changed. Fix those before re-stamping `synced:`: afterwards drift cannot see them.
 - **coverage**: tracked files no page's `sources` claims, minus `.wikipokeignore`. Resolve a
   cluster by writing a page or, when it is out of scope, by ignoring it on purpose. The report ends
   with how many files the ignore list took out, so a rule that hides too much is visible rather
@@ -184,17 +192,19 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
 - **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, over-broad sources, broken links (body, `related:` and `index.md`),
-  `path:line` citations that now land past the end of a file or on a blank line, orphan pages,
-  pages missing from `index.md`, and a warning past 80 pages, where reading `index.md` first stops
-  telling pages apart.
+  `path:line` citations that now land past the end of a file, on a blank line or on a lone closing
+  bracket, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
+  `index.md` first stops telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt.
 
 ## The signal
 
-`{{WIKI}}/.wikipoke-hook.sh` runs `drift` and `coverage`, prints nothing when the wiki is current,
-and never fails. Hooks that run it are optional, installed only on request with
-`wikipoke hooks add <name>` (`wikipoke hooks` lists them):
+`{{WIKI}}/.wikipoke-hook.sh` runs `drift`, prints nothing when the wiki is current, and never
+fails. It leaves coverage out on purpose: that backlog is meant to outlive every pass, and a
+notifier that repeats it on every commit and every session start is never silent, so it gets
+muted before it has anything new to say. Hooks that run it are optional, installed only on
+request with `wikipoke hooks add <name>` (`wikipoke hooks` lists them):
 
 | hook | where | when it speaks |
 | ---- | ----- | -------------- |

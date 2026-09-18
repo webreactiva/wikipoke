@@ -49,7 +49,7 @@ export function report(res: CoverageResult, { verbose }: ReportOptions = {}): nu
     `${color.yellow("uncovered")} ${res.unclaimed.length} of ${res.indexable} tracked code file(s) ` +
       `claimed by no page ${color.dim("-> wikipoke-ingest <path>")}`,
   );
-  for (const { dir, count } of res.clusters) console.log(`    ${String(count).padStart(5)}  ${color.dim(dir)}`);
+  for (const { dir, count } of res.clusters) console.log(`    ${String(count).padStart(5)}  ${color.dim(dir === "." ? "(root)" : dir)}`);
   if (verbose) {
     console.log(color.dim("    --"));
     for (const f of res.unclaimed) console.log(`    ${color.dim(f)}`);
