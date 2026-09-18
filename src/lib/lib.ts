@@ -457,6 +457,25 @@ export function codeCitations(body: string): Citation[] {
   return out;
 }
 
+/**
+ * Every citation on a page, in either form an agent writes: `path:line` in prose, or a link into
+ * the repository with a GitHub line anchor, `[event.ts](../src/core/event.ts#L12)`. A wiki written
+ * the second way used to go entirely unchecked, because the link text alone (`event.ts:12`) names
+ * no path. `raw` is what the page says, so a report names text someone can find and replace; a
+ * pointer written both ways counts once. A range (`#L12-L20`) is checked by its first line.
+ */
+export function pageCitations(body: string, pageRel: string, wikiDir: string, root: string): Citation[] {
+  const out = codeCitations(body);
+  const seen = new Set(out.map((c) => `${c.path}:${c.line}`));
+  for (const link of markdownLinks(body, pageRel, wikiDir, root)) {
+    const line = Number(link.raw.match(/#L([1-9]\d*)(?:-L?\d+)?$/)?.[1]);
+    if (link.kind !== "repo" || !link.target || !line || seen.has(`${link.target}:${line}`)) continue;
+    seen.add(`${link.target}:${line}`);
+    out.push({ raw: link.raw, path: link.target, line });
+  }
+  return out;
+}
+
 /** `[[...]]` in prose. Never resolved: reported, so a page written for another tool shows up. */
 export function wikilinks(body: string): string[] {
   const prose = body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");

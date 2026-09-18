@@ -86,10 +86,12 @@ wikipoke check must pass without errors before you are done
    - `concepts/`: the cross-cutting patterns and conventions.
    - `decisions/`: the choices behind the code, with the discarded alternative.
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
-   what you actually read; never claim a whole package. Mark anything you
+   what you actually read; never claim a whole package or a folder like `src/`, and
+   never list a file you only named — coverage is how the next pass finds it, and a
+   claim hides it from that pass. Mark anything you
    reconstructed rather than read with `confidence: inferred`. Link only to pages
    that already exist. **Cite only files you opened in this pass**, and take every
-   `path:line` from that file alone, as you write the page — a number carried over
+   line number (`path:line`, or a `#L42` link) from that file alone, as you write the page — a number carried over
    from a listing of several files is wrong by however many lines came before it.
    A claim about code you did not open (from a README, a commit message, a file
    name) is `confidence: inferred` and carries no `path:line`: a line number you
@@ -139,7 +141,8 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    When the change **contradicts** what the page claimed, say what it used to be and
    what changed it, with the SHA. Re-check `confidence:` while you are there.
 4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]` lists
-   its `path:line` pointers the diff moved: `now` is the line they point at today,
+   its pointers the diff moved, `path:line` and `#L42` links alike, with `raw` as
+   the page writes it (update a line number repeated in the link text too): `now` is the line they point at today,
    and `now: null` means the cited line itself was edited or deleted, so open the
    file and find what the sentence was about. Fix every one **before** setting
    `synced:` to `git rev-parse --short HEAD`: re-stamping is the last moment drift

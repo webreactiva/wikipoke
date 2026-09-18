@@ -8,11 +8,10 @@
 //
 // A stale page also gets its `path:line` citations carried through the diff, because re-stamping
 // `synced:` is the last moment anyone can still see where a cited line went.
-import type { CheckContext, ReportOptions } from "./lib.ts";
+import type { CheckContext, Citation, ReportOptions } from "./lib.ts";
 import {
   asList,
   changedSince,
-  codeCitations,
   color,
   commitExists,
   commitsSince,
@@ -20,6 +19,7 @@ import {
   indexableChanges,
   listPages,
   matchesAny,
+  pageCitations,
   readPage,
   readState,
   shortSha,
@@ -104,8 +104,12 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     }
     const patterns = sourcePatterns(meta, root);
     const files = changesFor(synced).filter((f) => matchesAny(f, patterns));
-    if (files.length) stale.push({ id: page.id, synced, files, citations: movedCitations(page.body, changesFor(synced), (path) => hunksFor(synced, path)) });
-    else fresh.push(page.id);
+    if (!files.length) {
+      fresh.push(page.id);
+      continue;
+    }
+    const cites = pageCitations(page.body, page.rel, wikiDir, root);
+    stale.push({ id: page.id, synced, files, citations: movedCitations(cites, changesFor(synced), (path) => hunksFor(synced, path)) });
   }
 
   return { repo, stale, skipped, fresh, pages: pages.length };
@@ -116,10 +120,10 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
  * Only the ones that no longer point at their line come back: a citation the diff did not touch
  * is not news. Any cited file that changed counts, not only the page's own `sources:`.
  */
-function movedCitations(body: string, changes: string[], hunksFor: (path: string) => Hunk[]): MovedCitation[] {
+function movedCitations(citations: Citation[], changes: string[], hunksFor: (path: string) => Hunk[]): MovedCitation[] {
   const changed = new Set(changes);
   const moved: MovedCitation[] = [];
-  for (const cite of codeCitations(body)) {
+  for (const cite of citations) {
     if (!changed.has(cite.path)) continue;
     const now = lineNow(hunksFor(cite.path), cite.line);
     if (now !== cite.line) moved.push({ raw: cite.raw, now });

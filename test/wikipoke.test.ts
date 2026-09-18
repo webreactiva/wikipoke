@@ -451,3 +451,41 @@ test("a checkpoint that is not a commit is shown in full, since its first charac
   put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: invented }));
   assert.match(wikipoke(root, "check", "drift").out, new RegExp(`checkpoint points at ${invented}, which is not a commit here`));
 });
+
+test("a link with a line anchor is a citation too, for lint and for drift", () => {
+  const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10) });
+  seed(root);
+  page(root, "components/billing.md", {
+    body: [
+      "Totals ([invoice.js:4](../../src/billing/invoice.js#L4)), and [a range](../../src/billing/invoice.js#L6-L8).",
+      "Gone: [invoice.js:40](../../src/billing/invoice.js#L40). A heading is not a line: [map](../architecture.md#top).",
+    ].join("\n\n"),
+  });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const cites = lint.warnings.filter((f) => f.page === "components/billing").map((f) => f.message);
+  assert.deepEqual(cites, ["`../../src/billing/invoice.js#L40` is past the end of src/billing/invoice.js (10 lines): the code moved"]);
+
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "cite by link");
+  put(root, "src/billing/invoice.js", "new 1\nnew 2\n" + lines(10));
+  git(root, "commit", "-qam", "two lines on top");
+  const billing = json<DriftJson>(root, "check", "drift", "--json").stale.find((s) => s.id === "components/billing");
+  assert.deepEqual(billing?.citations, [
+    { raw: "../../src/billing/invoice.js#L4", now: 6 },
+    { raw: "../../src/billing/invoice.js#L6-L8", now: 8 },
+    { raw: "../../src/billing/invoice.js#L40", now: 42 },
+  ]);
+});
+
+test("a source that claims most of the repository is over-broad even without a manifest", () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 12; i++) files[`src/mod/f${i}.js`] = "//\n";
+  const root = repo(files);
+  seed(root);
+  page(root, "concepts/everything.md", { type: "concept", sources: ["src/"], body: "[map](../architecture.md)" });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message);
+  assert.equal(broad.length, 1, broad.join("\n"));
+  assert.match(broad[0] as string, /`src\/` claims 15 of the 15 indexable files/);
+});

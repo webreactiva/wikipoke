@@ -14,7 +14,6 @@ import {
   REQUIRED_KEYS,
   STATE_FILE,
   asList,
-  codeCitations,
   color,
   commitExists,
   globToRegExp,
@@ -23,6 +22,7 @@ import {
   listPages,
   markdownLinks,
   normalizeSource,
+  pageCitations,
   pageTypes,
   readPage,
   relatedLinks,
@@ -110,15 +110,23 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
         add("error", `dead source (matches no tracked file): \`${source}\``, page.id);
         continue;
       }
-      if (isOverBroad(source, root)) {
-        const n = indexable.filter((f) => re.test(f)).length;
+      const n = indexable.filter((f) => re.test(f)).length;
+      if (isOverBroad(source, root))
         add(
           "warn",
           `over-broad source \`${source}\` claims a whole package (${n} indexable file(s)): ` +
             `narrow it to what this page really documents, or coverage reads green for code nobody wrote up`,
           page.id,
         );
-      }
+      // A package's code usually sits in one folder, not at its root: `src/` in a single-package
+      // repository claims the package just the same. Ten files keeps a small repository quiet.
+      else if (n >= 10 && n * 2 > indexable.length)
+        add(
+          "warn",
+          `over-broad source \`${source}\` claims ${n} of the ${indexable.length} indexable files: ` +
+            `narrow it to what this page really documents, or coverage reads green for code nobody wrote up`,
+          page.id,
+        );
     }
 
     checkLinks(
@@ -131,7 +139,8 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
 
     // `path:line` is how a page points at code without transcribing it, so it is worth as much as
     // a link and rots the same way — silently, as soon as the file is edited above that line.
-    for (const cite of codeCitations(page.body)) checkCitation(cite, { root, trackedSet, readSource, add, page: page.id });
+    for (const cite of pageCitations(page.body, page.rel, wikiDir, root))
+      checkCitation(cite, { root, trackedSet, readSource, add, page: page.id });
 
     if (indexRaw && !indexRaw.includes(page.rel)) add("warn", "not listed in index.md", page.id);
   }
