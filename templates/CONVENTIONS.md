@@ -143,6 +143,10 @@ page was verified against, which is the date that matters.
 - Open with what it is and why it exists. Never "this document describes…".
 - Prose over bullet lists. Six bullets of three words each is usually a paragraph nobody wrote.
 - Point at code with `path:line`, not by transcribing it.
+- **One case, one sentence, with its outcome.** When a behaviour splits into cases, give each
+  its own sentence that says what happens to it: "an expired token is refreshed. A revoked token is
+  rejected and logged." Two cases explained together read as one, and an agent answering from the
+  page merges them: the page is often all it reads.
 - A page that does not fit in two screens is usually two pages.
 - When a change **contradicts** what a page claimed, do not overwrite in silence: say what it used
   to be and what changed it, with the SHA. That is the part git tells badly.
