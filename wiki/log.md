@@ -150,3 +150,8 @@ one inside a diagram in components/install.md that drift does not read, fixed by
   upgrade note in the ingest skill.
 - Written with an invented sha in five places first, caught before the commit: the same failure
   the skills now prevent for the checkpoint. Prose shas are not checked by anything yet.
+
+## 2026-09-18 · wikipoke-ingest
+
+- components/checks.md: two lint.ts citations re-pointed after the inline-code fix; three more
+  pages re-read against it and re-stamped, nothing they claim changed.
