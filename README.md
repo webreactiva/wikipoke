@@ -203,6 +203,11 @@ with its `responsibility`, its `synced:` commit and date, its sources, and a mar
 `inferred` or stale, and ends with the pages it relates to and the ones that link to it. Headings
 make a table of contents beside the page, and `/` filters the page list.
 
+The graph draws the pages as nodes and their links as edges, the way Obsidian does: a view of its
+own, where you zoom, pan and drag, and a small one beside each page with that page's neighbours.
+Nodes are coloured by type, sized by how many links they have, and ringed when stale; hovering one
+lights up what it touches, and clicking it opens the page.
+
 Live, a citation opens the cited file at its line, served only if git tracks it, and the page
 redraws when a file in `wiki/` changes, so an ingest pass can be watched as it lands. It stops at
 the wiki: an edit to the code shows up as a stale page on the next redraw, not on its own.

@@ -620,7 +620,7 @@ test("atlas --out writes the page and a snapshot of the wiki, and only where it 
 
   const { code, out } = wikipoke(root, "atlas", "--out", "site");
   assert.equal(code, 0, out);
-  for (const file of ["index.html", "atlas.css", "atlas.js", "marked.js", "marked.LICENSE.md", "wiki.js"])
+  for (const file of ["index.html", "atlas.css", "atlas.js", "graph.js", "marked.js", "marked.LICENSE.md", "wiki.js"])
     assert.ok(existsSync(join(root, "site", file)), file);
   assert.match(read(root, "site/index.html"), /Created with 🧡 by <a href="https:\/\/webreactiva.dev\/wikipoke">wikipoke<\/a>/);
 
@@ -655,6 +655,7 @@ test("atlas serves the wiki live, hands out only tracked files, and says when a 
     assert.equal(snap.live, true);
     assert.equal(snap.pages.length, 2);
     assert.equal((await fetchWith(`${served.url}marked.js`)).status, 200);
+    assert.equal((await fetchWith(`${served.url}graph.js`)).status, 200);
 
     assert.deepEqual(await fetchWith(`${served.url}code/src/cli.js`), { status: 200, body: "console.log('hi');\n" });
     assert.equal((await fetchWith(`${served.url}code/secret.env`)).status, 404);

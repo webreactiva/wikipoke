@@ -25,7 +25,7 @@ const MARKED: Record<string, string> = {
 };
 
 /** Every file the page is made of, besides the snapshot. The server serves exactly these. */
-export const ASSETS = ["index.html", "atlas.css", "atlas.js", ...Object.keys(MARKED)];
+export const ASSETS = ["index.html", "atlas.css", "atlas.js", "graph.js", ...Object.keys(MARKED)];
 
 /** Where an asset is read from: web/, or marked's own package when the build has not copied it. */
 export function assetFile(asset: string): string {

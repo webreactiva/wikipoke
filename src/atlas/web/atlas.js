@@ -16,6 +16,10 @@
 /** @typedef {import("../snapshot.ts").AtlasPage} AtlasPage */
 /** @typedef {import("../snapshot.ts").AtlasDoc} AtlasDoc */
 /** @typedef {import("../../lib/lib.ts").Citation} Citation */
+/** @typedef {import("./graph.js").Graph} Graph */
+/** @typedef {import("./graph.js").GraphNode} GraphNode */
+/** @typedef {import("./graph.js").GraphLink} GraphLink */
+/** @typedef {import("./graph.js").GraphView} GraphView */
 
 (() => {
   /** @type {{ parse(markdown: string): string, parseInline(markdown: string): string, use(extension: object): void }} */
@@ -23,6 +27,12 @@
 
   /** @type {Snapshot} */
   let data = /** @type {any} */ (window).ATLAS;
+
+  /** @type {Graph} */
+  const graph = /** @type {any} */ (globalThis).atlasGraph;
+
+  /** The graphs on screen, stopped before anything else is drawn. @type {GraphView[]} */
+  let views = [];
 
   /**
    * @template {Element} T
@@ -272,6 +282,87 @@
     return path;
   }
 
+  // ── The graph ─────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Every page is a node, and every link between two pages one edge, whichever way it points; the
+   * wiki's own files stay out, or index.md would be a hub tied to everything. Colour follows the
+   * type in CONVENTIONS.md order: the first in ink, the next four in hues, any others in grey.
+   */
+  function graphData() {
+    const colors = new Map(data.types.map((type, i) => [type, Math.min(i, 5)]));
+    /** @type {Map<string, GraphLink>} */
+    const links = new Map();
+    for (const page of data.pages)
+      for (const from of page.backlinks) links.set([from, page.id].sort().join("\n"), { source: from, target: page.id });
+    /** @type {Map<string, number>} */
+    const degree = new Map();
+    for (const { source, target } of links.values()) {
+      degree.set(source, (degree.get(source) ?? 0) + 1);
+      degree.set(target, (degree.get(target) ?? 0) + 1);
+    }
+    /** @type {GraphNode[]} */
+    const nodes = data.pages.map((page) => ({
+      id: page.id,
+      title: page.title,
+      type: page.type,
+      color: colors.get(page.type) ?? 5,
+      stale: Boolean(page.stale),
+      degree: degree.get(page.id) ?? 0,
+    }));
+    return { nodes, links: [...links.values()], colors };
+  }
+
+  /** @param {string} focus */
+  function renderGraph(focus) {
+    const { nodes, links, colors } = graphData();
+    const lonely = nodes.filter((node) => !node.degree).length;
+    const legend = [...new Set(nodes.map((node) => node.type))]
+      .sort((a, b) => (colors.get(a) ?? 5) - (colors.get(b) ?? 5))
+      .map((type) => {
+        const count = nodes.filter((node) => node.type === type).length;
+        return `<li>${swatch(`fill: var(--type-${colors.get(type) ?? 5})`)} ${escape(type || "untyped")} <small>${count}</small></li>`;
+      });
+    if (nodes.some((node) => node.stale)) legend.push(`<li>${swatch("fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 1.5")} stale</li>`);
+    legend.push("<li>scroll to zoom · drag to move · double-click to fit</li>");
+    main.innerHTML = `<article>
+      <header>
+        <p>graph</p>
+        <h1>Graph</h1>
+        <p>${nodes.length} pages · ${links.length} links${lonely ? ` · ${lonely} with none` : ""}</p>
+      </header>
+      <svg role="img" aria-label="Every page of the wiki and the links between them"></svg>
+      <ul>${legend.join("")}</ul>
+    </article>`;
+    const svg = main.querySelector("svg");
+    if (svg) views.push(graph.draw(svg, nodes, links, focus ? { mode: "full", focus } : { mode: "full" }));
+    return "Graph";
+  }
+
+  /** @param {string} style */
+  const swatch = (style) => `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" style="${style}"></circle></svg>`;
+
+  /**
+   * The page and the pages it touches, beside the page, as Obsidian's local graph does.
+   * @param {string} id
+   */
+  function buildLocal(id) {
+    const { nodes, links } = graphData();
+    const near = new Set([id]);
+    for (const { source, target } of links) {
+      if (source === id) near.add(target);
+      if (target === id) near.add(source);
+    }
+    aside.insertAdjacentHTML(
+      "beforeend",
+      `<h2>Graph</h2><svg role="img" aria-label="This page and the pages it links with"></svg><p><a href="#graph/${escape(id)}">Open the full graph</a></p>`,
+    );
+    const svg = aside.querySelector("svg");
+    if (!svg) return;
+    const local = links.filter((link) => near.has(link.source) && near.has(link.target));
+    views.push(graph.draw(svg, nodes.filter((node) => near.has(node.id)), local, { mode: "local", focus: id }));
+  }
+
   // ── The sidebar and the table of contents ──────────────────────────────────────────────────────
 
   /** Pages grouped by type, in the order CONVENTIONS.md lists the types, then the wiki's own files. */
@@ -288,7 +379,10 @@
       });
       html += `<h2>${escape(type || "untyped")}</h2>${bullets(items)}`;
     }
-    const docs = data.docs.map((doc) => `<a href="#/${escape(doc.id)}" data-search="${escape(fold(doc.title))}">${escape(doc.title)}</a>`);
+    const docs = [
+      `<a href="#graph" data-search="graph">Graph</a>`,
+      ...data.docs.map((doc) => `<a href="#/${escape(doc.id)}" data-search="${escape(fold(doc.title))}">${escape(doc.title)}</a>`),
+    ];
     list.innerHTML = `${html}<h2>wiki</h2>${bullets(docs)}`;
     applyFilter();
   }
@@ -307,10 +401,10 @@
     }
   }
 
-  /** @param {string} id */
-  function markCurrent(id) {
+  /** @param {string} href */
+  function markCurrent(href) {
     for (const a of list.querySelectorAll("a")) {
-      if (a.getAttribute("href") === `#/${id}`) a.setAttribute("aria-current", "page");
+      if (a.getAttribute("href") === href) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     }
   }
@@ -332,7 +426,7 @@
     const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
     let current = atBottom ? headings.at(-1) : undefined;
     if (!current) for (const h of headings) if (h.getBoundingClientRect().top < 120) current = h;
-    for (const a of aside.querySelectorAll("a")) {
+    for (const a of aside.querySelectorAll("aside > ul a")) {
       if (current && a.getAttribute("href")?.endsWith(`#${current.id}`)) a.setAttribute("aria-current", "true");
       else a.removeAttribute("aria-current");
     }
@@ -340,7 +434,7 @@
 
   // ── Routing ─────────────────────────────────────────────────────────────────────────────────────
 
-  /** @returns {{ code: string, line: number } | { id: string, heading: string }} */
+  /** @returns {{ code: string, line: number } | { graph: string } | { id: string, heading: string }} */
   function route() {
     let hash = location.hash.slice(1);
     try {
@@ -348,6 +442,7 @@
     } catch {
       // shown as written
     }
+    if (hash === "graph" || hash.startsWith("graph/")) return { graph: hash.slice("graph/".length) };
     if (hash.startsWith("code/")) {
       const match = hash.slice("code/".length).match(/^(.*?)(?::(\d+))?$/);
       return { code: match?.[1] ?? "", line: Number(match?.[2] ?? 0) };
@@ -362,6 +457,20 @@
   async function render({ keepScroll = false } = {}) {
     const where = route();
     const y = scrollY;
+    // The same page with a heading asked for: only scroll, nothing to redraw.
+    if ("id" in where && !keepScroll && where.id === shown && where.heading)
+      return void document.getElementById(where.heading)?.scrollIntoView();
+
+    for (const view of views) view.stop();
+    views = [];
+    if ("graph" in where) {
+      shown = "";
+      aside.innerHTML = "";
+      markCurrent("#graph");
+      document.title = `${renderGraph(where.graph)} · ${data.name} atlas`;
+      if (!keepScroll) scrollTo(0, 0);
+      return;
+    }
     if ("code" in where) {
       shown = "";
       aside.innerHTML = "";
@@ -371,9 +480,6 @@
       document.title = `${title ?? where.code} · ${data.name} atlas`;
       return;
     }
-    // The same page with a heading asked for: only scroll, nothing to redraw.
-    if (!keepScroll && where.id === shown && where.heading) return void document.getElementById(where.heading)?.scrollIntoView();
-
     const page = pageById(where.id);
     const doc = docById(where.id);
     const title = page ? renderPage(page) : doc ? renderDoc(doc) : undefined;
@@ -381,7 +487,8 @@
     document.title = `${title ?? "Not found"} · ${data.name} atlas`;
     shown = where.id;
     buildToc(where.id);
-    markCurrent(where.id);
+    if (page) buildLocal(page.id);
+    markCurrent(`#/${where.id}`);
     if (keepScroll) scrollTo(0, y);
     else if (where.heading) document.getElementById(where.heading)?.scrollIntoView();
     else scrollTo(0, 0);

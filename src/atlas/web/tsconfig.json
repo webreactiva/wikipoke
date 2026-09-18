@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "files": ["atlas.js"]
+  "files": ["atlas.js", "graph.js"]
 }

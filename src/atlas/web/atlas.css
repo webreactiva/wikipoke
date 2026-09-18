@@ -10,6 +10,14 @@
   --accent: light-dark(#c2410c, #fb923c);
   --tint: light-dark(#f2eee7, #1e1e23);
   --mark: light-dark(#fde6c8, #4a2f16);
+  /* Page types in the graph, in CONVENTIONS.md order: ink, then four hues from the dataviz
+     reference palette (validated all-pairs on --tint, both modes), then grey for any others. */
+  --type-0: var(--fg);
+  --type-1: light-dark(#2a78d6, #3987e5);
+  --type-2: light-dark(#eda100, #c98500);
+  --type-3: light-dark(#e87ba4, #d55181);
+  --type-4: light-dark(#008300, #008300);
+  --type-5: var(--muted);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --top: 3.25rem;
   font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -50,8 +58,9 @@ body > header {
 }
 body > header > a { color: inherit; text-decoration: none; }
 body > header > small { color: var(--muted); font-family: var(--mono); }
+body > header > a[href="#graph"] { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+body > header > a[href="#graph"]:hover { color: var(--fg); }
 button {
-  margin-left: auto;
   font: inherit;
   color: inherit;
   background: none;
@@ -119,6 +128,29 @@ dt { color: var(--muted); }
 dd { margin: 0; }
 dd ul { list-style: none; margin: 0; padding: 0; }
 article > footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+
+/* The graph: a page of its own, and a small one beside each page */
+svg[data-graph] { display: block; width: 100%; background: var(--tint); border-radius: 8px; touch-action: none; user-select: none; }
+svg[data-graph="full"] { height: max(22rem, calc(100vh - var(--top) - 15rem)); cursor: grab; }
+svg[data-graph="local"] { height: 13rem; }
+svg[data-graph] line { stroke: var(--muted); stroke-opacity: 0.45; vector-effect: non-scaling-stroke; }
+svg[data-graph] line[data-lit] { stroke: var(--accent); stroke-opacity: 1; }
+svg[data-graph] a { cursor: pointer; transition: opacity 0.15s; outline: none; }
+svg[data-graph] circle { stroke: var(--tint); stroke-width: 1.5; }
+svg[data-graph] circle[data-stale] { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 2; }
+svg[data-graph] a:is([data-focus], :focus-visible) circle:not([data-stale]) { stroke: var(--fg); stroke-width: 2.5; }
+svg[data-graph] text { fill: var(--fg); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--tint); stroke-width: 0.3em; stroke-linejoin: round; transition: opacity 0.15s; }
+svg[data-graph] [data-dim] { opacity: 0.15; }
+svg[data-graph="full"][data-labels="off"] a:not([data-lit], [data-focus]) text,
+svg[data-graph="local"] a:not([data-lit], [data-focus]) text { opacity: 0; }
+aside > svg + p { font-size: 0.85rem; margin: 0.5rem 0 0; }
+article > svg + ul { list-style: none; padding: 0; margin: 0.75rem 0 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; font-size: 0.85rem; color: var(--muted); }
+article > svg + ul svg { vertical-align: -1px; }
+main:has(svg[data-graph="full"]) { max-width: none; }
+body:has(svg[data-graph="full"]) > aside { display: none; }
+@media (min-width: 68rem) {
+  main:has(svg[data-graph="full"]) { grid-column: 2 / 4; }
+}
 
 /* A cited file, live only */
 article > pre { display: grid; font-size: 0.82rem; line-height: 1.5; background: var(--tint); border-radius: 8px; padding: 1rem 0; overflow-x: auto; counter-reset: line; }
