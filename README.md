@@ -2,6 +2,15 @@
 
 # Wikipoke
 
+<p align="center"><b>Around 40% fewer tokens every time you ask your agent about your code,<br>
+thanks to a wiki the agent writes for you and keeps up to date.</b></p>
+
+Wikipoke has your coding agent write a wiki of your repository: the map, the flows that cross
+files, the decisions and why they were taken, with every claim pointing at a line of code. When the
+code changes, it tells you which pages went stale and which citations moved, and the agent brings
+them back in line. Ask how something works and the agent reads a page instead of exploring the
+repository, which is where the tokens go ([measured on two repositories](#does-it-save-tokens)).
+
 A code wiki that agents maintain. Three skills write it; one small CLI sets it up, checks it and
 shows it, and never writes a page.
 
@@ -34,26 +43,26 @@ flowchart LR
 
 What a repository gets once wikipoke is installed:
 
-- **Three skills, for any agent.** `wikipoke-ingest` seeds the wiki, reconciles it with what
+- 🧠 **Three skills, for any agent.** `wikipoke-ingest` seeds the wiki, reconciles it with what
   changed, or documents a part you point it at; `wikipoke-query` answers from the wiki before
   opening code; `wikipoke-lint` explains what is wrong and, with `--deep`, reads the pages for
   contradictions and gaps. Installed where Claude Code looks (`.claude/skills/`) and where other
   agents do (`.agents/skills/`).
-- **A wiki that knows when it is out of date.** Every page names the files it documents and the
+- 🕰️ **A wiki that knows when it is out of date.** Every page names the files it documents and the
   commit it was checked against, so `wikipoke check drift` lists the stale pages and every
   `path:line` citation the code has moved, with the line it points at now.
-- **Coverage as a backlog.** The code no page covers, grouped by folder, so the next pass knows
+- 📋 **Coverage as a backlog.** The code no page covers, grouped by folder, so the next pass knows
   where to go, and a count of what the ignore list hides.
-- **Lint for the wiki.** Missing fields, broken links, sources that no longer exist, citations that
+- 🩺 **Lint for the wiki.** Missing fields, broken links, sources that no longer exist, citations that
   land on a blank line, pages nothing links to.
-- **The atlas.** The wiki in a browser, redrawn live while an agent writes it, or exported as a
+- 🗺️ **The atlas.** The wiki in a browser, redrawn live while an agent writes it, or exported as a
   static site; with a graph of how the pages link, the way Obsidian draws a vault.
-- **Optional hooks.** A notice after each commit or when an agent session starts, for
+- 🔔 **Optional hooks.** A notice after each commit or when an agent session starts, for
   git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
   them ever writes it.
-- **Fewer tokens per question.** Measured at 37% to 49% fewer on two repositories, because the
+- 💸 **Fewer tokens per question.** Measured at 37% to 49% fewer on two repositories, because the
   agent reads a page instead of exploring ([details](#does-it-save-tokens)).
-- **Any language, no runtime dependencies.** Node 22.18 and git. The schema is a Markdown file the
+- 🪶 **Any language, no runtime dependencies.** Node 22.18 and git. The schema is a Markdown file the
   project owns and edits, page types included; `--json` and `--strict` fit it into CI.
 
 ## Install
@@ -70,11 +79,13 @@ npm install -D wikipoke        # or as a dependency of a JavaScript project
 
 Before the first npm release, or to run a checkout, `github:delineas/wikipoke` works in either
 command, and `npm run link` inside this repository compiles it and puts `wikipoke` on your `PATH`
-(`npm run unlink` takes it off again). Don't point a project at a checkout with
-`npm install -D ../wikipoke`: npm links the folder and runs its `prepare` there, which fails
-unless the checkout already has its own devDependencies, and the project's `package.json` ends up
-naming a path that exists only on your machine. Link it globally instead; the hooks find a global
-`wikipoke` as well as a local one.
+(`npm run unlink` takes it off again).
+
+> [!WARNING]
+> Don't point a project at a checkout with `npm install -D ../wikipoke`: npm links the folder and
+> runs its `prepare` there, which fails unless the checkout already has its own devDependencies,
+> and the project's `package.json` ends up naming a path that exists only on your machine. Link it
+> globally instead; the hooks find a global `wikipoke` as well as a local one.
 
 Then, in the repository:
 
@@ -145,11 +156,13 @@ sequenceDiagram
     Agent->>Agent: advance the checkpoint to HEAD
 ```
 
-**Install at least one.** Without a hook nothing ever tells you the wiki is stale — `wikipoke check`
-speaks only when someone runs it — and a wiki nobody is told about is one that quietly stops being
-true. `wikipoke hooks` says so whenever none is installed. Only `git` has to be installed again in
-every clone, because `.git/hooks` is not versioned; the other four are ordinary repository files,
-so committing one covers everyone who clones.
+> [!IMPORTANT]
+> **Install at least one.** Without a hook nothing ever tells you the wiki is stale —
+> `wikipoke check` speaks only when someone runs it — and a wiki nobody is told about is one that
+> quietly stops being true. `wikipoke hooks` says so whenever none is installed.
+
+Only `git` has to be installed again in every clone, because `.git/hooks` is not versioned; the
+other four are ordinary repository files, so committing one covers everyone who clones.
 
 ```sh
 wikipoke hooks                        # the list: which are installed, which are outdated
@@ -189,8 +202,9 @@ are until someone runs it.
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims and gaps |
 
-Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki on
-its own, and the saving below is only there when it does.
+> [!TIP]
+> Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki
+> on its own, and the saving below is only there when it does.
 
 `wikipoke-ingest` decides what kind of pass to run from the arguments and the wiki's state, so the
 same command seeds a new repository and keeps an old one current:
@@ -240,8 +254,9 @@ The same runs showed three more things:
 - **The wiki costs tokens to build.** Covering the library's whole backlog in one pass took about
   14M tokens, which the saving above pays back after roughly 70 to 100 questions.
 
-Three runs per cell with a wide spread (one no-wiki answer on the CLI took 1.6M tokens), one model,
-and questions the wiki covers: this measures these two repositories, not yours.
+> [!NOTE]
+> Three runs per cell with a wide spread (one no-wiki answer on the CLI took 1.6M tokens), one
+> model, and questions the wiki covers: this measures these two repositories, not yours.
 
 ## `wikipoke check`
 
