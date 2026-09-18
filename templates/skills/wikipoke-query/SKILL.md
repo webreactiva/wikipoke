@@ -1,6 +1,6 @@
 ---
 name: wikipoke-query
-description: "Answer any question about how this repository's code behaves from its code wiki first, before grepping or opening source files: the wiki's pages already map the flows and cite the lines, so an answer takes fewer steps than exploring. When the wiki does not cover it, research the code, answer, and offer to file the answer back. Use for every question about this codebase, in any language and any phrasing: how X works, what happens when Y, how it handles or avoids Z, where W lives, why it is built this way ('¿cómo funciona…?', '¿qué pasa cuando…?', '¿cómo evita…?', '¿dónde está…?', '¿por qué…?'). Also when the user invokes /wikipoke-query or says 'ask the wiki', 'pregunta al wiki', 'documenta la respuesta'."
+description: "Answer any question about how this repository's code behaves from its code wiki first, before grepping or opening source files: the wiki's pages already map the flows and cite the lines, so an answer takes fewer steps than exploring. When the wiki does not cover it, research the code, answer, and offer to file the answer back. Use for every question about this codebase, whatever language it is asked in: how X works, what happens when Y, how it handles or avoids Z, where W lives, why it is built this way. Also when the user invokes /wikipoke-query or says 'ask the wiki', 'file this answer in the wiki'."
 argument-hint: "<question>"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->

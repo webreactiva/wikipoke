@@ -1,6 +1,6 @@
 ---
 name: wikipoke-ingest
-description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'document <subsystem>', 'actualiza el wiki', 'crea el wiki', 'documenta <subsistema>', typically when closing a feature."
+description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'seed the wiki', 'create the wiki', 'document <subsystem>', typically when closing a feature."
 argument-hint: "[<path> | all]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->

@@ -1,6 +1,6 @@
 ---
 name: wikipoke-lint
-description: "Check the wiki's health and report what to fix. By default runs the deterministic checks (integrity, staleness, coverage) and explains each finding. With --deep, also reads the pages as a body of text to catch what no script can: contradictions, expired claims, concepts with no page, pages that only restate signatures, undocumented subsystems, wrong confidence. Proposes; fixes nothing without a yes. Use when: (1) the user invokes /wikipoke-lint, (2) the user says 'review the wiki', 'revisa el wiki', '¿está bien el wiki?', (3) every few weeks."
+description: "Check the wiki's health and report what to fix. By default runs the deterministic checks (integrity, staleness, coverage) and explains each finding. With --deep, also reads the pages as a body of text to catch what no script can: contradictions, expired claims, concepts with no page, pages that only restate signatures, undocumented subsystems, wrong confidence. Proposes; fixes nothing without a yes. Use when: (1) the user invokes /wikipoke-lint, (2) the user says 'review the wiki', 'check the wiki', 'is the wiki still right?', (3) every few weeks."
 argument-hint: "[--deep] [--fix-trivial] [--path=<glob>]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->
