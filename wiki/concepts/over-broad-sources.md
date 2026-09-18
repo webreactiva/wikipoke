@@ -5,7 +5,7 @@ responsibility: How a too-wide `sources:` entry makes coverage lie, and what the
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: df4db0e
+synced: b305be6
 related:
   - ./coverage-as-debt.md
   - ../components/checks.md
@@ -17,7 +17,7 @@ directions break the same way — a page that claims `src/` covers every file un
 reports green for code nobody wrote up, and every change anywhere under `src/` marks that one page
 stale, which trains everyone to ignore staleness.
 
-`isOverBroad()` catches the shape (`src/lib/lib.ts:366`): a wildcard-free source pointing at a
+`isOverBroad()` catches the shape (`src/lib/lib.ts:378`): a wildcard-free source pointing at a
 directory that carries one of the known package manifests (`package.json`, `Cargo.toml`,
 `go.mod`, …), or a source that resolves to the repository root. Claiming a whole *package* is the
 line, not claiming a directory — `src/billing/` is a legitimate module page's source, while a

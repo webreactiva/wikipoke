@@ -4,7 +4,7 @@ type: entity
 responsibility: How init, hooks add/remove and uninstall write files without ever taking something the project owns.
 sources:
   - src/lib/install.ts
-synced: 08177b5
+synced: b305be6
 related:
   - ../concepts/file-ownership.md
   - ./hooks.md
@@ -14,7 +14,10 @@ The only module in wikipoke that writes anything outside the wiki, and it writes
 up: every file is a template from `templates/` with `{{WIKI}}` replaced by the repository's real
 wiki path (`src/lib/install.ts:81`). That substitution is what lets a project keep its wiki in
 `docs/wiki` and still get skills, hooks and a schema that say `docs/wiki` — nothing downstream has
-to look the path up, so nothing downstream can disagree about it.
+to look the path up, so nothing downstream can disagree about it. A path `chooseWiki()` refuses
+makes `init()` throw rather than report (`src/lib/install.ts:166`): the CLI refuses it first, so
+only a programmatic caller gets here, and a report that says nothing went wrong while no file was
+written is worse than none.
 
 It finds `templates/` through a single relative URL, which resolves from the sources and from the
 build alike only because `src/lib/` and `dist/lib/` sit at the same depth. That is why `df4db0e`

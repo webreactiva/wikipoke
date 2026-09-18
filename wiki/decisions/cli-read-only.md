@@ -5,7 +5,7 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - README.md
   - src/bin/wikipoke.ts
-synced: 3a9a8d1
+synced: b305be6
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
@@ -32,6 +32,12 @@ sessions from writing the same page — so the guarantees moved from the process
 the frontmatter contract, `sources:`, `synced:` and the link graph are all checkable after the fact
 by `lint`, which is the reason they exist in that shape. The project keeps the line drawn in
 `AGENTS.md`: CLI code is added only for a check that is deterministic and read-only.
+
+The pressure comes back from the agents themselves. An OpenCode agent that mistyped the checkpoint
+asked for a `wikipoke seal`, a command that would write it. The fix stayed on this side of the line
+(`aafa306`): the skills write the checkpoint with a `printf` around `git rev-parse HEAD`, which
+takes the typing away from the agent without giving the CLI its first write. A command that writes
+one file is how 0.1 started.
 
 This page is `confidence: inferred` about the reasoning: the outcome is documented in the README's
 "Where this comes from", but the repository was squashed to a single commit, so the 0.1 code and

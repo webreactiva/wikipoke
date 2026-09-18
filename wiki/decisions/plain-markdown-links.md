@@ -5,7 +5,7 @@ responsibility: Why the wiki uses `[text](./page.md)` and reports `[[term]]` ins
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: df4db0e
+synced: b305be6
 related:
   - ../components/lib.md
 ---
@@ -20,7 +20,7 @@ at all. A `[[term]]` resolves against an index that the tool would have to own, 
 inventing a naming scheme, a disambiguation rule and a resolution order, none of which git or an
 editor understands.
 
-**The discarded alternative** is what most wikis do, and the comment in `src/lib/lib.ts:445` gives the
+**The discarded alternative** is what most wikis do, and the comment in `src/lib/lib.ts:460` gives the
 second reason to skip it: double brackets tend to collide with whatever the host project already
 uses them for — a templating language, another wiki tool, a documentation generator. The wiki lives
 inside someone else's repository, so it takes the syntax least likely to already mean something.
@@ -28,4 +28,4 @@ inside someone else's repository, so it takes the syntax least likely to already
 **What it costs.** Relative paths (`../concepts/thing.md`) are more awkward to write than a bare
 term, and moving a page means fixing its inbound links by hand — though `lint` lists exactly which
 ones. Links are checked for existence, not for anchors: a link to `page.md#a-heading` is verified
-as far as the file, and the fragment is dropped (`src/lib/lib.ts:459`).
+as far as the file, and the fragment is dropped (`src/lib/lib.ts:474`).

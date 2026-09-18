@@ -5,7 +5,7 @@ responsibility: Why the wiki tracks both a repository checkpoint and a per-page 
 sources:
   - src/lib/drift.ts
   - templates/CONVENTIONS.md
-synced: df4db0e
+synced: b305be6
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
@@ -38,6 +38,12 @@ There is deliberately no date field on a page. `git show -s --format=%cs <synced
 of the commit the page was verified against, which is the date that actually matters, and cannot
 drift from the sha the way a hand-written date can.
 
-Both axes measure against the **working tree**, not the last commit (`src/lib/lib.ts:163`): a page is
+The page axis has a finer grain inside it. A stale page's `path:line` citations are carried through
+the same diff, and drift reports where each cited line went (`src/lib/drift.ts:119`). It belongs to
+the page axis because it has the same weakness: once `synced:` is re-stamped the diff starts from
+the new commit, and a pointer nobody moved reads as current. So the move is reported while the page
+is still stale, and re-pointing and re-stamping are one edit.
+
+Both axes measure against the **working tree**, not the last commit (`src/lib/lib.ts:175`): a page is
 stale the moment its source is edited. A page with no `sources:` or no `synced:` is on neither
 axis — `drift` puts it in `skipped[]`, because a page with no contract cannot be called fresh.

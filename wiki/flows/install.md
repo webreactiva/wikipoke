@@ -5,7 +5,7 @@ responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in
 sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
-synced: 08177b5
+synced: b305be6
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -15,7 +15,8 @@ related:
 ```
 wikipoke init [--dir docs/wiki]
    │
-   ├─ --dir given?  → validWiki()  → write/remove .wikipoke.json     (only when not "wiki")
+   ├─ --dir given?  → chooseWiki() → unusable? exit 2, nothing written
+   │                               → write/remove .wikipoke.json      (only when not "wiki")
    │
    ├─ wiki/CONVENTIONS.md    exists? kept : written from the template
    ├─ wiki/.wikipokeignore   exists? kept : written from the template
@@ -23,7 +24,8 @@ wikipoke init [--dir docs/wiki]
    ├─ .claude/skills/…                                         ← always: Claude Code reads no other
    │
    ├─ list the hooks, marking the ones the repository shows signs of using
-   └─ TTY?  ask which to install        no TTY?  install none, invite the agent to ask
+   └─ TTY?  ask which to install        no TTY?  install none; if none is installed either,
+                                                  invite the agent to ask
 ```
 
 `init` writes no page, no `index.md`, no `log.md` and no checkpoint: the first ingest does. It is

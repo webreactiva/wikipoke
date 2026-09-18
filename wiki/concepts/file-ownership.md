@@ -4,7 +4,7 @@ type: concept
 responsibility: The `managed by wikipoke` marker, and the three ownership rules every write goes through.
 sources:
   - src/lib/install.ts
-synced: 08177b5
+synced: b305be6
 related:
   - ../components/install.md
   - ../flows/install.md

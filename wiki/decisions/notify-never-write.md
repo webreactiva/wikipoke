@@ -5,7 +5,7 @@ responsibility: Why no hook updates the wiki automatically, and why the notifier
 sources:
   - templates/wikipoke-hook.sh
   - templates/post-commit
-synced: 68c8fa3
+synced: b305be6
 related:
   - ../components/hooks.md
 ---
@@ -23,9 +23,10 @@ where people expect neither latency nor cost.
 
 - **It never fails.** Every path in `wiki/.wikipoke-hook.sh` ends in `exit 0`, including "wikipoke
   is not installed" and "not a git repository". A hook that can break a commit gets uninstalled.
-- **It is silent when the wiki is current.** Which is why `drift` and `coverage` print nothing on a
-  clean run — a notifier that speaks every time is muted within the week, and then speaks to nobody
-  when it matters.
+- **It is silent when the wiki is current.** Which is why `drift` prints nothing on a clean run — a
+  notifier that speaks every time is muted within the week, and then speaks to nobody when it
+  matters. The notifier used to run `coverage` too; `aafa306` took it out, because a backlog is
+  never clean on a wiki seeded honestly and the notifier had become one that speaks every time.
 - **It exits early on an unseeded wiki.** No `.wikipoke-state.json`, nothing owed: installing
   wikipoke does not start nagging.
 

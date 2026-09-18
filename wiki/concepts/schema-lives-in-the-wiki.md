@@ -5,7 +5,7 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: df4db0e
+synced: b305be6
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -18,7 +18,7 @@ question of authority outright: when the skills or the checks disagree with it, 
 
 That is not only a documentation convention — one part of it is wired up. `pageTypes()` reads the
 valid `type:` values out of the first column of the page-types table in `CONVENTIONS.md`
-(`src/lib/lib.ts:259`), falling back to the defaults only when the file or the table is missing. A
+(`src/lib/lib.ts:271`), falling back to the defaults only when the file or the table is missing. A
 project adds a page type by adding a table row to a file it owns; nothing is recompiled and nothing
 is configured. Retiring a type is deleting the row, after which lint reports every page still
 carrying it.

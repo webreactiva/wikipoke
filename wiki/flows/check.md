@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 08177b5
+synced: b305be6
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -24,6 +24,7 @@ wikipoke check [names…] [--json] [--strict] [-v]
      │
      ├─ for each named check: runCheck(name, { root, wikiDir, wiki })  → { name, result }
      │       drift    ── git rev-list / git diff       → { repo, stale[], skipped[], fresh[] }
+     │                   └ per stale page: git diff -U0  → citations[] { raw, now }
      │       coverage ── git ls-files + sources globs  → { unclaimed[], clusters[] }
      │       lint     ── read every page               → { errors[], warnings[] }
      │
@@ -42,9 +43,10 @@ pages themselves.
 
 ## What the silences mean
 
-The report functions of `drift` and `coverage` print **nothing** when there is nothing to say,
-because [the notifier depends on it](../components/hooks.md): a hook that speaks on every commit
-gets muted by the person within a week. `lint` is the exception — it prints `✓ lint: OK` when run
+The report functions of `drift` and `coverage` print **nothing** when there is nothing to say.
+For drift that is what [the notifier depends on](../components/hooks.md): a hook that speaks on
+every commit gets muted by the person within a week. Coverage's silence is rarer — a wiki seeded
+honestly always has a backlog — which is why the notifier stopped running it in `aafa306`. `lint` is the exception — it prints `✓ lint: OK` when run
 by name, because a person who asked for a review deserves an answer.
 
 The green one-liner only appears for a plain `wikipoke check` with no findings at all, so
@@ -66,6 +68,6 @@ empty wiki.
 ## `--json`, and who reads it
 
 `--json` prints one check's result object, or a map of them when several ran. It exists for the
-skills: `wikipoke-ingest` reads `check drift --json` to get `repo` and `stale[]` and then reads
-only those pages' diffs. That is the whole integration surface between the CLI and the skills —
+skills: `wikipoke-ingest` reads `check drift --json` to get `repo` and `stale[]`, reads only those
+pages' diffs, and re-points each stale page's `citations[]` before it re-stamps `synced:`. That is the whole integration surface between the CLI and the skills —
 the CLI hands over measurements, and the agent decides what to write.

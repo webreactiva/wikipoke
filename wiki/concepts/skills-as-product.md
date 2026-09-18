@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: 08177b5
+synced: b305be6
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md

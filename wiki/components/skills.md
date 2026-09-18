@@ -6,7 +6,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 19b233f
+synced: b305be6
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -21,8 +21,11 @@ Most of wikipoke's behaviour is here rather than in `src/lib/`; see
 
 **`wikipoke-ingest`** takes code into the wiki, and picks one of three modes from the arguments and
 the filesystem: an argument means *ingest that part*, no argument and no `.wikipoke-state.json`
-means *seed*, no argument with a checkpoint means *reconcile*. Only reconciling moves the
-checkpoint — closing a coverage gap says nothing about the repository being indexed up to HEAD.
+means *seed*, no argument with a checkpoint means *reconcile*. Only seeding and reconciling move the
+checkpoint — closing a coverage gap says nothing about the repository being indexed up to HEAD — and
+since `aafa306` they write it with a `printf` around `git rev-parse HEAD` rather than letting the
+agent copy a sha. The same change added two citation rules: a seed cites only files it opened in
+that pass, and a reconcile re-points the `citations[]` drift reports before it re-stamps a page.
 [The full pass is a flow](../flows/ingest-pass.md).
 
 **`wikipoke-query`** answers a question from the wiki first, falls back to the code, and then
@@ -33,7 +36,9 @@ do X"), never accept an answer that rests on the wiki's silence.
 
 **`wikipoke-lint`** reads `wikipoke check` and explains it, and with `--deep` reads the pages as a
 body of text through six lenses no script can apply: contradiction, expired claim, orphan concept,
-density, gap, confidence. It proposes and does not rewrite — reconciling is ingest's job — and
+density, gap, confidence. Its expired-claim lens opens the citations a page already carries, because `check` knows a cited
+line exists, not that it still says what the sentence claims. It proposes and does not rewrite —
+reconciling is ingest's job — and
 `--fix-trivial` is the narrow exception for broken links and missing index lines. Two rules keep it
 from generating noise: a finding you cannot back with a page quote or a `path:line` is an opinion,
 and "no findings" is a real outcome.

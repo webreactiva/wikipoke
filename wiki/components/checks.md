@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: df4db0e
+synced: b305be6
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -20,7 +20,7 @@ the `wikipoke-lint` skill's deep pass.
 Since `df4db0e` each module also names the object it returns — `DriftResult`, `CoverageResult`,
 `LintResult` — and those names are what let the CLI keep treating the three uniformly without
 forgetting which is which (see [the entry point](./cli.md)). The most useful of them is drift's
-`RepoAxis` (`src/lib/drift.ts:28`): its four states are a union rather than a `status` string
+`RepoAxis` (`src/lib/drift.ts:33`): its four states are a union rather than a `status` string
 beside optional fields, so the two that know a commit count are the only two that can be asked for
 one, and the report cannot print a count that was never computed.
 
@@ -29,8 +29,21 @@ one, and the report cannot print a count that was never computed.
 checkpoint; the page axis compares each page's `sources:` against its own `synced:`. A page with no
 `sources:`/`synced:`, or a `synced:` that is not a commit here, lands in `skipped[]` rather than in
 either bucket: it has no contract, so it cannot be called fresh or stale
-(`src/lib/drift.ts:75`). Diffs are cached per sha (`src/lib/drift.ts:59`), so a wiki where most pages
+(`src/lib/drift.ts:98`). Diffs are cached per sha (`src/lib/drift.ts:76`), so a wiki where most pages
 carry the same `synced:` runs one `git diff`, not one per page.
+
+Since `aafa306` a stale page also carries `citations[]`: every `path:line` on it that points into a
+changed file is carried through `git diff -U0 <synced>` to the line it names now, or reported as
+changed when a hunk rewrote the line itself (`src/lib/drift.ts:119`, `src/lib/drift.ts:150`). The
+reason is timing. Re-stamping `synced:` is the last moment anyone can see where a cited line went;
+after it the page is fresh and drift stops looking. An agent reconciling a real repository
+re-stamped a page after a feature had pushed its nine citations between 56 and 286 lines down, and `lint`
+said OK to all nine. The mapping starts from `synced:`, which is also its one trap: a page whose
+citations were re-pointed but whose `synced:` was not re-stamped reads as moved again, and following
+that report twice shifts every line twice. The ingest skill makes the two one edit. A checkpoint
+that is not a commit is printed in full (`src/lib/drift.ts:186`), because the usual cause is a sha
+typed by hand whose first seven characters are right, and seven characters that match HEAD read as
+a contradiction.
 
 **coverage** is drift's mirror: tracked files, minus `.wikipokeignore`, that no page's `sources:`
 claims. It groups what is left into clusters by folder so the backlog reads as "five files in
@@ -48,7 +61,10 @@ every Markdown link resolves — on pages, in `related:`, and in `index.md`, whi
 page because a broken map is as bad as a broken page (`src/lib/lint.ts:83`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
-the end of its file or on a blank line (`src/lib/lint.ts:183`). It cannot know whether line 96 still
+the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
+(`src/lib/lint.ts:185`). Nobody cites a closing brace, so that one is almost always code that moved
+underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
+and it catches some of what a reconcile re-stamped without re-pointing. It cannot know whether line 96 still
 says what the page claims — that is the deep pass — but a file that lost forty lines it can see,
 and that is the shape a citation usually rots into. Like staleness, a drifted pointer is debt: a
 warning, never an error.
@@ -58,4 +74,4 @@ Its other warnings are about a wiki nobody can navigate rather than one that is 
 follow, and the [over-broad `sources:`](../concepts/over-broad-sources.md) that turn coverage
 green by lying. Past 80 pages it warns once that reading `index.md` first has stopped ranking
 anything — a deliberate nudge to reopen the "do we need search?" question rather than a measured
-limit (`src/lib/lib.ts:126`).
+limit (`src/lib/lib.ts:138`).

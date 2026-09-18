@@ -8,15 +8,15 @@ sources:
   - templates/opencode-plugin.js
   - templates/cursor-rule.mdc
   - templates/agents-block.md
-synced: 68c8fa3
+synced: b305be6
 related:
   - ./install.md
 ---
 
 Five hooks, one notifier. `wiki/.wikipoke-hook.sh` is the only thing that actually runs: it finds
 the repository root, exits silently when there is no `.wikipoke-state.json` (an unseeded wiki owes
-nothing), and otherwise runs `wikipoke check drift coverage` from `node_modules/.bin` or from the
-global install. It never fails: every path ends in `exit 0`, including the one where wikipoke is
+nothing), and otherwise runs `wikipoke check drift` from `node_modules/.bin` or from the global
+install. It never fails: every path ends in `exit 0`, including the one where wikipoke is
 not installed at all. A hook that can break a commit or a session start would be uninstalled within
 the day.
 
@@ -52,7 +52,13 @@ notice to survive its own setup should install and commit at least one of the fo
 the cheapest since it needs no tool-specific file.
 
 Silence is the design. The notifier prints nothing when the wiki is current, so a current wiki adds
-nothing to any prompt and costs nobody attention. When it does speak it says what is owed and
+nothing to any prompt and costs nobody attention. Until `aafa306` that was only half true: it ran
+`check drift coverage`, and coverage is a backlog meant to outlive every pass, so on any repository
+seeded honestly the notifier never went quiet. On a real OpenCode run the plugin put the same
+32-file list into the system prompt of every new session, followed by "the wikipoke-ingest skill
+reconciles it" — a standing nudge to leave the person's task for a wiki chore. The notifier now runs
+drift alone (`templates/wikipoke-hook.sh:15`), which also carries the citations a stale page lost;
+coverage stays in `wikipoke check` and in the skills, where someone asked for it. When it does speak it says what is owed and
 names the skill — and stops there. **No hook ever writes the wiki**: ingesting is a person's call,
 made by launching `wikipoke-ingest`, and an automatic wiki would be a wiki nobody reviewed. See
 [the decision](../decisions/notify-never-write.md).

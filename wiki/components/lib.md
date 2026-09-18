@@ -4,7 +4,7 @@ type: entity
 responsibility: The git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
 sources:
   - src/lib/lib.ts
-synced: df4db0e
+synced: b305be6
 related:
   - ./checks.md
 ---
@@ -35,20 +35,20 @@ try/catch at every call site. There is no cache and no index of its own: every a
 from git at the moment a check runs, which is why nothing can go stale between runs.
 
 **Uncommitted work counts.** `changedSince()` unions `git diff --name-only <sha>` against the
-working tree with `git ls-files --others --exclude-standard` (`src/lib/lib.ts:163`), so a page goes
+working tree with `git ls-files --others --exclude-standard` (`src/lib/lib.ts:175`), so a page goes
 stale the moment its source is edited, not once the edit is committed. A wiki pass that edits code
 would therefore invalidate its own pages — which is one more reason the skills forbid it.
 
 **The frontmatter parser is deliberately small.** Scalars, block lists and inline arrays; no
-nesting, no anchors, no multi-line strings (`src/lib/lib.ts:304`). The comment says why: the parser
+nesting, no anchors, no multi-line strings (`src/lib/lib.ts:316`). The comment says why: the parser
 is the contract `CONVENTIONS.md` documents, and one that accepts more than the contract lets pages
 drift out of it. Unknown keys are kept and ignored.
 
 **The ignore list is matched by git, twice.** `.wikipokeignore` is git pathspecs, so its `*`
 crosses directories — which is not what a `sources:` glob does, and the two dialects must not be
-confused. `ignoreRules()` splits the file into plain lines and `!` lines (`src/lib/lib.ts:188`),
+confused. `ignoreRules()` splits the file into plain lines and `!` lines (`src/lib/lib.ts:200`),
 and `indexablePaths()` runs git once with the plain lines as `:(exclude)` pathspecs and once with
-the `!` lines to bring paths back (`src/lib/lib.ts:208`). Doing the second pass in git rather than
+the `!` lines to bring paths back (`src/lib/lib.ts:220`). Doing the second pass in git rather than
 in JavaScript is the whole point: one dialect decides everything, and re-inclusion is
 order-independent because it is a separate pass rather than a rule read top to bottom.
 `ignoredFiles()` inverts the result so coverage can say how many files the list hid, minus the
@@ -57,13 +57,19 @@ wiki's own pages, which are never code.
 **Two glob rules do most of the work.** `normalizeSource()` turns a wildcard-free path that is a
 directory on disk into `dir/**`, so `sources: [src/billing/]` means what a reader thinks it means.
 `isOverBroad()` flags a source that claims a directory carrying one of the known package manifests
-(`src/lib/lib.ts:366`), or the repository root: those are the claims that make
+(`src/lib/lib.ts:378`), or the repository root: those are the claims that make
 [coverage read green for code nobody wrote up](../concepts/over-broad-sources.md).
 
 **Citations are found the same way links are.** `codeCitations()` pulls `path:line` references
-out of a page's prose (`src/lib/lib.ts:437`), stripping fenced blocks — a diagram or an example is
+out of a page's prose (`src/lib/lib.ts:452`), stripping fenced blocks — a diagram or an example is
 not a claim — but keeping inline code, since a citation is normally written in backticks. It is how
-`lint` can check the pointers `CONVENTIONS.md` tells pages to use instead of transcribing code.
+`lint` can check the pointers `CONVENTIONS.md` tells pages to use instead of transcribing code, and
+how `drift` finds the ones a stale page has to re-point. Lines count from 1, so `file.js:0` is left
+to the prose rather than reported: until `b29f7f4` it crashed every check, the notifier included.
+
+**A `--dir` is chosen, not just validated.** `chooseWiki()` (`src/lib/lib.ts:111`) refuses a path
+outside the repository, the repository itself, and a path a file already occupies, and returns the
+reason as a sentence rather than `null`, so the CLI can print it before writing anything.
 
 **Links are plain Markdown on purpose.** `markdownLinks()` strips code fences and spans first, then
 classifies each link as `page` (inside the wiki, compared against the pages), `repo` (outside it,

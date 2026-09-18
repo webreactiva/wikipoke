@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 19b233f
+synced: b305be6
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -24,6 +24,7 @@ person: /wikipoke-ingest [<path> | all]
    └─ no ── .wikipoke-state.json exists?
               ├─ no  ─► A · SEED        survey → ignore list → architecture.md → avenues
               └─ yes ─► B · RECONCILE   drift --json → read each stale page's own diff
+                                         → re-point its citations[] and re-stamp, in one edit
    │
    ▼
 write pages under wiki/  ·  index.md  ·  log.md entry
@@ -32,7 +33,8 @@ write pages under wiki/  ·  index.md  ·  log.md entry
 wikipoke check  ── errors? ─► fix, re-run
    │
    ▼
-checkpoint: Mode A and B set last_indexed_commit = HEAD.  Mode C never touches it.
+checkpoint: Mode A and B write last_indexed_commit = HEAD, by printf, never by hand.
+            Mode C never touches it.
 ```
 
 ## Seeding stops at the avenues
@@ -43,7 +45,9 @@ than the gap it closed, and coverage will list exactly what was left as
 [the backlog](../concepts/coverage-as-debt.md). The order inside a seed is also fixed:
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
 as the other pages teach the agent more. Anything reconstructed rather than read is marked
-`confidence: inferred`.
+`confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
+repository wrote a page about a directory it never opened and cited a line in it, which landed on
+unrelated code and passed every check. Only a file opened in the pass may be cited.
 
 Seeding also tailors `.wikipokeignore` in both directions, which is the step most easily done
 half-way. The starting list ignores `*.md`, and in a repository whose product is prose — prompts,
@@ -63,6 +67,12 @@ the stale sections are rewritten, so hand-written notes survive, and when a chan
 what the page claimed, the page says what it used to be and what changed it, with the SHA. That
 sentence is the part git tells badly, and it is most of why the wiki is worth keeping.
 
+Each stale page also comes with `citations[]`, its `path:line` pointers carried through the same
+diff: the line each one names now, or `null` when the diff rewrote the line itself. They are
+re-pointed and the page re-stamped in the same edit. Re-stamping is the last moment the move is
+visible — after it the page is fresh and drift stops looking — and doing only the first half is
+worse than neither, since the report is mapped from `synced:` and would shift the fixed lines again.
+
 Nothing stale and the repository current is a complete outcome: say so and stop.
 
 ## Why only two modes move the checkpoint
@@ -72,3 +82,7 @@ reconciling earn that claim; ingesting a part does not — it closes a coverage 
 nothing about the commits since the checkpoint. Query and lint never move it either. And it moves
 **after** the final check passes, never before, so a checkpoint never vouches for a wiki that does
 not lint.
+
+It is written by a command — `printf` around `git rev-parse HEAD` — and never typed. An agent that
+typed it kept the first seven characters of the sha and invented the other thirty-three, which
+`check` caught as a broken checkpoint; the skills now leave no sha for the agent to copy.

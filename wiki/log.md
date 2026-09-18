@@ -77,3 +77,26 @@ blank. Re-pointed all forty-seven after checking each against the line it now la
 - typescript-two-ways.md: package.json citations moved with the publish metadata; `npm run link` builds before it links
 - cli-read-only.md: re-read against the README install change, which did not touch what the page claims
 - ignored LICENSE: a licence is not code
+
+## 2026-09-18 · wikipoke-ingest
+
+Four commits since the checkpoint (`b29f7f4`, `c6a201a`, `aafa306`, `b305be6`), all nineteen pages
+with a source among them stale. The first pass run with the new drift report: it listed 23
+citations the diffs had moved, every one checked against the sentence citing it before being
+re-pointed, and none of them had been re-pointed before without a re-stamp. `lint` had caught ten
+of them, the ones on a blank line or a lone `}`; the other thirteen landed on real code.
+
+- components/checks.md, concepts/two-axes-of-staleness.md: drift now carries a stale page's
+  citations through the diff, and why that has to happen before the re-stamp. Also its one trap,
+  found halfway through this pass: the report is mapped from `synced:`, so a page re-pointed but
+  not re-stamped reads as moved again (`b305be6` makes the two one edit in the skill).
+- components/hooks.md, decisions/notify-never-write.md, concepts/coverage-as-debt.md,
+  flows/check.md: the notifier runs drift alone. It used to run coverage, which on an honestly
+  seeded wiki is never empty, so the notifier was never silent. Recorded as a change with its SHA.
+- flows/ingest-pass.md, components/skills.md: the checkpoint is written by `printf`, never typed;
+  a seed cites only files it opened; a reconcile re-points before it re-stamps.
+- decisions/cli-read-only.md: an agent asked for `wikipoke seal`. The answer stayed in the skill.
+- components/cli.md, flows/install.md, components/install.md, components/lib.md: `b29f7f4`, never
+  indexed until now — `chooseWiki()` refuses a bad `--dir` before anything is written, `:0` is not a
+  citation — and `init` no longer invites hooks in a repository that has some.
+- CONVENTIONS.md: brought level with the template, which it had fallen behind twice.
