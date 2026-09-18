@@ -32,15 +32,16 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').chmodSync('dist/bin/wikipoke.js', 0o755)\"",
+    "build": "tsc -p tsconfig.build.json && node scripts/build.ts",
     "link": "npm run build && npm link",
     "unlink": "npm rm -g wikipoke",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p src/atlas/web",
     "test": "node --test test/*.test.ts",
     "prepare": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
+    "marked": "^18.0.13",
     "typescript": "^5.9.3"
   }
 }

@@ -2,8 +2,8 @@
 
 # Wikipoke
 
-A code wiki that agents maintain. Three skills write it; one small CLI sets it up and checks it,
-and never writes a page.
+A code wiki that agents maintain. Three skills write it; one small CLI sets it up, checks it and
+shows it, and never writes a page.
 
 ```
 person ──► /wikipoke-ingest ──► the agent reads the code, writes pages in wiki/
@@ -18,8 +18,9 @@ optional hooks ──► wiki/.wikipoke-hook.sh                "the wiki is 3 co
 - **The skills govern.** A person launches `wikipoke-ingest`, `wikipoke-query` or `wikipoke-lint`;
   the agent follows the skill and writes Markdown pages directly under `wiki/`. The rules live in
   `wiki/CONVENTIONS.md`, which the project owns and edits.
-- **The CLI only measures.** `wikipoke check` is deterministic, reads git and the pages, and
-  reports. It has no publish step, no lock, no staging and no plan to follow.
+- **The CLI only measures and shows.** `wikipoke check` is deterministic, reads git and the pages,
+  and reports; `wikipoke atlas` puts the same pages in a browser. Neither has a publish step, a
+  lock, a staging area or a plan to follow.
 - **Coverage is debt, not failure.** Code no page covers is listed so the next pass knows where to
   go. A plain `check` fails only when the wiki is broken: a missing field, a dead source, a broken
   link.
@@ -28,7 +29,8 @@ optional hooks ──► wiki/.wikipoke-hook.sh                "the wiki is 3 co
 
 Node 22.18 or later and git. Wikipoke has no runtime dependencies: the CLI is TypeScript
 compiled to plain ESM on install, and everything it needs at run time is in Node's standard
-library.
+library. The one library atlas uses, [marked](https://marked.js.org), renders Markdown in the
+browser; it is a devDependency the build copies next to the compiled code.
 
 ```sh
 npm install -g wikipoke        # any repository, any language
@@ -188,6 +190,27 @@ wikipoke check lint         # fields, types, links, citations, dead and over-bro
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
 A plain run exits 1 only on lint errors.
 
+## `wikipoke atlas`
+
+```sh
+wikipoke atlas              # the wiki at http://127.0.0.1:4747, redrawn as pages change
+wikipoke atlas --port 8080
+wikipoke atlas --out site   # the same page as a static site: open index.html, or publish the folder
+```
+
+A reader for people. Pages are grouped by the `type:` values in `CONVENTIONS.md`, each one opens
+with its `responsibility`, its `synced:` commit and date, its sources, and a mark when it is
+`inferred` or stale, and ends with the pages it relates to and the ones that link to it. Headings
+make a table of contents beside the page, and `/` filters the page list.
+
+Live, a citation opens the cited file at its line, served only if git tracks it, and the page
+redraws when a file in `wiki/` changes, so an ingest pass can be watched as it lands. It stops at
+the wiki: an edit to the code shows up as a stale page on the next redraw, not on its own.
+Exported, citations point at the remote (GitHub or GitLab) at each page's `synced:` commit, which
+is the code the page was last checked against, and the snapshot is taken at the moment you export.
+`--out` writes only into a new or empty directory, or one a previous export made, and never
+inside the wiki.
+
 ## A page
 
 ```markdown
@@ -238,7 +261,7 @@ The CLI is TypeScript under `src/`, and it is read two different ways.
 ```sh
 npm test         # node --test test/*.test.ts — runs the sources, no build first
 npm run typecheck
-npm run build    # tsc -> dist/, the ESM that actually ships
+npm run build    # tsc -> dist/, the ESM that actually ships, plus atlas's page and marked
 npm run link     # build, then `npm link`: the working copy becomes your global wikipoke
 npm run unlink   # take it off the PATH again
 ```
@@ -252,3 +275,7 @@ Two consequences for anyone editing `src/`: imports name the `.ts` file (`./lib.
 rewrites the specifier to `.js` when it emits), and only syntax that erases to nothing is allowed —
 no `enum`, no `namespace`, no parameter properties. `erasableSyntaxOnly` in `tsconfig.json` fails
 the check rather than letting one through.
+
+atlas's page, in `src/atlas/web/`, is the exception: plain HTML, CSS and JavaScript the browser
+runs as they are, which `scripts/build.ts` copies into `dist/` along with marked. `atlas.js` is
+still type-checked, through its own `tsconfig.json`, against the snapshot's types.

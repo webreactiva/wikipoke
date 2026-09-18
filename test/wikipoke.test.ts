@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { get } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { serve } from "../src/atlas/serve.ts";
+import type { Snapshot } from "../src/atlas/snapshot.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -594,4 +598,81 @@ test("lint warns when a link's text and its line anchor disagree", () => {
   const lint = json<LintJson>(root, "check", "lint", "--json");
   const found = lint.warnings.filter((f) => f.page === "components/billing").map((f) => f.message);
   assert.deepEqual(found, ["`[invoice.js:1](../../src/billing/invoice.js#L3)` says line 1 and links to line 3: one of them moved"]);
+});
+
+/** GET through node:http, which, unlike fetch, lets a test send a Host header of its own. */
+function fetchWith(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+  return new Promise((done, fail) => {
+    get(url, { headers }, (res) => {
+      let body = "";
+      res.on("data", (chunk: Buffer) => (body += chunk.toString()));
+      res.on("end", () => done({ status: res.statusCode ?? 0, body }));
+    }).on("error", fail);
+  });
+}
+
+test("atlas --out writes the page and a snapshot of the wiki, and only where it may", () => {
+  const root = repo();
+  seed(root);
+  put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
+  git(root, "commit", "-qam", "raise tax");
+  git(root, "remote", "add", "origin", "https://someone:s3cret@github.com/acme/demo.git");
+
+  const { code, out } = wikipoke(root, "atlas", "--out", "site");
+  assert.equal(code, 0, out);
+  for (const file of ["index.html", "atlas.css", "atlas.js", "marked.js", "marked.LICENSE.md", "wiki.js"])
+    assert.ok(existsSync(join(root, "site", file)), file);
+  assert.match(read(root, "site/index.html"), /Created with 🧡 by <a href="https:\/\/webreactiva.dev\/wikipoke">wikipoke<\/a>/);
+
+  const script = read(root, "site/wiki.js");
+  const snap = JSON.parse(script.replace(/^window\.ATLAS = /, "").replace(/;\n$/, "")) as Snapshot;
+  assert.equal(snap.live, false);
+  assert.deepEqual(snap.pages.map((p) => p.id), ["architecture", "components/billing"]);
+  assert.deepEqual(snap.docs.map((d) => d.id), ["index", "log", "CONVENTIONS"]);
+  const billing = snap.pages.find((p) => p.id === "components/billing");
+  assert.deepEqual(billing?.backlinks, ["architecture"]);
+  assert.deepEqual(billing?.stale, ["src/billing/tax.js"]);
+  assert.equal(snap.pages.find((p) => p.id === "architecture")?.stale, null);
+  // Citations open on the remote, built from its host and path: the token never reaches the page.
+  assert.equal(snap.blob, "https://github.com/acme/demo/blob/");
+  assert.doesNotMatch(script, /s3cret/);
+
+  // Never into the wiki, never into a directory it did not make; a previous export is its own.
+  assert.equal(wikipoke(root, "atlas", "--out", "wiki/site").code, 2);
+  assert.ok(!existsSync(join(root, "wiki/site")));
+  assert.equal(wikipoke(root, "atlas", "--out", "docs").code, 2);
+  assert.ok(!existsSync(join(root, "docs/index.html")));
+  assert.equal(wikipoke(root, "atlas", "--out", "site").code, 0);
+});
+
+test("atlas serves the wiki live, hands out only tracked files, and says when a page changes", async () => {
+  const root = repo();
+  seed(root);
+  put(root, "secret.env", "TOKEN=1\n"); // untracked, like a real one
+  const served = await serve({ root, wikiDir: join(root, "wiki"), wiki: "wiki" }, { port: 0, exact: true });
+  try {
+    const snap = JSON.parse((await fetchWith(`${served.url}wiki.json`)).body) as Snapshot;
+    assert.equal(snap.live, true);
+    assert.equal(snap.pages.length, 2);
+    assert.equal((await fetchWith(`${served.url}marked.js`)).status, 200);
+
+    assert.deepEqual(await fetchWith(`${served.url}code/src/cli.js`), { status: 200, body: "console.log('hi');\n" });
+    assert.equal((await fetchWith(`${served.url}code/secret.env`)).status, 404);
+    assert.equal((await fetchWith(`${served.url}code/src%2F..%2F..%2Fetc%2Fpasswd`)).status, 404);
+    // A page elsewhere that rebinds its own name to 127.0.0.1 is still not this machine.
+    assert.equal((await fetchWith(`${served.url}wiki.json`, { host: "evil.example" })).status, 403);
+
+    const changed = new Promise<string>((done, fail) => {
+      get(`${served.url}events`, (res) => {
+        res.on("data", (chunk: Buffer) => {
+          if (chunk.toString().includes("data: change")) done("change");
+          else put(root, "wiki/log.md", "# Log\n\n## later\n- edited\n");
+        });
+      }).on("error", fail);
+      setTimeout(() => fail(new Error("no change event within 3s")), 3000).unref();
+    });
+    assert.equal(await changed, "change");
+  } finally {
+    await served.close();
+  }
 });

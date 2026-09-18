@@ -1,0 +1,19 @@
+{
+  // Checking only, for `npm run typecheck`: atlas.js is plain JavaScript the browser runs as it
+  // is, read here with the DOM's types and the snapshot's shape from ../snapshot.ts. No output,
+  // and the build never copies this file.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "files": ["atlas.js"]
+}

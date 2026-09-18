@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// wikipoke: a code wiki that agents maintain. Three skills write it; this CLI sets it up and
-// checks it, and never writes a page.
+// wikipoke: a code wiki that agents maintain. Three skills write it; this CLI sets it up, checks
+// it and shows it, and never writes a page.
 //
 //   wikipoke init [--dir <path>]          the schema, the ignore list and the skills; re-run to refresh
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
+//   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
 // `check` exits 1 on lint errors (a broken wiki), or on any finding at all with --strict.
@@ -14,6 +15,8 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 
+import { exportSite } from "../atlas/export.ts";
+import { DEFAULT_PORT, serve } from "../atlas/serve.ts";
 import type { CoverageResult } from "../lib/coverage.ts";
 import * as coverage from "../lib/coverage.ts";
 import type { DriftResult } from "../lib/drift.ts";
@@ -56,6 +59,9 @@ const HELP = `wikipoke: a code wiki that agents maintain
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
+  wikipoke atlas               browse the wiki at http://127.0.0.1:${DEFAULT_PORT}, redrawn as pages change
+      --port <n>               another port
+      --out <dir>              write it as a static site instead, citations linked to the remote
   wikipoke uninstall           remove the skills and hooks; the wiki stays
 
 Then, in your agent: run the wikipoke-ingest skill to seed the wiki.`;
@@ -69,6 +75,8 @@ try {
       strict: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
       dir: { type: "string" },
+      out: { type: "string" },
+      port: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean" },
     },
@@ -219,6 +227,34 @@ if (command === "uninstall") {
   if (!report.removed.length && !report.manual.length) console.log("Nothing of wikipoke's was installed here.");
   console.log(color.dim(`\n${wiki}/ stays: it is the project's knowledge, not wikipoke's.`));
   process.exit(0);
+}
+
+if (command === "atlas") {
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
+  const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
+  if (flags.out !== undefined) {
+    const exported = exportSite(ctx, flags.out);
+    if (!exported.ok) {
+      console.error(exported.problem);
+      process.exit(2);
+    }
+    console.log(`${color.green("atlas")}  ${exported.dir} ${color.dim(`(${exported.files.length} files: open index.html, or publish the folder)`)}`);
+    process.exit(0);
+  }
+  const port = flags.port === undefined ? DEFAULT_PORT : Number(flags.port);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error(`Not a port: ${flags.port}`);
+    process.exit(2);
+  }
+  const served = await serve(ctx, { port, exact: flags.port !== undefined }).catch((error: Error) => {
+    console.error(`atlas could not start: ${error.message}`);
+    process.exit(1);
+  });
+  console.log(`${color.green("atlas")}  ${served.url} ${color.dim("· redrawn as the wiki changes · Ctrl+C to stop")}`);
+  await new Promise<never>(() => {});
 }
 
 if (command !== "check") {
