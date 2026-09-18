@@ -136,6 +136,44 @@ are until someone runs it.
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims and gaps |
 
+Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki on
+its own, and the saving below is only there when it does.
+
+## Does it save tokens?
+
+Measured on two TypeScript repositories, each with the same code on two branches — one with a
+seeded wiki, one without — and a fresh OpenCode session per question (model: glm-5.3-flash). Three
+questions a wiki page covers, three runs each. Tokens are everything the model processed (input,
+cached input and output) summed over the whole answer.
+
+| Repository | No wiki (median tokens per question) | With `/wikipoke-query` | Tokens | Cost |
+| --- | --- | --- | --- | --- |
+| a library: 32 source files, ~11k lines, a third of them comments | 308k | 157k | −49% | −40% |
+| a CLI: 39 source files, ~7.5k lines, 7% comments | 384k | 242k | −37% | −48% |
+
+The saving comes from steps, not from shorter reads. Every step re-sends the whole conversation —
+about 28k tokens of system prompt and tool definitions before anything is read — and what a tool
+returns is small by comparison, so an answer costs roughly its number of steps. Without the wiki
+the agent searches and opens files until it has the picture, 7 to 15 steps on average per
+question; with it, it reads the index, then the candidate pages together, and opens code only at
+the line the answer turns on, 5 to 9. Answers covered the same facts either way, with the one exception below.
+
+The same runs showed three more things:
+
+- **Name the skill when you want the saving.** Left to decide, the agent opened the wiki in 17 of
+  18 runs with the current skill description and saved about as much (−50% and −38% median), but
+  in only 3 of 9 on the library with an earlier description that fired on "how does X work", and
+  every skipped wiki is paid in exploration. `/wikipoke-query` removes the guess.
+- **A page is only as good as its sentences.** One page explained two cases in the same paragraph.
+  Four of six answers that read it merged them, while every answer that read the code kept them
+  apart; rewritten with one sentence per case, six of six were right. `CONVENTIONS.md` carries
+  that rule now.
+- **The wiki costs tokens to build.** Covering the library's whole backlog in one pass took about
+  14M tokens, which the saving above pays back after roughly 70 to 100 questions.
+
+Three runs per cell with a wide spread (one no-wiki answer on the CLI took 1.6M tokens), one model,
+and questions the wiki covers: this measures these two repositories, not yours.
+
 ## `wikipoke check`
 
 ```sh
