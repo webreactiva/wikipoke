@@ -2,8 +2,8 @@
 
 # Wikipoke
 
-<p align="center"><b>Around 40% fewer tokens every time you ask your agent about your code,<br>
-thanks to a wiki the agent writes for you and keeps up to date.</b></p>
+<p align="center"><b>Around 40% fewer tokens when you ask your agent how your code works,<br>
+because it answers from a wiki it writes for you and keeps up to date.</b></p>
 
 Wikipoke has your coding agent write a wiki of your repository: the map, the flows that cross
 files, the decisions and why they were taken, with every claim pointing at a line of code. When the
@@ -68,6 +68,59 @@ What a repository gets once wikipoke is installed:
   agent reads a page instead of exploring ([details](#does-it-save-tokens)).
 - 🪶 **Any language, no runtime dependencies.** Node 22.18 and git. The schema is a Markdown file the
   project owns and edits, page types included; `--json` and `--strict` fit it into CI.
+
+## Use cases
+
+Four ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
+a terminal.
+
+### 1. The whole system, from scratch
+
+The skills write the wiki, the hooks notice when it falls behind, and each pass brings it back.
+
+1. `npm install -g wikipoke`, then `wikipoke init` in the repository.
+2. At the hook prompt, name `git` for a notice after each commit, plus the one for your agent:
+   `claude`, `opencode`, `cursor` or `agents`.
+3. `/wikipoke-ingest` seeds the wiki: the architecture, the main flows, a page per subsystem.
+4. Commit `wiki/`, the skills and the hook files, so everyone who clones gets them. Only the `git`
+   hook has to be installed again in each clone.
+5. From then on, a commit or a new agent session says when the code has moved past the wiki, and
+   `/wikipoke-ingest` rewrites only the pages whose code changed.
+
+### 2. The skills without the notices
+
+After the first pass, keep the wiki and the skills, and stop being told that the wiki is behind.
+
+1. `wikipoke init` and `/wikipoke-ingest`, as above.
+2. `wikipoke hooks` lists what is installed; `wikipoke hooks remove git claude` takes those out. The
+   last one takes the notifier with it.
+3. `/wikipoke-query`, `/wikipoke-ingest` and `/wikipoke-lint` keep working whenever you name them.
+4. Nothing warns you now, so check when it matters, for instance when you close a feature:
+   `wikipoke check drift`, then `/wikipoke-ingest` to catch up. `wikipoke hooks add <name>` brings
+   a hook back.
+
+### 3. Documentation to read and publish
+
+The ingest writes the pages; the atlas puts them in a browser, or in a folder you can publish.
+
+1. `wikipoke init`, then `/wikipoke-ingest` to seed the wiki.
+2. `wikipoke check coverage` lists the code no page covers yet; `/wikipoke-ingest src/billing`
+   documents one of those parts.
+3. `wikipoke atlas` serves the wiki at http://127.0.0.1:4747. Left open during a pass, it redraws
+   each page as the agent writes it.
+4. `wikipoke atlas --out site` exports it as a static site, with citations pointing at your GitHub
+   or GitLab remote. Publish the folder wherever you host static pages.
+
+### 4. Questions that stay answered
+
+`wikipoke-query` answers from the wiki, and what it has to dig out of the code can go back in.
+
+1. Ask through the skill: `/wikipoke-query how are invoices rounded?`
+2. The agent reads `index.md` and the pages that match, and answers citing them. If the wiki does
+   not cover it, it reads the code, answers with `path:line` citations, and says the wiki had a gap.
+3. It offers to file the answer back, as a section on an existing page or as a new page. Say yes.
+4. It writes the page, links it from its neighbours, adds it to `index.md` and `log.md`, and runs
+   `wikipoke check lint`. The next person, or the next agent, who asks finds it there.
 
 ## Install
 
