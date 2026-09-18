@@ -53,12 +53,12 @@ practice.
 No: signatures, parameter lists, export enumerations, option tables. The code and its types
 already say that, and a copy guarantees it rots. To point at code, **link to it with a line**:
 `src/billing/invoice.ts:42`, or a Markdown link with a line anchor,
-`[invoice.ts](../src/billing/invoice.ts#L42)`; the checks read both. Take that number from the file itself, at the moment you write the
-page, and only from a file you opened: a number from memory, a commit message or another page
-lands on real code and looks true. While a page is stale, `wikipoke check drift` carries each of
-its citations through the diff and says where the line went; `wikipoke check lint` re-reads every
-citation and says when one has drifted past the end of its file, onto a blank line or onto a lone
-closing bracket.
+`[invoice.ts](../src/billing/invoice.ts#L42)`; the checks read both. Take that number from the
+file itself, at the moment you write the page, and only from a file you opened: a number from
+memory, a commit message or another page lands on real code and looks true. `wikipoke check drift`
+carries every citation through the diff from the commit that wrote it and says where the line went;
+`wikipoke check lint` re-reads every citation and says when one has drifted past the end of its
+file, onto a blank line or onto a lone closing bracket.
 
 ## Layout
 
@@ -185,9 +185,10 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
 
 - **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
-  against the working tree, so uncommitted edits count. For each stale page it also lists the
-  `path:line` citations the diff moved, with the line they point at now, or a note that the cited
-  line itself changed. Fix those before re-stamping `synced:`: afterwards drift cannot see them.
+  against the working tree, so uncommitted edits count. It also lists every citation the code moved
+  since the commit that wrote it, with the line it points at now or a note that the cited line
+  itself changed: on a stale page, and on a fresh one (`moved`) that was re-stamped without being
+  re-pointed. A citation not committed yet counts as current.
 - **coverage**: tracked files no page's `sources` claims, minus `.wikipokeignore`. Resolve a
   cluster by writing a page or, when it is out of scope, by ignoring it on purpose. The report ends
   with how many files the ignore list took out, so a rule that hides too much is visible rather

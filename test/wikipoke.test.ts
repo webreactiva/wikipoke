@@ -82,6 +82,7 @@ function seed(root: string, wiki = "wiki"): void {
 interface DriftJson {
   repo: { status: string; commits?: number; files?: number; last?: string };
   stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
+  moved: { id: string; citations: { raw: string; now: number | null }[] }[];
   fresh: string[];
 }
 interface CoverageJson {
@@ -488,4 +489,51 @@ test("a source that claims most of the repository is over-broad even without a m
   const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message);
   assert.equal(broad.length, 1, broad.join("\n"));
   assert.match(broad[0] as string, /`src\/` claims 15 of the 15 indexable files/);
+});
+
+test("a citation is moved from the commit that wrote it, not from synced:", () => {
+  const lines = (n: number, tag = "line"): string => Array.from({ length: n }, (_, i) => `${tag} ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10) });
+  seed(root);
+  const synced = git(root, "rev-parse", "--short", "HEAD");
+  const cite = (body: string): void => page(root, "components/billing.md", { synced, body: `${body}\n\n[map](../architecture.md)` });
+
+  // Written in the same commit that added the file, after synced: already current.
+  put(root, "src/billing/rounding.js", lines(5));
+  cite("Rounding: `src/billing/rounding.js:3`.");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "add rounding, and cite it");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").stale[0]?.citations, []);
+
+  // Re-pointed in the working tree and not re-stamped: current, not moved a second time.
+  put(root, "src/billing/invoice.js", "new\n" + lines(10));
+  git(root, "commit", "-qam", "one line on top");
+  cite("Rounding: `src/billing/rounding.js:3`. Total: `src/billing/invoice.js:5`.");
+  git(root, "commit", "-qam", "cite the total");
+  put(root, "src/billing/invoice.js", "newer\nnew\n" + lines(10));
+  git(root, "commit", "-qam", "another line on top");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").stale[0]?.citations, [{ raw: "src/billing/invoice.js:5", now: 6 }]);
+  cite("Rounding: `src/billing/rounding.js:3`. Total: `src/billing/invoice.js:6`.");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").stale[0]?.citations, []);
+});
+
+test("a page re-stamped without re-pointing its citations is still reported", () => {
+  const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10) });
+  seed(root);
+  page(root, "components/billing.md", { body: "Total: `src/billing/invoice.js:5`. [map](../architecture.md)" });
+  git(root, "commit", "-qam", "cite");
+  put(root, "src/billing/invoice.js", "a\nb\nc\n" + lines(10));
+  git(root, "commit", "-qam", "three lines on top");
+  // The laundering: synced: moves to HEAD, the number stays.
+  const text = read(root, "wiki/components/billing.md").replace(/^synced: .*$/m, `synced: ${git(root, "rev-parse", "--short", "HEAD")}`);
+  writeFileSync(join(root, "wiki/components/billing.md"), text);
+  git(root, "commit", "-qam", "re-stamp only");
+
+  const drift = json<DriftJson>(root, "check", "drift", "--json");
+  assert.ok(drift.fresh.includes("components/billing"));
+  assert.deepEqual(drift.moved, [{ id: "components/billing", citations: [{ raw: "src/billing/invoice.js:5", now: 8 }] }]);
+  const out = wikipoke(root, "check", "drift");
+  assert.match(out.out, /moved\s+components\/billing[\s\S]*invoice\.js:5 is now line 8/);
+  assert.equal(wikipoke(root, "check").code, 0, "debt, not breakage");
 });

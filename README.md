@@ -134,7 +134,7 @@ wikipoke adds and removes only its own entry.
 
 ```sh
 wikipoke check              # all three
-wikipoke check drift        # commits not indexed, stale pages, and where their citations moved
+wikipoke check drift        # commits not indexed, stale pages, and citations the code moved
 wikipoke check coverage     # tracked files no page's `sources:` claims
 wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
 ```
@@ -160,10 +160,10 @@ Invoices round per line, not per total, because… See [the checkout flow](../fl
 `sources:` ties the page to the code and `synced:` to the commit it was checked against; together
 they are how `drift` knows the page is stale. Links are plain Markdown, so `check` can verify every
 one, and so are the citations in the body — `path:line`, or a link with a GitHub line anchor
-(`#L42`). While a page is stale, `drift` carries each
-of its citations through the diff and says which line it points at now, so the pass that re-stamps
-`synced:` can re-point them first; after that, `lint` re-reads each one and reports those that fall
-past the end of their file, on a blank line or on a lone closing bracket. The full contract is in
+(`#L42`). `drift` carries each citation through the diff from the commit that wrote it and says
+which line it points at now — on a stale page, and on one re-stamped without its pointers being
+moved — and `lint` re-reads each one and reports those that fall past the end of their file, on a
+blank line or on a lone closing bracket. The full contract is in
 the `CONVENTIONS.md` that `init` writes, and the valid `type:` values are the rows of its page-type
 table.
 

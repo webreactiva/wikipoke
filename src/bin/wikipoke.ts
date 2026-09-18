@@ -242,7 +242,7 @@ const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
 
 const countFindings = (ran: Ran): number =>
   ran.name === "drift"
-    ? ran.result.stale.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
+    ? ran.result.stale.length + ran.result.moved.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
     : ran.name === "coverage"
       ? ran.result.unclaimed.length
       : ran.result.errors.length + ran.result.warnings.length;

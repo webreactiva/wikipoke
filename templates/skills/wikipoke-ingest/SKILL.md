@@ -121,10 +121,11 @@ Reconcile, don't accumulate: the code moved, bring the pages back in line.
 wikipoke check drift --json
    │  repo: commits since the checkpoint
    │  stale[]: pages whose sources moved past their own synced:
-   │           + citations[]: their path:line pointers the diff moved
+   │           + citations[]: their pointers the code moved
+   │  moved[]: fresh pages whose pointers the code moved anyway
    ▼
    read ONLY each stale page's diff ──► rewrite the stale sections
-   re-point every moved citation ──► only then re-stamp synced:
+   re-point every moved citation, stale page or not ──► re-stamp synced:
    new code → propose a page  ·  moved/deleted code → fix or retire the page
    ▼
 index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the check passes)
@@ -140,16 +141,15 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
 3. **Reconcile.** Rewrite only the stale sections, so hand-written notes survive.
    When the change **contradicts** what the page claimed, say what it used to be and
    what changed it, with the SHA. Re-check `confidence:` while you are there.
-4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]` lists
-   its pointers the diff moved, `path:line` and `#L42` links alike, with `raw` as
-   the page writes it (update a line number repeated in the link text too): `now` is the line they point at today,
-   and `now: null` means the cited line itself was edited or deleted, so open the
-   file and find what the sentence was about. Fix every one **before** setting
-   `synced:` to `git rev-parse --short HEAD`: re-stamping is the last moment drift
-   can see where a cited line went, and after it a stale pointer reads as current.
-   Do both in the same edit. Drift maps every citation from the page's `synced:`,
-   so a page re-pointed but not yet re-stamped reads as moved again, and applying
-   that report a second time shifts every citation twice.
+4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]`, and
+   each page in `moved[]`, lists the pointers the code moved since they were
+   written, `path:line` and `#L42` links alike, with `raw` as the page writes it
+   (update a line number repeated in the link text too). `now` is the line each
+   points at today; `now: null` means the cited line itself was edited or deleted,
+   so open the file and find what the sentence was about. Then set `synced:` to
+   `git rev-parse --short HEAD`. Re-stamping does not hide a pointer you skipped —
+   drift dates each citation by the commit that wrote it and reports the page under
+   `moved[]` — and one you already re-pointed is current, committed or not.
 5. **New and moved code.** Changed files no page covers: propose a page, or leave
    them to coverage. Sources pointing at moved or deleted files: fix or retire the
    page.

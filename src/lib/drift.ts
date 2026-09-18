@@ -6,9 +6,12 @@
 // The two answer different questions and neither replaces the other: the repo axis catches code
 // nobody has looked at yet, the page axis catches pages that lie. It counts; it does not judge.
 //
-// A stale page also gets its `path:line` citations carried through the diff, because re-stamping
-// `synced:` is the last moment anyone can still see where a cited line went.
-import type { CheckContext, Citation, ReportOptions } from "./lib.ts";
+// Citations get a third look, finer than either: each one is carried through the diff from the
+// commit that wrote it, so a page that was re-stamped without its pointers being moved still says
+// where they went.
+import { relative } from "node:path";
+
+import type { CheckContext, LoadedPage, ReportOptions } from "./lib.ts";
 import {
   asList,
   changedSince,
@@ -36,10 +39,8 @@ export type RepoAxis =
   | { status: "current" | "behind"; last: string; commits: number; files: number };
 
 /**
- * A citation on a stale page whose line the diff moved. `now` is where that line sits in the
+ * A citation whose line the code moved since it was written. `now` is where that line sits in the
  * working tree, or null when the line itself was edited or deleted and only re-reading can say.
- * It is mapped from the page's `synced:`, so it assumes the citation was written against that
- * commit: a page re-pointed but not re-stamped reads as moved again, and would move twice.
  */
 export interface MovedCitation {
   raw: string;
@@ -54,6 +55,15 @@ export interface StalePage {
   citations: MovedCitation[];
 }
 
+/**
+ * A page whose sources did not move but whose citations did: re-stamped without being re-pointed,
+ * or citing a file outside its own `sources:`.
+ */
+export interface MovedPage {
+  id: string;
+  citations: MovedCitation[];
+}
+
 /** A page drift cannot judge, because its contract with the code is broken. */
 export interface SkippedPage {
   id: string;
@@ -63,6 +73,7 @@ export interface SkippedPage {
 export interface DriftResult {
   repo: RepoAxis;
   stale: StalePage[];
+  moved: MovedPage[];
   skipped: SkippedPage[];
   fresh: string[];
   pages: number;
@@ -87,6 +98,7 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
   };
 
   const stale: StalePage[] = [];
+  const moved: MovedPage[] = [];
   const skipped: SkippedPage[] = [];
   const fresh: string[] = [];
 
@@ -104,31 +116,54 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     }
     const patterns = sourcePatterns(meta, root);
     const files = changesFor(synced).filter((f) => matchesAny(f, patterns));
-    if (!files.length) {
+    const citations = movedCitations(root, wikiDir, page, changesFor, hunksFor);
+    if (files.length) stale.push({ id: page.id, synced, files, citations });
+    else {
       fresh.push(page.id);
-      continue;
+      if (citations.length) moved.push({ id: page.id, citations });
     }
-    const cites = pageCitations(page.body, page.rel, wikiDir, root);
-    stale.push({ id: page.id, synced, files, citations: movedCitations(cites, changesFor(synced), (path) => hunksFor(synced, path)) });
   }
 
-  return { repo, stale, skipped, fresh, pages: pages.length };
+  return { repo, stale, moved, skipped, fresh, pages: pages.length };
 }
 
 /**
- * The page's citations into the files that changed, carried from `synced` to the working tree.
- * Only the ones that no longer point at their line come back: a citation the diff did not touch
- * is not news. Any cited file that changed counts, not only the page's own `sources:`.
+ * The page's citations the code moved since each was written, carried through the diff to the
+ * working tree. Not from `synced:`: a citation written after it — into a file added since, or
+ * re-pointed and not yet re-stamped — would be moved a second time, and one left behind by a
+ * re-stamp would never be moved at all. So the start is the commit that last wrote the page line
+ * the citation sits on, and a line not committed yet is taken as current.
  */
-function movedCitations(citations: Citation[], changes: string[], hunksFor: (path: string) => Hunk[]): MovedCitation[] {
-  const changed = new Set(changes);
+function movedCitations(
+  root: string,
+  wikiDir: string,
+  page: LoadedPage,
+  changesFor: (sha: string) => string[],
+  hunksFor: (sha: string, path: string) => Hunk[],
+): MovedCitation[] {
+  const citations = pageCitations(page.body, page.rel, wikiDir, root);
+  if (!citations.length) return [];
+  const lines = page.raw.split("\n");
+  const origins = blame(root, relative(root, page.path));
   const moved: MovedCitation[] = [];
   for (const cite of citations) {
-    if (!changed.has(cite.path)) continue;
-    const now = lineNow(hunksFor(cite.path), cite.line);
+    // ponytail: dates the line, not the number — an edit elsewhere on the line re-dates the
+    // citation too. Per-citation history (`git log -L`) if that ever hides a real move.
+    const origin = origins[lines.findIndex((line) => line.includes(cite.raw))];
+    if (!origin || !changesFor(origin).includes(cite.path)) continue;
+    const now = lineNow(hunksFor(origin, cite.path), cite.line);
     if (now !== cite.line) moved.push({ raw: cite.raw, now });
   }
   return moved;
+}
+
+/** The commit that last wrote each line of a file, or null for a line not committed yet. */
+function blame(root: string, path: string): (string | null)[] {
+  const out = gitOrNull(root, ["blame", "--porcelain", "--", path]) ?? "";
+  const origins: (string | null)[] = [];
+  for (const m of out.matchAll(/^([0-9a-f]{40}) \d+ (\d+)/gm))
+    origins[Number(m[2]) - 1] = /^0+$/.test(m[1] as string) ? null : (m[1] as string);
+  return origins;
 }
 
 /** One `@@ -a,b +c,d @@` header: `b` old lines from `a` became `d` new ones. */
@@ -199,8 +234,13 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     const shown = verbose ? item.files : item.files.slice(0, 8);
     for (const f of shown) console.log(`    ${color.dim(f)}`);
     if (!verbose && item.files.length > shown.length) console.log(color.dim(`    …and ${item.files.length - shown.length} more`));
-    for (const { raw, now } of item.citations)
-      console.log(`    ${color.dim(`${raw} ${now === null ? "— that line changed, re-read it" : `is now line ${now}`}`)}`);
+    printCitations(item.citations);
+  }
+
+  for (const item of res.moved) {
+    found++;
+    console.log(`${color.yellow("moved")}     ${color.bold(item.id)} ${color.dim("(fresh, but the code moved under its citations)")}`);
+    printCitations(item.citations);
   }
 
   for (const item of res.skipped) {
@@ -209,4 +249,9 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
   }
 
   return found;
+}
+
+function printCitations(citations: MovedCitation[]): void {
+  for (const { raw, now } of citations)
+    console.log(`    ${color.dim(`${raw} ${now === null ? "— that line changed, re-read it" : `is now line ${now}`}`)}`);
 }

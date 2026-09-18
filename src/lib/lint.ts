@@ -186,10 +186,10 @@ interface CitationContext {
 /**
  * A citation is checked as far as a machine can: the file is tracked, and the line is still there,
  * not blank, and not just the end of a block. It cannot know whether line 96 still says what the
- * page claims — that is the wikipoke-lint skill's deep pass, and while a page is stale, drift
- * carries each citation through the diff — but "the file lost 40 lines" it can see, and so is a
- * line that holds nothing but `}`: nobody cites a closing brace, so the code moved under it. A
- * warning, never an error: a pointer that drifted is debt.
+ * page claims — that is the wikipoke-lint skill's deep pass, and drift carries each citation
+ * through the diff from the commit that wrote it — but "the file lost 40 lines" it can see, and so
+ * is a line that holds nothing but `}`: nobody cites a closing brace, so the code moved under it.
+ * A warning, never an error: a pointer that drifted is debt.
  */
 function checkCitation({ raw, path, line }: Citation, { root, trackedSet, readSource, add, page }: CitationContext): void {
   if (!trackedSet.has(path)) {
