@@ -128,6 +128,10 @@ dt { color: var(--muted); }
 dd { margin: 0; }
 dd ul { list-style: none; margin: 0; padding: 0; }
 article > footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+article > footer > section { margin-bottom: 1.5rem; padding: 0.75rem 1rem; background: var(--tint); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; font-size: 0.95rem; }
+article > footer > section > h2 { font-size: 1rem; margin: 0 0 0.35rem; }
+article > footer > section > p { margin: 0 0 0.5rem; }
+article > footer > section > ul { margin: 0; padding-left: 1.25rem; }
 
 /* The graph: a page of its own, and a small one beside each page */
 svg[data-graph] { display: block; width: 100%; background: var(--tint); border-radius: 8px; touch-action: none; user-select: none; }

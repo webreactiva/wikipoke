@@ -198,15 +198,17 @@ wikipoke atlas --port 8080
 wikipoke atlas --out site   # the same page as a static site: open index.html, or publish the folder
 ```
 
-A reader for people. Pages are grouped by the `type:` values in `CONVENTIONS.md`, each one opens
-with its `responsibility`, its `synced:` commit and date, its sources, and a mark when it is
-`inferred` or stale, and ends with the pages it relates to and the ones that link to it. Headings
+A reader for people. Pages are grouped by the `type:` values in `CONVENTIONS.md`, and each one
+opens with its `responsibility`, the date and commit it was last checked against (`synced:`) and
+its sources. It ends with the pages it relates to and the ones that link to it, and with a plain
+note for each caveat it carries: that part of it is reconstructed (`confidence: inferred`), or
+that files changed after it was checked (what drift calls stale), naming them. Headings
 make a table of contents beside the page, and `/` filters the page list.
 
 The graph draws the pages as nodes and their links as edges, the way Obsidian does: a view of its
 own, where you zoom, pan and drag, and a small one beside each page with that page's neighbours.
-Nodes are coloured by type, sized by how many links they have, and ringed when stale; hovering one
-lights up what it touches, and clicking it opens the page.
+Nodes are coloured by type, sized by how many links they have, and ringed when out of date;
+hovering one lights up what it touches, and clicking it opens the page.
 
 Live, a citation opens the cited file at its line, served only if git tracks it, and the page
 redraws when a file in `wiki/` changes, so an ingest pass can be watched as it lands. It stops at

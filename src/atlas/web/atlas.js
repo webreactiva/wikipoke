@@ -196,12 +196,10 @@
   /** @param {AtlasPage} page */
   function renderPage(page) {
     const kind = [escape(page.type || "page")];
-    if (page.confidence === "inferred")
-      kind.push(`<mark title="Reconstructed rather than read in the code: it may be wrong">inferred</mark>`);
-    if (page.stale) kind.push(`<mark title="Its sources changed after it was last synced">stale</mark>`);
 
-    const facts = [`<dt>Synced</dt><dd><code>${escape(page.synced)}</code>${page.date ? ` · ${page.date}` : ""}</dd>`];
-    if (page.stale) facts.push(`<dt>Changed since</dt><dd>${bullets(page.stale.map((file) => codeLink(file, 0, "")))}</dd>`);
+    // `synced:` is the commit someone last read this page against the code at; said in words.
+    const checked = `${page.date ? `${page.date} · ` : ""}<code>${escape(page.synced)}</code>`;
+    const facts = [`<dt>Last checked</dt><dd>${checked}</dd>`];
     const sources = page.sources.map((source) =>
       /[*?]/.test(source) || !/\.\w+$/.test(source) ? `<code>${escape(source)}</code>` : codeLink(source, 0, page.synced),
     );
@@ -211,6 +209,27 @@
     if (page.related.length) links.push(`<dt>Related</dt><dd>${bullets(page.related.map(pageLink))}</dd>`);
     if (page.backlinks.length) links.push(`<dt>Linked from</dt><dd>${bullets(page.backlinks.map(pageLink))}</dd>`);
 
+    // The two caveats a page can carry, `confidence: inferred` and what drift calls stale, are told
+    // in words at the end of the page, where a reader has just read the claims they put in doubt.
+    const inferred =
+      page.confidence === "inferred"
+        ? `<section>
+            <h2>Part of this page is a reading, not a fact</h2>
+            <p>Whoever wrote it could not find everything it says in the code: some of the intent, the
+            reasons or the history is reconstructed, and the page says so rather than guess in silence.
+            Take those parts as the likeliest explanation, and correct the page if you know better.</p>
+          </section>`
+        : "";
+    const outdated = page.stale
+      ? `<section>
+          <h2>This page may be out of date</h2>
+          <p>It was last checked against the code on ${checked}. These files have changed since, so what
+          it says about them may no longer hold until someone re-reads them and updates the page, which
+          is what the <code>wikipoke-ingest</code> skill does:</p>
+          ${bullets(page.stale.map((file) => codeLink(file, 0, "")))}
+        </section>`
+      : "";
+
     main.innerHTML = `<article>
       <header>
         <p>${kind.join(" ")}</p>
@@ -219,7 +238,7 @@
         <dl>${facts.join("")}</dl>
       </header>
       <div class="prose">${markdown.parse(page.body)}</div>
-      ${links.length ? `<footer><dl>${links.join("")}</dl></footer>` : ""}
+      ${inferred || outdated || links.length ? `<footer>${inferred}${outdated}${links.length ? `<dl>${links.join("")}</dl>` : ""}</footer>` : ""}
     </article>`;
     const prose = main.querySelector(".prose");
     if (prose) enhance(prose, page.rel, page.synced, page.citations);
@@ -237,11 +256,11 @@
     return doc.title;
   }
 
-  /** The wiki in one line: how many pages, how many stale, how far behind the code. */
+  /** The wiki in one line: how many pages, how many may be out of date, how far behind the code. */
   function status() {
     const stale = data.pages.filter((page) => page.stale).length;
     const parts = [`${data.pages.length} pages`];
-    if (stale) parts.push(`<mark>${stale} stale</mark>`);
+    if (stale) parts.push(`<mark>${stale} may be out of date</mark>`);
     const repo = data.repo;
     if (repo.status === "behind") parts.push(`${repo.commits} ${repo.commits === 1 ? "commit" : "commits"} since the last ingest`);
     else if (repo.status === "no-checkpoint") parts.push("not seeded yet");
@@ -323,7 +342,7 @@
         const count = nodes.filter((node) => node.type === type).length;
         return `<li>${swatch(`fill: var(--type-${colors.get(type) ?? 5})`)} ${escape(type || "untyped")} <small>${count}</small></li>`;
       });
-    if (nodes.some((node) => node.stale)) legend.push(`<li>${swatch("fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 1.5")} stale</li>`);
+    if (nodes.some((node) => node.stale)) legend.push(`<li>${swatch("fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 1.5")} may be out of date</li>`);
     legend.push("<li>scroll to zoom · drag to move · double-click to fit</li>");
     main.innerHTML = `<article>
       <header>
@@ -374,7 +393,7 @@
       if (!ofType.length) continue;
       const items = ofType.map((page) => {
         const search = fold(`${page.title} ${page.responsibility} ${page.id}`);
-        const hint = `${page.responsibility}${page.stale ? " (stale)" : ""}`;
+        const hint = `${page.responsibility}${page.stale ? " (may be out of date)" : ""}`;
         return `<a href="#/${escape(page.id)}" title="${escape(hint)}" data-search="${escape(search)}"${page.stale ? " data-stale" : ""}>${escape(page.title)}</a>`;
       });
       html += `<h2>${escape(type || "untyped")}</h2>${bullets(items)}`;

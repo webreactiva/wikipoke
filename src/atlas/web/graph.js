@@ -80,7 +80,7 @@
       a.dataset.id = body.id;
       if (body.id === focus) a.dataset.focus = "";
       const title = make("title");
-      title.textContent = `${body.title} · ${body.type}${body.stale ? " · stale" : ""}`;
+      title.textContent = `${body.title} · ${body.type}${body.stale ? " · may be out of date" : ""}`;
       const circle = make("circle");
       circle.setAttribute("r", String(body.r));
       circle.setAttribute("style", `fill: var(--type-${body.color})`);
