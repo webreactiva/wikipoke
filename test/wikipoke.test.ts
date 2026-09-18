@@ -620,7 +620,7 @@ test("atlas --out writes the page and a snapshot of the wiki, and only where it 
 
   const { code, out } = wikipoke(root, "atlas", "--out", "site");
   assert.equal(code, 0, out);
-  for (const file of ["index.html", "atlas.css", "atlas.js", "graph.js", "marked.js", "marked.LICENSE.md", "wiki.js"])
+  for (const file of ["index.html", "atlas.css", "atlas.js", "graph.js", "logo.webp", "marked.js", "marked.LICENSE.md", "wiki.js"])
     assert.ok(existsSync(join(root, "site", file)), file);
   assert.match(read(root, "site/index.html"), /Created with 🧡 by <a href="https:\/\/webreactiva.dev\/wikipoke">wikipoke<\/a>/);
 

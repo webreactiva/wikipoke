@@ -56,7 +56,7 @@ body > header {
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
-body > header > a { color: inherit; text-decoration: none; }
+body > header > a { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
 body > header > small { color: var(--muted); font-family: var(--mono); }
 body > header > a[href="#graph"] { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
 body > header > a[href="#graph"]:hover { color: var(--fg); }

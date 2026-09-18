@@ -21,6 +21,7 @@ const TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".md": "text/markdown; charset=utf-8",
+  ".webp": "image/webp",
 };
 
 /**

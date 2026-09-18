@@ -467,7 +467,7 @@
       shown = "";
       aside.innerHTML = "";
       markCurrent("#graph");
-      document.title = `${renderGraph(where.graph)} · ${data.name} atlas`;
+      document.title = `${renderGraph(where.graph)} · ${data.name}`;
       if (!keepScroll) scrollTo(0, 0);
       return;
     }
@@ -477,14 +477,14 @@
       markCurrent("");
       const title = data.live ? await renderCode(where.code, where.line) : undefined;
       if (!data.live) main.innerHTML = `<article><h1>Not here</h1><p>Cited files open only in <code>wikipoke atlas</code>.</p></article>`;
-      document.title = `${title ?? where.code} · ${data.name} atlas`;
+      document.title = `${title ?? where.code} · ${data.name}`;
       return;
     }
     const page = pageById(where.id);
     const doc = docById(where.id);
     const title = page ? renderPage(page) : doc ? renderDoc(doc) : undefined;
     if (!title) main.innerHTML = `<article><h1>No such page</h1><p><code>${escape(where.id)}</code> is not in this wiki. <a href="#/">Back to the index</a>.</p></article>`;
-    document.title = `${title ?? "Not found"} · ${data.name} atlas`;
+    document.title = `${title ?? "Not found"} · ${data.name}`;
     shown = where.id;
     buildToc(where.id);
     if (page) buildLocal(page.id);
@@ -500,8 +500,8 @@
   if (!data) {
     main.innerHTML = `<p>No snapshot: <code>wiki.js</code> is missing next to this page.</p>`;
   } else {
-    find("body > header strong", HTMLElement).textContent = data.name;
-    find("body > header small", HTMLElement).textContent = data.live ? "live" : `${data.commit.slice(0, 7)} · ${data.date ?? ""}`;
+    find("body > header > a > span", HTMLElement).textContent = data.name;
+    find("body > header small", HTMLElement).textContent = data.live ? "live" : data.date ?? "";
     if (narrow.matches) pages.open = false;
     buildNav();
     render();
