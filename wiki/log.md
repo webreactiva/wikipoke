@@ -199,3 +199,9 @@ from their own diffs and re-stamped at `f4615f9`.
   Noted on components/atlas.md; read from the code, not tried.
 - Ignored `*.webp`: the logo in the README and in the atlas header is not code.
 - Not done: `src/atlas/web/atlas.css` stays uncovered, as does a page on what the atlas tests pin down.
+
+## 2026-09-18 · wikipoke-ingest
+
+- decisions/cli-read-only.md: re-read against `f36a2b1`, which gave the README a features list,
+  Mermaid diagrams and atlas screenshots. Nothing the page claims changed: "Where this comes from"
+  is as it was, and the new overview draws the CLI as reading and never writing a page.

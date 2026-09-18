@@ -6,7 +6,7 @@ sources:
   - README.md
   - AGENTS.md
   - src/bin/wikipoke.ts
-synced: f4615f9
+synced: f36a2b1
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
