@@ -52,7 +52,8 @@ practice.
 
 No: signatures, parameter lists, export enumerations, option tables. The code and its types
 already say that, and a copy guarantees it rots. To point at code, **link to it with a line**:
-`src/billing/invoice.ts:42`. Take that number from the file itself, at the moment you write the
+`src/billing/invoice.ts:42`, or a Markdown link with a line anchor,
+`[invoice.ts](../src/billing/invoice.ts#L42)`; the checks read both. Take that number from the file itself, at the moment you write the
 page, and only from a file you opened: a number from memory, a commit message or another page
 lands on real code and looks true. While a page is stale, `wikipoke check drift` carries each of
 its citations through the diff and says where the line went; `wikipoke check lint` re-reads every
@@ -117,8 +118,10 @@ deliberately no date field: `git show -s --format=%cs <synced>` gives the date o
 page was verified against, which is the date that matters.
 
 - **`sources:`** is the inverted index: it is what lets `wikipoke check drift` map a changed file
-  back to the pages that document it. Be **specific**: a source that claims a whole package makes
-  coverage read green for code nobody wrote up, and the check warns about it. Globs are allowed
+  back to the pages that document it. Be **specific**: a source that claims a whole package, or
+  most of the repository, makes coverage read green for code nobody wrote up, and the check warns
+  about it. List only files you opened: a file you merely named is exactly what coverage exists to
+  point the next pass at, and claiming it hides it from that pass. Globs are allowed
   (`src/jobs/*.ts`); a wildcard-free directory means everything under it.
 - **`synced:`** is per-page staleness: if any of a page's sources changed after its `synced` SHA,
   the page is stale.
@@ -191,9 +194,9 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
 - **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
-  match a tracked file, over-broad sources, broken links (body, `related:` and `index.md`),
-  `path:line` citations that now land past the end of a file, on a blank line or on a lone closing
-  bracket, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
+  match a tracked file, over-broad sources (a whole package, or more than half the indexable files), broken links (body, `related:` and `index.md`),
+  citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
+  or on a lone closing bracket, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
   `index.md` first stops telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt.

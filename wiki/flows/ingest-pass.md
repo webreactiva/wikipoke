@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: b305be6
+synced: 3eb714c
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -47,7 +47,9 @@ than the gap it closed, and coverage will list exactly what was left as
 as the other pages teach the agent more. Anything reconstructed rather than read is marked
 `confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
 repository wrote a page about a directory it never opened and cited a line in it, which landed on
-unrelated code and passed every check. Only a file opened in the pass may be cited.
+unrelated code and passed every check. Only a file opened in the pass may be cited, and only a file
+opened in the pass goes in `sources:` (`3eb714c`): a file merely named belongs to the backlog, and
+claiming it takes it off the list the next pass reads.
 
 Seeding also tailors `.wikipokeignore` in both directions, which is the step most easily done
 half-way. The starting list ignores `*.md`, and in a repository whose product is prose — prompts,

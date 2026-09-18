@@ -5,7 +5,7 @@ responsibility: Why the wiki tracks both a repository checkpoint and a per-page 
 sources:
   - src/lib/drift.ts
   - templates/CONVENTIONS.md
-synced: b305be6
+synced: 3eb714c
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
@@ -39,7 +39,7 @@ of the commit the page was verified against, which is the date that actually mat
 drift from the sha the way a hand-written date can.
 
 The page axis has a finer grain inside it. A stale page's `path:line` citations are carried through
-the same diff, and drift reports where each cited line went (`src/lib/drift.ts:119`). It belongs to
+the same diff, and drift reports where each cited line went (`src/lib/drift.ts:123`). It belongs to
 the page axis because it has the same weakness: once `synced:` is re-stamped the diff starts from
 the new commit, and a pointer nobody moved reads as current. So the move is reported while the page
 is still stale, and re-pointing and re-stamping are one edit.

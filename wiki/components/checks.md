@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: b305be6
+synced: 3eb714c
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -34,14 +34,14 @@ carry the same `synced:` runs one `git diff`, not one per page.
 
 Since `aafa306` a stale page also carries `citations[]`: every `path:line` on it that points into a
 changed file is carried through `git diff -U0 <synced>` to the line it names now, or reported as
-changed when a hunk rewrote the line itself (`src/lib/drift.ts:119`, `src/lib/drift.ts:150`). The
+changed when a hunk rewrote the line itself (`src/lib/drift.ts:123`, `src/lib/drift.ts:154`). The
 reason is timing. Re-stamping `synced:` is the last moment anyone can see where a cited line went;
 after it the page is fresh and drift stops looking. An agent reconciling a real repository
 re-stamped a page after a feature had pushed its nine citations between 56 and 286 lines down, and `lint`
 said OK to all nine. The mapping starts from `synced:`, which is also its one trap: a page whose
 citations were re-pointed but whose `synced:` was not re-stamped reads as moved again, and following
 that report twice shifts every line twice. The ingest skill makes the two one edit. A checkpoint
-that is not a commit is printed in full (`src/lib/drift.ts:186`), because the usual cause is a sha
+that is not a commit is printed in full (`src/lib/drift.ts:190`), because the usual cause is a sha
 typed by hand whose first seven characters are right, and seven characters that match HEAD read as
 a contradiction.
 
@@ -62,9 +62,15 @@ page because a broken map is as bad as a broken page (`src/lib/lint.ts:83`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
 the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
-(`src/lib/lint.ts:185`). Nobody cites a closing brace, so that one is almost always code that moved
+(`src/lib/lint.ts:194`). Nobody cites a closing brace, so that one is almost always code that moved
 underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
-and it catches some of what a reconcile re-stamped without re-pointing. It cannot know whether line 96 still
+and it catches some of what a reconcile re-stamped without re-pointing.
+
+Both checks read citations in both forms agents write: `path:line` in prose, and a link into the
+repository with a GitHub line anchor, `[event.ts](../src/core/event.ts#L12)`. The second form was
+invisible until `3eb714c` — its link text names no path — and the first repository seeded after
+the citation work wrote all 65 of its citations that way, so none of them had been checked by
+anything. [The shared parser](./lib.md) reads both. It cannot know whether line 96 still
 says what the page claims — that is the deep pass — but a file that lost forty lines it can see,
 and that is the shape a citation usually rots into. Like staleness, a drifted pointer is debt: a
 warning, never an error.
@@ -72,6 +78,7 @@ warning, never an error.
 Its other warnings are about a wiki nobody can navigate rather than one that is malformed: orphan pages
 (nothing links here), pages missing from `index.md`, `[[wikilinks]]` that this wiki does not
 follow, and the [over-broad `sources:`](../concepts/over-broad-sources.md) that turn coverage
-green by lying. Past 80 pages it warns once that reading `index.md` first has stopped ranking
+green by lying — a whole package, or since `3eb714c` any source that claims more than half the
+repository. Past 80 pages it warns once that reading `index.md` first has stopped ranking
 anything — a deliberate nudge to reopen the "do we need search?" question rather than a measured
 limit (`src/lib/lib.ts:138`).

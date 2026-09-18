@@ -5,7 +5,7 @@ responsibility: How a too-wide `sources:` entry makes coverage lie, and what the
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: b305be6
+synced: 3eb714c
 related:
   - ./coverage-as-debt.md
   - ../components/checks.md
@@ -23,8 +23,15 @@ directory that carries one of the known package manifests (`package.json`, `Carg
 line, not claiming a directory — `src/billing/` is a legitimate module page's source, while a
 monorepo package root almost never is.
 
+Until `3eb714c` that left the example in the first paragraph uncaught. In a single-package
+repository the manifest sits at the root and the code in `src/`, so `src/` carries no manifest and
+passed — and a real seed claimed it on its architecture page, which turned coverage green over a
+file nobody had opened. `lint` now also warns about any source that matches more than half of the
+indexable files, once that is at least ten (`src/lib/lint.ts:123`): the share is what makes a claim
+a package in all but name, and the floor keeps a five-file repository quiet.
+
 It is a **warning**, not an error, and it says how many indexable files the claim swallows
-(`src/lib/lint.ts:114`). A wiki can be sound and still be lazily indexed; the number is there so the
+(`src/lib/lint.ts:113`). A wiki can be sound and still be lazily indexed; the number is there so the
 reader can judge.
 
 The trap this leaves is one no script can close, and the `wikipoke-lint` skill is told to watch for

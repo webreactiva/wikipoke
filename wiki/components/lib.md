@@ -4,7 +4,7 @@ type: entity
 responsibility: The git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
 sources:
   - src/lib/lib.ts
-synced: b305be6
+synced: 3eb714c
 related:
   - ./checks.md
 ---
@@ -62,9 +62,13 @@ directory on disk into `dir/**`, so `sources: [src/billing/]` means what a reade
 
 **Citations are found the same way links are.** `codeCitations()` pulls `path:line` references
 out of a page's prose (`src/lib/lib.ts:452`), stripping fenced blocks — a diagram or an example is
-not a claim — but keeping inline code, since a citation is normally written in backticks. It is how
-`lint` can check the pointers `CONVENTIONS.md` tells pages to use instead of transcribing code, and
-how `drift` finds the ones a stale page has to re-point. Lines count from 1, so `file.js:0` is left
+not a claim — but keeping inline code, since a citation is normally written in backticks. `pageCitations()`
+(`src/lib/lib.ts:467`) adds the other form agents write, a Markdown link into the repository with a
+GitHub line anchor (`#L12`, or the first line of `#L12-L20`), resolved the same way any repository
+link is; one pointer written both ways counts once, and `raw` keeps the text the page actually
+holds so a report names something findable. It is how `lint` checks the pointers `CONVENTIONS.md`
+tells pages to use instead of transcribing code, and how `drift` finds the ones a stale page has to
+re-point. Lines count from 1, so `file.js:0` is left
 to the prose rather than reported: until `b29f7f4` it crashed every check, the notifier included.
 
 **A `--dir` is chosen, not just validated.** `chooseWiki()` (`src/lib/lib.ts:111`) refuses a path

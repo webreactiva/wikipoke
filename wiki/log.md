@@ -100,3 +100,20 @@ of them, the ones on a blank line or a lone `}`; the other thirteen landed on re
   indexed until now — `chooseWiki()` refuses a bad `--dir` before anything is written, `:0` is not a
   citation — and `init` no longer invites hooks in a repository that has some.
 - CONVENTIONS.md: brought level with the template, which it had fallen behind twice.
+
+## 2026-09-18 · wikipoke-ingest
+
+`3eb714c`, found by the second real run: an OpenCode seed of another repository wrote every one of
+its 65 citations as a `#L` link, which nothing checked, and claimed `src/` on its architecture page.
+Twelve pages stale; drift carried nine citations, three of them `null` because the cited line itself
+changed (the `movedCitations` signature, the over-broad count), and those were found again by
+reading the code.
+
+- components/checks.md, components/lib.md, decisions/plain-markdown-links.md: citations are read in
+  both forms, `path:line` and a `#L` link into the repository; a line anchor is the one fragment
+  the checks read instead of dropping.
+- concepts/over-broad-sources.md: the page's own first example, `src/`, was not caught by the check
+  it describes. It is now, by share of the indexable files. Recorded as a change with its SHA.
+- components/skills.md, flows/ingest-pass.md: a file only named goes to the backlog, not into
+  `sources:`.
+- CONVENTIONS.md: level with the template again.
