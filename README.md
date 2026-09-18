@@ -5,14 +5,19 @@
 A code wiki that agents maintain. Three skills write it; one small CLI sets it up, checks it and
 shows it, and never writes a page.
 
-```
-person ──► /wikipoke-ingest ──► the agent reads the code, writes pages in wiki/
-                                          │
-                                          ▼
-                                   wikipoke check        lint · drift · coverage
-                                          ▲
-optional hooks ──► wiki/.wikipoke-hook.sh                "the wiki is 3 commits behind"
-(after a commit, when an agent session starts)
+```mermaid
+flowchart LR
+    person(["person"]) -- "/wikipoke-ingest<br/>query · lint" --> agent["agent<br/>follows the skill"]
+    code[("your code")] -- reads --> agent
+    agent -- writes pages --> wiki[("wiki/")]
+    subgraph cli ["wikipoke, the CLI: reads, never writes a page"]
+        check["check<br/>drift · coverage · lint"]
+        atlas["atlas<br/>browser or static site"]
+    end
+    wiki --> check
+    wiki --> atlas
+    hooks["optional hooks<br/>after a commit · at session start"] -- run --> check
+    check -. "the wiki is 3 commits behind" .-> person
 ```
 
 - **The skills govern.** A person launches `wikipoke-ingest`, `wikipoke-query` or `wikipoke-lint`;
@@ -24,6 +29,32 @@ optional hooks ──► wiki/.wikipoke-hook.sh                "the wiki is 3 co
 - **Coverage is debt, not failure.** Code no page covers is listed so the next pass knows where to
   go. A plain `check` fails only when the wiki is broken: a missing field, a dead source, a broken
   link.
+
+## Features
+
+What a repository gets once wikipoke is installed:
+
+- **Three skills, for any agent.** `wikipoke-ingest` seeds the wiki, reconciles it with what
+  changed, or documents a part you point it at; `wikipoke-query` answers from the wiki before
+  opening code; `wikipoke-lint` explains what is wrong and, with `--deep`, reads the pages for
+  contradictions and gaps. Installed where Claude Code looks (`.claude/skills/`) and where other
+  agents do (`.agents/skills/`).
+- **A wiki that knows when it is out of date.** Every page names the files it documents and the
+  commit it was checked against, so `wikipoke check drift` lists the stale pages and every
+  `path:line` citation the code has moved, with the line it points at now.
+- **Coverage as a backlog.** The code no page covers, grouped by folder, so the next pass knows
+  where to go, and a count of what the ignore list hides.
+- **Lint for the wiki.** Missing fields, broken links, sources that no longer exist, citations that
+  land on a blank line, pages nothing links to.
+- **The atlas.** The wiki in a browser, redrawn live while an agent writes it, or exported as a
+  static site; with a graph of how the pages link, the way Obsidian draws a vault.
+- **Optional hooks.** A notice after each commit or when an agent session starts, for
+  git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
+  them ever writes it.
+- **Fewer tokens per question.** Measured at 37% to 49% fewer on two repositories, because the
+  agent reads a page instead of exploring ([details](#does-it-save-tokens)).
+- **Any language, no runtime dependencies.** Node 22.18 and git. The schema is a Markdown file the
+  project owns and edits, page types included; `--json` and `--strict` fit it into CI.
 
 ## Install
 
@@ -96,6 +127,24 @@ stays out of it on purpose: that backlog is meant to outlive every pass, and a n
 repeats it at every commit and every session start is never silent, which is how a notifier gets
 muted.
 
+```mermaid
+sequenceDiagram
+    actor You
+    participant Hook as hook + notifier
+    participant Agent
+    participant CLI as wikipoke check
+    You->>Hook: commit, or open an agent session
+    Hook->>CLI: drift
+    Hook-->>You: the wiki is 3 commits behind, 2 pages stale
+    You->>Agent: /wikipoke-ingest
+    Agent->>CLI: check drift --json
+    CLI-->>Agent: stale pages, moved citations
+    Agent->>Agent: read each stale page's diff, rewrite what changed
+    Agent->>CLI: check
+    CLI-->>Agent: sound
+    Agent->>Agent: advance the checkpoint to HEAD
+```
+
 **Install at least one.** Without a hook nothing ever tells you the wiki is stale — `wikipoke check`
 speaks only when someone runs it — and a wiki nobody is told about is one that quietly stops being
 true. `wikipoke hooks` says so whenever none is installed. Only `git` has to be installed again in
@@ -142,6 +191,22 @@ are until someone runs it.
 
 Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki on
 its own, and the saving below is only there when it does.
+
+`wikipoke-ingest` decides what kind of pass to run from the arguments and the wiki's state, so the
+same command seeds a new repository and keeps an old one current:
+
+```mermaid
+flowchart TD
+    run(["/wikipoke-ingest"]) --> arg{"a path given?"}
+    arg -- yes --> part["<b>ingest a part</b><br/>document that path<br/>checkpoint untouched"]
+    arg -- no --> state{"a checkpoint exists?"}
+    state -- no --> seed["<b>seed</b><br/>the map, the main flows,<br/>one page per subsystem"]
+    state -- yes --> reconcile["<b>reconcile</b><br/>only the pages whose<br/>code changed"]
+    part --> verify["wikipoke check passes"]
+    seed --> verify
+    reconcile --> verify
+    verify --> done(["log.md entry · checkpoint to HEAD<br/>(seed and reconcile)"])
+```
 
 ## Does it save tokens?
 
@@ -205,10 +270,14 @@ note for each caveat it carries: that part of it is reconstructed (`confidence: 
 that files changed after it was checked (what drift calls stale), naming them. Headings
 make a table of contents beside the page, and `/` filters the page list.
 
+![A page in wikipoke atlas: the page list grouped by type, the page with its sources and the commit it was checked against, and the table of contents and local graph beside it](assets/atlas-page.webp)
+
 The graph draws the pages as nodes and their links as edges, the way Obsidian does: a view of its
 own, where you zoom, pan and drag, and a small one beside each page with that page's neighbours.
 Nodes are coloured by type, sized by how many links they have, and ringed when out of date;
 hovering one lights up what it touches, and clicking it opens the page.
+
+![The graph in wikipoke atlas: this repository's 21 pages as nodes coloured by type, joined by the links between them](assets/atlas-graph.webp)
 
 Live, a citation opens the cited file at its line, served only if git tracks it, and the page
 redraws when a file in `wiki/` changes, so an ingest pass can be watched as it lands. It stops at
