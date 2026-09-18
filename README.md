@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/wikipoke.webp" alt="wikipoke" width="520"></p>
+
 # Wikipoke
 
 A code wiki that agents maintain. Three skills write it; one small CLI sets it up and checks it,
