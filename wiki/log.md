@@ -117,3 +117,18 @@ reading the code.
 - components/skills.md, flows/ingest-pass.md: a file only named goes to the backlog, not into
   `sources:`.
 - CONVENTIONS.md: level with the template again.
+
+## 2026-09-18 · wikipoke-ingest
+
+`4943a76`: drift dates each citation by the commit that wrote its page line instead of by
+`synced:`, and reports fresh pages whose pointers moved anyway. Found on tracewake, where an agent
+cited a file it had added in the same commit and drift moved the citation 94 lines from a commit
+where the file did not exist. Fourteen pages stale; six citations carried, one `null` (the
+`movedCitations` signature) found again by reading the code.
+
+- components/checks.md, concepts/two-axes-of-staleness.md, flows/ingest-pass.md: the earlier
+  reasoning — re-stamping is the last moment a move can be seen, so re-point and re-stamp in one
+  edit — no longer holds, and each page says what replaced it and with which SHA. Citations have a
+  clock of their own now.
+- flows/check.md, components/skills.md: `moved[]` beside `stale[]`.
+- CONVENTIONS.md: level with the template.

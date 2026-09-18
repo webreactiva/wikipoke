@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 3eb714c
+synced: 4943a76
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -24,7 +24,7 @@ wikipoke check [names…] [--json] [--strict] [-v]
      │
      ├─ for each named check: runCheck(name, { root, wikiDir, wiki })  → { name, result }
      │       drift    ── git rev-list / git diff       → { repo, stale[], skipped[], fresh[] }
-     │                   └ per stale page: git diff -U0  → citations[] { raw, now }
+     │                   └ per page: git blame + git diff -U0 → citations[] (stale) · moved[] (fresh)
      │       coverage ── git ls-files + sources globs  → { unclaimed[], clusters[] }
      │       lint     ── read every page               → { errors[], warnings[] }
      │
@@ -69,5 +69,6 @@ empty wiki.
 
 `--json` prints one check's result object, or a map of them when several ran. It exists for the
 skills: `wikipoke-ingest` reads `check drift --json` to get `repo` and `stale[]`, reads only those
-pages' diffs, and re-points each stale page's `citations[]` before it re-stamps `synced:`. That is the whole integration surface between the CLI and the skills —
+pages' diffs, and re-points the citations in each stale page's `citations[]` and in `moved[]`
+before it re-stamps `synced:`. That is the whole integration surface between the CLI and the skills —
 the CLI hands over measurements, and the agent decides what to write.

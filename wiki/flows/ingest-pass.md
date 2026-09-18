@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 3eb714c
+synced: 4943a76
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -69,11 +69,13 @@ the stale sections are rewritten, so hand-written notes survive, and when a chan
 what the page claimed, the page says what it used to be and what changed it, with the SHA. That
 sentence is the part git tells badly, and it is most of why the wiki is worth keeping.
 
-Each stale page also comes with `citations[]`, its `path:line` pointers carried through the same
-diff: the line each one names now, or `null` when the diff rewrote the line itself. They are
-re-pointed and the page re-stamped in the same edit. Re-stamping is the last moment the move is
-visible — after it the page is fresh and drift stops looking — and doing only the first half is
-worse than neither, since the report is mapped from `synced:` and would shift the fixed lines again.
+Each stale page also comes with `citations[]`, the pointers the code moved since they were
+written: the line each one names now, or `null` when the diff rewrote the cited line itself, which
+means reading the code again. Pages that are fresh but whose pointers moved anyway come in
+`moved[]` — usually a page an earlier pass re-stamped without re-pointing — and are fixed the same
+way. Both are re-pointed before the re-stamp, though since `4943a76` the order is no longer what
+keeps them honest: each citation is dated by the commit that wrote it, so a re-stamp cannot hide a
+skipped one and a re-pointed one is never moved twice.
 
 Nothing stale and the repository current is a complete outcome: say so and stop.
 

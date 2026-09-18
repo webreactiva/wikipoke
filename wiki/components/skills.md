@@ -6,7 +6,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 3eb714c
+synced: 4943a76
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -25,7 +25,8 @@ means *seed*, no argument with a checkpoint means *reconcile*. Only seeding and 
 checkpoint — closing a coverage gap says nothing about the repository being indexed up to HEAD — and
 since `aafa306` they write it with a `printf` around `git rev-parse HEAD` rather than letting the
 agent copy a sha. The same change added two citation rules: a seed cites only files it opened in
-that pass, and a reconcile re-points the `citations[]` drift reports before it re-stamps a page.
+that pass, and a reconcile re-points every citation drift reports — on stale pages and on the
+fresh ones it lists under `moved[]` — before it re-stamps a page.
 `3eb714c` extended the first to `sources:` — a file only named is left for coverage to report, not
 claimed — after a seed listed two files it never opened and hid them from the backlog.
 [The full pass is a flow](../flows/ingest-pass.md).

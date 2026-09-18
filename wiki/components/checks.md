@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 3eb714c
+synced: 4943a76
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -20,7 +20,7 @@ the `wikipoke-lint` skill's deep pass.
 Since `df4db0e` each module also names the object it returns — `DriftResult`, `CoverageResult`,
 `LintResult` — and those names are what let the CLI keep treating the three uniformly without
 forgetting which is which (see [the entry point](./cli.md)). The most useful of them is drift's
-`RepoAxis` (`src/lib/drift.ts:33`): its four states are a union rather than a `status` string
+`RepoAxis` (`src/lib/drift.ts:36`): its four states are a union rather than a `status` string
 beside optional fields, so the two that know a commit count are the only two that can be asked for
 one, and the report cannot print a count that was never computed.
 
@@ -29,21 +29,22 @@ one, and the report cannot print a count that was never computed.
 checkpoint; the page axis compares each page's `sources:` against its own `synced:`. A page with no
 `sources:`/`synced:`, or a `synced:` that is not a commit here, lands in `skipped[]` rather than in
 either bucket: it has no contract, so it cannot be called fresh or stale
-(`src/lib/drift.ts:98`). Diffs are cached per sha (`src/lib/drift.ts:76`), so a wiki where most pages
+(`src/lib/drift.ts:110`). Diffs are cached per sha (`src/lib/drift.ts:87`), so a wiki where most pages
 carry the same `synced:` runs one `git diff`, not one per page.
 
-Since `aafa306` a stale page also carries `citations[]`: every `path:line` on it that points into a
-changed file is carried through `git diff -U0 <synced>` to the line it names now, or reported as
-changed when a hunk rewrote the line itself (`src/lib/drift.ts:123`, `src/lib/drift.ts:154`). The
-reason is timing. Re-stamping `synced:` is the last moment anyone can see where a cited line went;
-after it the page is fresh and drift stops looking. An agent reconciling a real repository
-re-stamped a page after a feature had pushed its nine citations between 56 and 286 lines down, and `lint`
-said OK to all nine. The mapping starts from `synced:`, which is also its one trap: a page whose
-citations were re-pointed but whose `synced:` was not re-stamped reads as moved again, and following
-that report twice shifts every line twice. The ingest skill makes the two one edit. A checkpoint
-that is not a commit is printed in full (`src/lib/drift.ts:190`), because the usual cause is a sha
-typed by hand whose first seven characters are right, and seven characters that match HEAD read as
-a contradiction.
+Drift also carries every citation through the diff to the line it names now, or reports it as
+changed when a hunk rewrote the line itself (`src/lib/drift.ts:137`, `src/lib/drift.ts:189`). A
+stale page lists them as `citations[]`; a fresh page whose pointers moved anyway lands in
+`moved[]`. The first version (`aafa306`) looked only at stale pages and mapped from `synced:`, on
+the theory that re-stamping was the last moment a move could be seen. Both halves were wrong in
+practice. A page re-stamped without its pointers being moved is fresh, and an agent had done exactly
+that to nine citations pushed between 56 and 286 lines down, with `lint` saying OK to all nine. And
+`synced:` is not when a citation was written: a pointer into a file added after it, or one
+re-pointed but not yet re-stamped, got moved a second time. Since `4943a76` each citation is dated
+by the commit that last wrote its page line (`git blame`, `src/lib/drift.ts:161`), and a line not
+committed yet counts as current. A checkpoint that is not a commit is printed in full
+(`src/lib/drift.ts:225`), because the usual cause is a sha typed by hand whose first seven
+characters are right, and seven characters that match HEAD read as a contradiction.
 
 **coverage** is drift's mirror: tracked files, minus `.wikipokeignore`, that no page's `sources:`
 claims. It groups what is left into clusters by folder so the backlog reads as "five files in
