@@ -3,7 +3,6 @@ title: The CLI never writes a page
 type: decision
 responsibility: Why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
 sources:
-  - README.md
   - AGENTS.md
   - src/bin/wikipoke.ts
 synced: f36a2b1
@@ -52,5 +51,5 @@ skills, and what was missing was saying so, and listing the outdated hooks inste
 them.
 
 This page is `confidence: inferred` about the reasoning: the outcome is documented in the README's
-"Where this comes from", but the repository was squashed to a single commit, so the 0.1 code and
+["Where this comes from"](../../README.md#where-this-comes-from), but the repository was squashed to a single commit, so the 0.1 code and
 its history are not here to read.

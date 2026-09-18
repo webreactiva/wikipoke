@@ -205,3 +205,10 @@ from their own diffs and re-stamped at `f4615f9`.
 - decisions/cli-read-only.md: re-read against `f36a2b1`, which gave the README a features list,
   Mermaid diagrams and atlas screenshots. Nothing the page claims changed: "Where this comes from"
   is as it was, and the new overview draws the CLI as reading and never writing a page.
+
+## 2026-09-18 · wikipoke-ingest
+
+- decisions/cli-read-only.md: dropped `README.md` from `sources:`. The page is about the CLI and
+  quotes only the README's "Where this comes from", which is history; every edit to the rest of the
+  README marked it stale for nothing. The README is linked from the page instead. If that section
+  ever changes, drift will no longer say so.
