@@ -144,6 +144,9 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    file and find what the sentence was about. Fix every one **before** setting
    `synced:` to `git rev-parse --short HEAD`: re-stamping is the last moment drift
    can see where a cited line went, and after it a stale pointer reads as current.
+   Do both in the same edit. Drift maps every citation from the page's `synced:`,
+   so a page re-pointed but not yet re-stamped reads as moved again, and applying
+   that report a second time shifts every citation twice.
 5. **New and moved code.** Changed files no page covers: propose a page, or leave
    them to coverage. Sources pointing at moved or deleted files: fix or retire the
    page.

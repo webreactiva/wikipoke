@@ -38,6 +38,8 @@ export type RepoAxis =
 /**
  * A citation on a stale page whose line the diff moved. `now` is where that line sits in the
  * working tree, or null when the line itself was edited or deleted and only re-reading can say.
+ * It is mapped from the page's `synced:`, so it assumes the citation was written against that
+ * commit: a page re-pointed but not re-stamped reads as moved again, and would move twice.
  */
 export interface MovedCitation {
   raw: string;
