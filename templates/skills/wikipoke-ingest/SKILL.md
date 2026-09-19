@@ -1,7 +1,7 @@
 ---
 name: wikipoke-ingest
-description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'seed the wiki', 'create the wiki', 'document <subsystem>', typically when closing a feature, or 'document everything', 'keep going until it is done' (that is `all`)."
-argument-hint: "[<path> | all]"
+description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path or a topic (a flow, a decision), ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'seed the wiki', 'create the wiki', 'document <subsystem>', typically when closing a feature, or 'document everything', 'keep going until it is done' (that is `all`)."
+argument-hint: "[<path> | <topic> | all]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in {{WIKI}}/CONVENTIONS.md. -->
 
@@ -12,7 +12,7 @@ One verb, three ways in. Two are decided for you; the third is the one you aim.
 ```
 argument given?
    │
-   ├── yes ──► INGEST A PART   that path, whether or not it ever changed
+   ├── yes ──► INGEST A PART   that path or topic, whether or not it ever changed
    │           (`all` = every part of the backlog, one after another)
    │
    └── no ──► {{WIKI}}/.wikipoke-state.json exists?
@@ -38,6 +38,19 @@ turn into a page is spent twice, once now and again when you have forgotten it. 
 you notice you are reading for pages you have not started, stop and write the one in
 hand. A page written early and corrected later beats a perfect plan that never
 reaches the disk.
+
+**Each page type has its own evidence, and coverage only sees the first.**
+
+| type | where it comes from |
+| --- | --- |
+| `entity` | a folder: the module and what it owns |
+| `flow` | an entry point (a route, a command, a job, a webhook, a listener), followed across modules until the sequence ends |
+| `decision` | the history and the prose: `git log` (a fix that changed the design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of coverage but not out of reading |
+| `concept` | a pattern that three or more modules repeat |
+
+Coverage counts files, so following it alone writes `entity` pages and nothing else.
+A concept is a pattern, not a place for the folders left over: tests, config and
+tooling go in the ignore list or on the page of what they serve.
 
 ---
 
@@ -166,8 +179,10 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
 
 ## Mode C · INGEST A PART (an argument was given)
 
-Aimed, not reactive. The target is a path (`src/billing`) or `all` for everything
-still outstanding.
+Aimed, not reactive. The target is a path (`src/billing`), a topic
+(`the guides unlock flow`, often one a `wikipoke-lint --deep` pass proposed), or `all`
+for everything still outstanding. A topic is a flow or a decision, not a folder:
+start from its entry point or its history, and skip the coverage step.
 
 ```
 wikipoke check coverage -v   the backlog, grouped by folder
@@ -231,10 +246,14 @@ over-broad sources or citations are yours to fix too. Coverage and staleness lef
 over are debt: report them, do not chase them in the same pass (unless the pass is `all`).
 
 **Close with what is left.** Run `wikipoke check coverage` and tell the person, in
-numbers: the code files the wiki now covers out of the total, the largest clusters
-still uncovered, and how many files the ignore list hides. Then the next step, as a
-command they can type: `wikipoke-ingest <largest cluster>` for the next part, or
-`wikipoke-ingest all` to give every remaining part its pass, whatever it costs.
+numbers: the code files the wiki now covers out of the total, the largest clusters still
+uncovered, how many files the ignore list hides, and the pages by type. Name the flows
+and decisions you saw and did not write. Fewer flows than one per three module pages, or
+no decision once the wiki has a dozen pages, is a wiki that only followed the folders:
+say so, and propose the two or three that matter most. Then the next step, as a command
+they can type: `wikipoke-ingest <largest cluster>` or `wikipoke-ingest "<a flow or
+decision you named>"` for the next part, or `wikipoke-ingest all` to give every
+remaining part its pass, whatever it costs.
 
 ## Notes
 
