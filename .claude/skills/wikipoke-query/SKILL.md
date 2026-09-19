@@ -14,7 +14,7 @@ instead of where the index looks empty.
 **Read `wiki/CONVENTIONS.md`** for the template before filing anything.
 
 ```
-question ──► search wiki/  (index.md → the pages it points to)
+question ──► search wiki/  (grep the pages for its term, or index.md → the pages)
                 │ found ──► answer + cite the page(s)             · DONE
                 │ not found
                 ▼
@@ -31,21 +31,29 @@ question ──► search wiki/  (index.md → the pages it points to)
 
 ## Steps
 
-1. **Wiki first, in as few steps as you can.** Read `wiki/index.md`, then every
-   page whose line matches the question **in one step, together**. Each step re-sends
-   the whole conversation, so three pages read at once cost about a third of three
-   read one after another.
+1. **Search and read the wiki in one call.** Put the question's most specific terms in
+   this command (a status, a command, a table, an error; not a word the whole domain
+   uses, which every page mentions) and keep the pipe, so the pages come back read:
+   ```sh
+   grep -ril "<term>\|<synonym>" wiki/ | head -3 | xargs cat
+   ```
+   Every step re-sends the whole conversation, so a search and then a read cost twice
+   one call. When the question names nothing concrete, read `wiki/index.md`, then
+   every page whose line matches **in one step, together**.
 2. **A current page is the map, and its citations are the evidence.** Unless a
    notice this session said the wiki owes work, a page's `path:line` citations point
-   where it says. Answer from the page and cite those lines. Open code only for what
-   the page does not cover, or to confirm the one claim your answer turns on — at its
-   cited line, not by searching again. Keep apart what the page keeps apart: two
-   cases in neighbouring sentences are still two cases.
+   where it says. Answer from the page and cite those lines: re-reading code the page
+   already cites buys nothing. Open code only for what the page does not cover, and
+   then read the lines around a citation (`sed -n '40,60p' <file>`), not the whole
+   file and not by searching again, every range you need in the same step. Keep apart what
+   the page keeps apart: two cases in neighbouring sentences are still two cases.
 3. **Fall back to the code** for what the wiki does not have. Research the source,
    answer from it, and cite what you read as `path:line`. If a page you read is stale
    against the code, say so.
 4. **Name the gap.** When the answer came from the code, say the wiki did not have
-   it: the gap is a finding.
+   it: the gap is a finding. So is a detail you had to open code for that the page
+   should carry (what a command covers, a limit, which way a value or a flag works):
+   added to that page, the next question stays in the wiki.
 5. **Offer to file it back**, and where it fits: a **section** on an existing page
    when it extends one, a **new page** of the right type when it is its own unit,
    pattern or comparison. Write only on a yes.
@@ -54,7 +62,12 @@ question ──► search wiki/  (index.md → the pages it points to)
    answer is your reading rather than something the code states. **Link the new
    page from the pages it relates to**, then add its line to `index.md` and an entry
    to `log.md` (`## <date> · wikipoke-query`).
-7. If you wrote anything, run `wikipoke check lint` and fix what it reports.
+7. **Re-read what you wrote against the question.** The next person will ask it with
+   the page and nothing else: every fact your answer gave has to be there, each
+   condition with all its cases (not "requires X" when a neighbouring case behaves
+   differently), and nothing the page said before that the code contradicts. A section
+   that only points at the code is not filed yet.
+8. If you wrote anything, run `wikipoke check lint` and fix what it reports.
 
 ## Notes
 
