@@ -119,8 +119,10 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
           page.id,
         );
       // A package's code usually sits in one folder, not at its root: `src/` in a single-package
-      // repository claims the package just the same. Ten files keeps a small repository quiet.
-      else if (n >= 10 && n * 2 > indexable.length)
+      // repository claims the package just the same. Ten files keeps a small repository quiet. In a
+      // large one no share is telling: a layer like `app/Features` is a third of the repository and
+      // thirty modules, so past fifty files a claim is more than any one page read.
+      else if (n >= 10 && (n * 2 > indexable.length || n > 50))
         add(
           "warn",
           `over-broad source \`${source}\` claims ${n} of the ${indexable.length} indexable files: ` +

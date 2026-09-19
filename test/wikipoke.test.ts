@@ -519,6 +519,19 @@ test("a source that claims most of the repository is over-broad even without a m
   assert.match(broad[0] as string, /`src\/` claims 15 of the 15 indexable files/);
 });
 
+test("a folder claiming more than fifty files is over-broad, however small a share of the repository", () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 60; i++) files[`app/features/f${i}.js`] = "//\n";
+  for (let i = 0; i < 70; i++) files[`app/other/f${i}.js`] = "//\n";
+  const root = repo(files);
+  seed(root);
+  page(root, "concepts/layer.md", { type: "concept", sources: ["app/features", "src/billing"], body: "[map](../architecture.md)" });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message);
+  assert.equal(broad.length, 1, broad.join("\n"));
+  assert.match(broad[0] as string, /`app\/features` claims 60 of the \d+ indexable files/);
+});
+
 test("a --json larger than a pipe's buffer reaches the reader whole", () => {
   const files: Record<string, string> = {};
   for (let i = 0; i < 400; i++) files[`src/gen/${"x".repeat(200)}${i}.js`] = "//\n";
