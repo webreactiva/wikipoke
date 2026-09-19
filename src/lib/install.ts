@@ -139,7 +139,11 @@ function unplace(root: string, path: string, out: Report, { keepDirs = false }: 
 
 function postCommitPath(root: string): string | null {
   const hooks = gitOrNull(root, ["rev-parse", "--git-path", "hooks"])?.trim();
-  return hooks ? join(resolve(root, hooks), "post-commit") : null;
+  if (!hooks) return null;
+  const dir = resolve(root, hooks);
+  // Husky 9 points git at .husky/_ and rewrites every file in it on each install. Its wrapper, `h`,
+  // runs the hook of the same name one level up, which is the one that lasts.
+  return join(existsSync(join(dir, "h")) ? dirname(dir) : dir, "post-commit");
 }
 
 /**
@@ -222,12 +226,16 @@ function outdated(root: string, wiki: string, name: HookName): boolean {
   const file = HOOK_FILES[name](root, wiki);
   if (!file) return false;
   const current = read(file.path) ?? "";
-  // AGENTS.md is shared: only wikipoke's block is compared.
-  return name === "agents" ? current.match(BLOCK)?.[0] !== file.content.match(BLOCK)?.[0] : current !== file.content;
+  // AGENTS.md is shared: only wikipoke's block is compared. A post-commit the project owns holds
+  // only the line it was told to add, and the notifier that line runs was compared above.
+  if (name === "agents") return current.match(BLOCK)?.[0] !== file.content.match(BLOCK)?.[0];
+  return current.includes(MARKER) && current !== file.content;
 }
 
 const INSTALLED: Record<HookName, (root: string, wiki: string) => boolean> = {
-  git: (root) => read(postCommitPath(root))?.includes(MARKER) ?? false,
+  // By the notifier it runs, not the marker: a post-commit the project owns gets that line added by
+  // hand, and never the marker, which would hand the whole file to wikipoke.
+  git: (root, wiki) => read(postCommitPath(root))?.includes(notifier(wiki)) ?? false,
   claude: (root, wiki) => read(join(root, SETTINGS))?.includes(notify(wiki)) ?? false,
   opencode: (root) => read(join(root, HOOKS.opencode.where))?.includes(MARKER) ?? false,
   cursor: (root) => read(join(root, HOOKS.cursor.where))?.includes(MARKER) ?? false,

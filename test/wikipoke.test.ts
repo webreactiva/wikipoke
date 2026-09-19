@@ -227,6 +227,24 @@ test("init and hooks leave files they do not manage alone and say what to do by 
   assert.equal(read(root, "wiki/CONVENTIONS.md"), "# our own schema\n");
   assert.match(out, /post-commit already exists\. Add this line to it/);
   assert.match(out, /wikipoke\.mdc exists and is not managed by wikipoke/);
+
+  // Following that line to the letter is what installs it.
+  const line = out.match(/Add this line to it: (.*)/)?.[1] ?? "";
+  put(root, ".git/hooks/post-commit", `#!/bin/sh\necho mine\n${line}\n`);
+  assert.match(wikipoke(root, "hooks").out, /git .* installed/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /git .* outdated/);
+});
+
+test("with husky 9, the git hook goes where husky keeps it, not in the wrappers it regenerates", () => {
+  const root = repo();
+  put(root, ".husky/_/h", "#!/usr/bin/env sh\n");
+  put(root, ".husky/_/post-commit", '#!/usr/bin/env sh\n. "$(dirname "$0")/h"\n');
+  git(root, "config", "core.hooksPath", ".husky/_");
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "git");
+  assert.match(read(root, ".husky/post-commit"), /wiki\/\.wikipoke-hook\.sh/);
+  assert.equal(read(root, ".husky/_/post-commit"), '#!/usr/bin/env sh\n. "$(dirname "$0")/h"\n');
+  assert.match(wikipoke(root, "hooks").out, /git .* installed/);
 });
 
 test("uninstall takes out skills and hooks, keeps the wiki and the rest of the settings", () => {
