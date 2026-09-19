@@ -2,14 +2,16 @@
 
 # Wikipoke
 
-<p align="center"><b>Around 40% fewer tokens when you ask your agent how your code works,<br>
-because it answers from a wiki it writes for you and keeps up to date.</b></p>
+<p align="center"><b>A code wiki your agent writes, keeps true to the code,<br>
+and grows from the questions you ask it.</b></p>
 
 Wikipoke has your coding agent write a wiki of your repository: the map, the flows that cross
 files, the decisions and why they were taken, with every claim pointing at a line of code. When the
 code changes, it tells you which pages went stale and which citations moved, and the agent brings
 them back in line. Ask how something works and the agent reads a page instead of exploring the
-repository, which is where the tokens go ([measured on two repositories](#does-it-save-tokens)).
+repository. When the page holds the answer, that is fewer tokens and the same answer every time;
+when it does not, the agent pays for the wiki and the code, and offers to file what it found so the
+next person does not ([measured on three repositories](#does-it-save-tokens)).
 
 *Thirty seconds in `wikipoke atlas`, on the wiki this repository keeps of itself: the page list, the graph, a page with its sources, the filter.*
 
@@ -43,6 +45,49 @@ flowchart LR
   go. A plain `check` fails only when the wiki is broken: a missing field, a dead source, a broken
   link.
 
+## What it is for
+
+A memory of your codebase that stays true, and answers what has been asked before cheaply and the
+same way every time. Fewer tokens are a consequence of that, on the questions the wiki already
+covers; they are not a promise for every question ([the numbers](#does-it-save-tokens)).
+
+What it gives you that the code and a search do not:
+
+- **What the code does not say.** Why something is built the way it is, the choice that was
+  discarded, what a command leaves out, where two modules meet. A `grep` finds a name, not a reason.
+- **Documentation that says when it is wrong.** Every claim cites a line, and `wikipoke check`
+  lists the pages whose code moved and the citations that now point elsewhere. Hand-written docs,
+  and docs an AI generated once, go out of date in silence.
+- **Answers that stay answered.** The first time a question finds a gap it costs more than asking
+  without a wiki: the agent reads the wiki, then the code. It then offers to file what it found, and
+  from then on that question, and the same question put another way, is answered from the wiki.
+- **The same answer at a predictable cost**, as long as the pages are well written. A vague page
+  produces confident wrong answers just as reliably, which is why reading what gets filed is part
+  of the work, not an extra.
+
+When it pays off, and when it does not:
+
+- **It pays off** in medium and large repositories where people and agents keep coming back to the
+  same questions (triage, onboarding, support) and the answers cross modules. On a 1,480-file
+  Laravel app, such questions cost 55% and 75% fewer tokens once the wiki had their answers.
+- **It pays off least** in a small repository. Covered questions still come back cheaper (37% and
+  49% fewer on two of them), but a search finds most things quickly there, and building the wiki
+  took 70 to 100 questions to pay back.
+- **It does not** for one-off questions, for questions that name something the code spells out (one
+  `grep` finds it), or in a team that will not read what its agents file.
+
+How to use it for that:
+
+- **Seed small, then grow with the questions.** A seed draws the map and the main flows (about 5M
+  tokens on that Laravel app), and each gap a question finds is filed once (0.2M to 0.8M).
+  `/wikipoke-ingest all`, which gives every part of the code a pass, cost 39M there: it is for
+  documentation you want to publish, not for saving tokens.
+- **Judge it by the second question, not the first:** what it costs, and whether it is right, when
+  someone asks again.
+
+Still unmeasured: whether the wiki beats a well-kept `AGENTS.md` plus `grep`, and what it is worth
+to people reading it rather than to agents.
+
 ## Features
 
 What a repository gets once wikipoke is installed:
@@ -64,8 +109,10 @@ What a repository gets once wikipoke is installed:
 - 🔔 **Optional hooks.** A notice after each commit or when an agent session starts, for
   git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
   them ever writes it.
-- 💸 **Fewer tokens per question.** Measured at 37% to 49% fewer on two repositories, because the
-  agent reads a page instead of exploring ([details](#does-it-save-tokens)).
+- 💸 **Fewer tokens on the questions it covers.** 37% to 49% fewer on two small repositories; on a
+  large one, 21% to 75% fewer on five of six questions once their answers were filed, and 7% more
+  on the sixth. The first time a question finds a gap it costs more than asking without a wiki
+  ([details](#does-it-save-tokens)).
 - 🪶 **Any language, no runtime dependencies.** Node 22.18 and git. The schema is a Markdown file the
   project owns and edits, page types included; `--json` and `--strict` fit it into CI.
 
@@ -83,11 +130,27 @@ The skills write the wiki, the hooks notice when it falls behind, and each pass 
    `claude`, `opencode`, `cursor` or `agents`.
 3. `/wikipoke-ingest` seeds the wiki: the architecture, the main flows, a page per subsystem.
 4. Commit `wiki/`, the skills and the hook files, so everyone who clones gets them. Only the `git`
-   hook has to be installed again in each clone.
+   hook has to be installed again in each clone, unless the repository uses husky 9: then it lives
+   in `.husky/post-commit` and travels with the rest.
 5. From then on, a commit or a new agent session says when the code has moved past the wiki, and
    `/wikipoke-ingest` rewrites only the pages whose code changed.
 
-### 2. The skills without the notices
+### 2. Questions that stay answered
+
+`wikipoke-query` answers from the wiki, and what it has to dig out of the code can go back in.
+
+1. Ask through the skill: `/wikipoke-query how are invoices rounded?`
+2. The agent searches the wiki for the question's terms, reads the pages that match in the same
+   step, and answers citing them. If the wiki does not cover it, it reads the code, answers with
+   `path:line` citations, and says the wiki had a gap.
+3. It offers to file the answer back, as a section on an existing page or as a new page. Say yes.
+   That first answer cost more than asking without a wiki: the agent read the wiki, then the code.
+4. It writes the page, links it from its neighbours, adds it to `index.md` and `log.md`, and runs
+   `wikipoke check lint`. Read what it filed: a section that leaves out a case is worse than none.
+   The next person, or the next agent, who asks finds it there, and pays less than asking without
+   the wiki.
+
+### 3. The skills without the notices
 
 After the first pass, keep the wiki and the skills, and stop being told that the wiki is behind.
 
@@ -99,28 +162,18 @@ After the first pass, keep the wiki and the skills, and stop being told that the
    `wikipoke check drift`, then `/wikipoke-ingest` to catch up. `wikipoke hooks add <name>` brings
    a hook back.
 
-### 3. Documentation to read and publish
+### 4. Documentation to read and publish
 
 The ingest writes the pages; the atlas puts them in a browser, or in a folder you can publish.
 
 1. `wikipoke init`, then `/wikipoke-ingest` to seed the wiki.
 2. `wikipoke check coverage` lists the code no page covers yet; `/wikipoke-ingest src/billing`
-   documents one of those parts.
+   documents one of those parts, and `/wikipoke-ingest all` gives every part a pass. That is the
+   expensive way in — about 39M tokens on a 1,480-file app — and worth it when the site is the goal.
 3. `wikipoke atlas` serves the wiki at http://127.0.0.1:4747. Left open during a pass, it redraws
    each page as the agent writes it.
 4. `wikipoke atlas --out site` exports it as a static site, with citations pointing at your GitHub
    or GitLab remote. Publish the folder wherever you host static pages.
-
-### 4. Questions that stay answered
-
-`wikipoke-query` answers from the wiki, and what it has to dig out of the code can go back in.
-
-1. Ask through the skill: `/wikipoke-query how are invoices rounded?`
-2. The agent reads `index.md` and the pages that match, and answers citing them. If the wiki does
-   not cover it, it reads the code, answers with `path:line` citations, and says the wiki had a gap.
-3. It offers to file the answer back, as a section on an existing page or as a new page. Say yes.
-4. It writes the page, links it from its neighbours, adds it to `index.md` and `log.md`, and runs
-   `wikipoke check lint`. The next person, or the next agent, who asks finds it there.
 
 ## Install
 
@@ -255,9 +308,9 @@ are until someone runs it.
 
 | Skill | What it does |
 | --- | --- |
-| `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path, documents a part no pass has covered |
+| `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path or a topic, documents a part no pass has covered (`all`: every part, one pass each) |
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
-| `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims and gaps |
+| `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims, gaps, and the flows and decisions coverage cannot ask for |
 
 > [!TIP]
 > Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki
@@ -268,8 +321,8 @@ same command seeds a new repository and keeps an old one current:
 
 ```mermaid
 flowchart TD
-    run(["/wikipoke-ingest"]) --> arg{"a path given?"}
-    arg -- yes --> part["<b>ingest a part</b><br/>document that path<br/>checkpoint untouched"]
+    run(["/wikipoke-ingest"]) --> arg{"a path or topic given?"}
+    arg -- yes --> part["<b>ingest a part</b><br/>document that path or topic<br/>checkpoint untouched"]
     arg -- no --> state{"a checkpoint exists?"}
     state -- no --> seed["<b>seed</b><br/>the map, the main flows,<br/>one page per subsystem"]
     state -- yes --> reconcile["<b>reconcile</b><br/>only the pages whose<br/>code changed"]
@@ -281,24 +334,47 @@ flowchart TD
 
 ## Does it save tokens?
 
-Measured on two TypeScript repositories, each with the same code on two branches — one with a
-seeded wiki, one without — and a fresh OpenCode session per question (model: glm-5.3-flash). Three
-questions a wiki page covers, three runs each. Tokens are everything the model processed (input,
-cached input and output) summed over the whole answer.
+Sometimes. It saves tokens on questions a page already answers, and costs more on the ones it does
+not. Three repositories, one model (glm-5.3-flash through OpenCode), a fresh session per question.
+Tokens are everything the model processed (input, cached input and output) over the whole answer.
+
+**Two small TypeScript repositories**, same code on two branches, one with a seeded wiki; three
+questions a wiki page covers, three runs each:
 
 | Repository | No wiki (median tokens per question) | With `/wikipoke-query` | Tokens | Cost |
 | --- | --- | --- | --- | --- |
 | a library: 32 source files, ~11k lines, a third of them comments | 308k | 157k | −49% | −40% |
 | a CLI: 39 source files, ~7.5k lines, 7% comments | 384k | 242k | −37% | −48% |
 
-The saving comes from steps, not from shorter reads. Every step re-sends the whole conversation —
-about 28k tokens of system prompt and tool definitions before anything is read — and what a tool
-returns is small by comparison, so an answer costs roughly its number of steps. Without the wiki
-the agent searches and opens files until it has the picture, 7 to 15 steps on average per
-question; with it, it reads the index, then the candidate pages together, and opens code only at
-the line the answer turns on, 5 to 9. Answers covered the same facts either way, with the one exception below.
+**A Laravel application with 1,480 code files**, triage questions of the kind a team asks about a
+bug or a feature, each asked without the wiki (the folder moved out), with a wiki whose page only
+pointed at the code, and again once the answer had been filed. Medians of 1 to 5 runs:
 
-The same runs showed three more things:
+| Question | No wiki | Wiki, page points at the code | Wiki, answer filed |
+| --- | --- | --- | --- |
+| a team member cannot see premium content | 425k | 133k | 105k (−75%) |
+| a subscriber never got the welcome email | 232k | 200k | 105k (−55%) |
+| can we give a user more AI tokens? | 200k | 254k | 100k (−50%) |
+| do we have a GDPR data export? | 102k | 186k | 75k (−26%) |
+| the welcome link stopped working | 126k | 263k | 100k (−21%) |
+| a private podcast feed stopped updating | 101k | 203k | 108k (+7%) |
+
+The saving comes from steps, not from shorter reads. Every step re-sends the whole conversation —
+some 20k to 30k tokens of system prompt and tool definitions before anything is read — so an answer
+costs roughly its number of steps. Without the wiki the agent searches and opens files until it has
+the picture. With it, it reads the pages and opens code only for what they lack: when a page holds
+the answer that is three or four steps, and when it only points at the code the agent pays for the
+wiki and then for the code, up to twice what the question cost without it. That first answer is
+the moment `wikipoke-query` offers to file what it found, and once filed the same question, and the
+same question put another way, came back from the wiki alone.
+
+Where the wiki helps least: a question that names something the code spells out ("GDPR" is in the
+export command's description) is found by one `grep`, so a wiki can only just beat it, and did so
+only once the skill searched and read the pages in a single call. Where it helps most is the
+question that crosses modules with no word to search for, where the agent without it sometimes
+spawned subagents and spent 400k to 500k.
+
+The same runs showed more than tokens:
 
 - **Name the skill when you want the saving.** Left to decide, the agent opened the wiki in 17 of
   18 runs with the current skill description and saved about as much (−50% and −38% median), but
@@ -306,14 +382,21 @@ The same runs showed three more things:
   every skipped wiki is paid in exploration. `/wikipoke-query` removes the guess.
 - **A page is only as good as its sentences.** One page explained two cases in the same paragraph.
   Four of six answers that read it merged them, while every answer that read the code kept them
-  apart; rewritten with one sentence per case, six of six were right. `CONVENTIONS.md` carries
-  that rule now.
-- **The wiki costs tokens to build.** Covering the library's whole backlog in one pass took about
-  14M tokens, which the saving above pays back after roughly 70 to 100 questions.
+  apart; rewritten with one sentence per case, six of six were right. On the Laravel app a page
+  that left out which way an adjustment's sign works led two answers in three to state it backwards
+  with confidence; once filed, three of three were right. `CONVENTIONS.md` carries the rule.
+- **Read what gets filed.** Two of the first four filings left out part of what had been asked,
+  and one kept a false sentence from before. The skill now re-reads a filed section against the question, and the next two were complete.
+- **The wiki costs tokens to build, and pays back only through questions.** Covering the library's
+  whole backlog took about 14M tokens, paid back after roughly 70 to 100 questions. On the Laravel
+  app a seed took about 5M, covering everything took 39M (and claimed folders nobody had read until
+  the skill forbade it), and filing one gap 0.2M to 0.8M. A seed plus the gaps your questions find is
+  the cheap way in; `all` makes sense for documentation you want to publish, not for saving tokens.
 
 > [!NOTE]
-> Three runs per cell with a wide spread (one no-wiki answer on the CLI took 1.6M tokens), one
-> model, and questions the wiki covers: this measures these two repositories, not yours.
+> One model, 1 to 5 runs per cell and a wide spread (one no-wiki answer on the CLI took 1.6M
+> tokens), and 4 of 24 Laravel runs where the model returned no answer at all. This measures these
+> repositories, not yours.
 
 ## `wikipoke check`
 
