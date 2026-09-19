@@ -5,7 +5,7 @@ responsibility: The map of wikipoke: who writes the wiki, who only measures it, 
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: f4615f9
+synced: 78adf3b
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are

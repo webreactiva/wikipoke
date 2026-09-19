@@ -41,7 +41,9 @@ between: Claude Code runs the command, and what it prints reaches the session.
 The table's first column decides more than which tool is told: it decides whether a clone gets the
 hook at all. `git` writes into `.git/hooks/`, which git never versions, so it is per-clone by
 construction — every checkout has to run `wikipoke hooks add git` again, and nothing about the
-repository can carry it. The other four write ordinary repository files (`.claude/settings.json`,
+repository can carry it. The exception is a repository run by husky 9: there the hook goes to
+`.husky/post-commit`, a versioned file, and travels like the rest ([the installer](./install.md)).
+The other four write ordinary repository files (`.claude/settings.json`,
 `.opencode/plugin/wikipoke.js`, `.cursor/rules/wikipoke.mdc`, a block in `AGENTS.md`), so committing
 them makes the notice arrive for everyone who clones, with nobody installing anything.
 

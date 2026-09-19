@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: f4615f9
+synced: 78adf3b
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -72,3 +72,8 @@ skills: `wikipoke-ingest` reads `check drift --json` to get `repo` and `stale[]`
 pages' diffs, and re-points the citations in each stale page's `citations[]` and in `moved[]`
 before it re-stamps `synced:`. That is the whole integration surface between the CLI and the skills —
 the CLI hands over measurements, and the agent decides what to write.
+
+Because the skills read it through a pipe, the run ends by setting the exit code and letting stdout
+drain (`src/bin/wikipoke.ts:328`). It used to call `process.exit`, which drops what a pipe has not
+taken yet: on a 1,480-file repository `check coverage --json` is about 75 KB, and every agent that
+piped it into `jq` or `python3` got the first 64 KB and a parse error (`c82a188`).

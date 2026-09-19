@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: fa67d16
+synced: 78adf3b
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -55,6 +55,10 @@ claims. It groups what is left into clusters by folder so the backlog reads as "
 nothing, rather than everything. It also reports how many files `.wikipokeignore` took out of the
 total, because a rule that hides too much is otherwise invisible — the number is not a finding, so
 it prints under the clusters and never breaks the report's silence when coverage is complete.
+With `-v` each ignored path is printed as `ignored  <path>` and the count stays the last line
+(`src/lib/coverage.ts:60`). Until `d3d5d3b` the ignored list came last with the same indent as the
+uncovered one, and an agent that read `-v | tail` took the ignored tests for uncovered code and
+spent fifteen calls reading wikipoke's own source to find out why.
 
 **lint** is the only check that produces errors, and therefore the only one that can fail a plain
 run. It decides the frontmatter contract (required keys, a `type:` that
@@ -65,10 +69,10 @@ page because a broken map is as bad as a broken page (`src/lib/lint.ts:83`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
 the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
-(`src/lib/lint.ts:199`). Nobody cites a closing brace, so that one is almost always code that moved
+(`src/lib/lint.ts:218`). Nobody cites a closing brace, so that one is almost always code that moved
 underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
 and it catches some of what a reconcile re-stamped without re-pointing. A link that carries its
-line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:147`):
+line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:166`):
 re-pointing the anchor and not the text is the usual way they part.
 
 Both checks read citations in both forms agents write: `path:line` in prose, and a link into the
@@ -83,7 +87,8 @@ warning, never an error.
 Its other warnings are about a wiki nobody can navigate rather than one that is malformed: orphan pages
 (nothing links here), pages missing from `index.md`, `[[wikilinks]]` that this wiki does not
 follow, and the [over-broad `sources:`](../concepts/over-broad-sources.md) that turn coverage
-green by lying — a whole package, or since `3eb714c` any source that claims more than half the
-repository. Past 80 pages it warns once that reading `index.md` first has stopped ranking
+green by lying — a whole package, since `3eb714c` any source that claims more than half the
+repository, and since `dc452c1` and `d63f692` more than fifty files, one source or a page's folders
+counted together. Past 80 pages it warns once that reading `index.md` first has stopped ranking
 anything — a deliberate nudge to reopen the "do we need search?" question rather than a measured
 limit (`src/lib/lib.ts:138`).

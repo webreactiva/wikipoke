@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: 60d592f
+synced: 78adf3b
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -28,7 +28,11 @@ prose, and nobody can open in the repository to see what their agent was told.
 The trade is real. Prose cannot be unit-tested, and two agents will follow the same skill
 differently. What the project does instead is make the *result* checkable: every page carries a
 frontmatter contract, and `wikipoke check` decides mechanically whether the pages a skill produced
-are sound, current and linked. The skill is free-form; its output is not.
+are sound, current and linked. The skill is free-form; its output is not. And the prose is measured
+the only way prose can be: an agent follows it on a real repository and the pages, the answers and
+the tokens are counted. The changes up to `78adf3b` came from four seed passes, a full `all` run and
+several dozen timed questions against a 1,480-file Laravel app, each one a sentence rewritten after
+a run showed an agent reading it the wrong way.
 
 The prose starts working before the skill is read, too: a skill's `description:` is all an agent
 sees when it decides whether to reach for one. The query skill's first description fired on "how

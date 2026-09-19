@@ -4,7 +4,7 @@ type: entity
 responsibility: How `src/bin/wikipoke.ts` dispatches the five commands and what each exit code means.
 sources:
   - src/bin/wikipoke.ts
-synced: f4615f9
+synced: 78adf3b
 related:
   - ../architecture.md
   - ../flows/check.md
@@ -12,7 +12,10 @@ related:
 ---
 
 A single file, no framework, `node:util`'s `parseArgs` and a handful of `if` blocks that each end
-in `process.exit`. It resolves two things before anything else happens — the repository root and
+in `process.exit`, all but the last: a full `check` sets `process.exitCode` and lets Node exit once
+stdout has drained (`src/bin/wikipoke.ts:328`). On a pipe stdout is written asynchronously, and
+until `c82a188` exiting at once cut a large `--json` off at the pipe's 64 KB buffer, which is
+exactly the output a skill parses. It resolves two things before anything else happens — the repository root and
 the wiki directory (`src/bin/wikipoke.ts:103`) — and hands both to whatever runs next, so no other
 module has to find them again.
 

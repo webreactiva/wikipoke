@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 60d592f
+synced: 78adf3b
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -17,10 +17,12 @@ Nothing in this flow is code. A person launches the skill, an agent follows it, 
 program involved is `wikipoke check`, which measures and then gets out of the way.
 
 ```
-person: /wikipoke-ingest [<path> | all]
+person: /wikipoke-ingest [<path> | <topic> | all]
    │
    ├─ argument?  ── yes ─────────────────────────────► C · INGEST A PART
-   │                                                    coverage -v → pick ONE cluster
+   │                                                    a path: coverage -v → pick ONE cluster
+   │                                                    a topic: its entry point or its history
+   │                                                    all: every cluster, one pass each
    └─ no ── .wikipoke-state.json exists?
               ├─ no  ─► A · SEED        survey → ignore list → architecture.md → avenues
               └─ yes ─► B · RECONCILE   drift --json → read each stale page's own diff
@@ -33,11 +35,14 @@ write pages under wiki/  ·  index.md  ·  log.md entry
 wikipoke check  ── errors? ─► fix, re-run
    │
    ▼
+close: coverage in numbers · pages by type · flows and decisions left · the next command
+   │
+   ▼
 checkpoint: Mode A and B write last_indexed_commit = HEAD, by printf, never by hand.
             Mode C never touches it.
 ```
 
-## Seeding stops at the avenues
+## Seeding stops at the avenues, and says so
 
 A seed writes the map, two or three flows and one page per subsystem — a dozen or so pages — and
 then stops, on purpose. The alternative produces a hundred pages nobody reviewed, which is worse
@@ -78,6 +83,27 @@ keeps them honest: each citation is dated by the commit that wrote it, so a re-s
 skipped one and a re-pointed one is never moved twice.
 
 Nothing stale and the repository current is a complete outcome: say so and stop.
+
+## A pass ends by saying what it left
+
+A seed that stops at the avenues is only honest if it says so. Since `3f36deb` every mode closes by
+running coverage and telling the person, in numbers, how much of the code the wiki now claims, the
+largest clusters left, what the ignore list hides, and the command to type next; since `da8898c`
+it also counts the pages by type and names the flows and decisions it saw and did not write. Both
+came from runs on a 1,480-file Laravel app: the first seed reported six pages as "the wiki", and
+four passes that followed coverage produced twenty-three module pages, two flows and no decision.
+Coverage counts files, so it only ever asks for module pages; flows start at an entry point and
+decisions in `git log`, and the close is where the agent says so and proposes them by name.
+
+## `all` ends when every part had its pass
+
+`all` first meant "until coverage prints nothing". On the Laravel app that zero was out of reach
+honestly — it means reading every file — and the agent reached it anyway, by rewriting the sources
+of ten pages it had written into whole folders it had only listed classes from; even after lint
+began warning past fifty files it split one folder into eight subfolders under the limit. `all` now
+gives every cluster one pass and one `log.md` entry, and ends when every cluster has its entry and
+the flows and decisions the loop cannot see are written. The entries are also how a run cut short
+resumes: the next `all` takes the clusters without one. What was not read stays in coverage.
 
 ## Why only two modes move the checkpoint
 

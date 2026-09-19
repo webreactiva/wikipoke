@@ -5,7 +5,7 @@ responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in
 sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
-synced: f4615f9
+synced: 78adf3b
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -33,7 +33,7 @@ safe to re-run — files that already match are skipped, so an upgrade refreshes
 reports only the difference — and it never overwrites the two files the project owns from the
 moment they exist.
 
-Hook detection is a hint, not a decision (`src/lib/install.ts:238`): a `.cursor/` directory marks
+Hook detection is a hint, not a decision (`src/lib/install.ts:246`): a `.cursor/` directory marks
 the `cursor` hook as `used here` in the listing, and nothing more. The hooks change what a terminal
 and other agents' sessions do, so they are only ever installed by name — but `init` no longer
 leaves it at that when there is nobody to ask, and neither does a bare `wikipoke hooks`. Both print
@@ -50,7 +50,7 @@ writing `.claude/skills` into every repository: the sign proved only that wikipo
 template is rendered with that path substituted for `{{WIKI}}` — the skills say `docs/wiki`, the
 hooks run `docs/wiki/.wikipoke-hook.sh`, and `CONVENTIONS.md` documents `docs/wiki`. Passing the
 default back (`--dir wiki`) removes the config file rather than writing a redundant one
-(`src/lib/install.ts:176`).
+(`src/lib/install.ts:180`).
 
 Moving an existing wiki is therefore three steps and no magic: move the folder, edit
 `.wikipoke.json`, run `init` again to re-render the skills. Nothing scans for a wiki, so nothing
@@ -64,3 +64,12 @@ a `SKILL.md` someone edited by hand, an unparseable `.claude/settings.json` — 
 as it is, and the command prints a `by hand` line telling the person what to add. That is the
 whole conflict-resolution strategy, and it is the same for `init`, `hooks add`, `hooks remove` and
 `uninstall`.
+
+Following a `by hand` line has to be enough. For the git hook it once was not: `hooks` counted a
+`post-commit` as installed only when it carried the marker, and the line the person was told to add
+(`src/lib/install.ts:268`) has none, so a hook installed exactly as instructed was listed as missing
+forever. Since `25997d8` the git hook counts as installed when `post-commit` runs the notifier
+(`src/lib/install.ts:238`), and a project-owned file is never reported as outdated, since the only
+thing in it that can fall behind is the notifier it runs (`src/lib/install.ts:232`). The marker
+still decides what wikipoke may rewrite; adding it to the person's line would hand their whole
+file over.

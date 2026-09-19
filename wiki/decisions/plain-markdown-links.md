@@ -5,13 +5,13 @@ responsibility: Why the wiki uses `[text](./page.md)` and reports `[[term]]` ins
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: fa67d16
+synced: 78adf3b
 related:
   - ../components/lib.md
 ---
 
 **Decision.** Links between pages are ordinary Markdown links. `[[wikilinks]]` are detected in
-prose and reported as a warning (`src/lib/lint.ts:137`), never followed.
+prose and reported as a warning (`src/lib/lint.ts:156`), never followed.
 
 **Why.** A Markdown link resolves to a path, so `lint` can check every one of them — on pages, in
 `related:` and in `index.md` — and a page that moves shows up immediately as a list of broken links

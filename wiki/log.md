@@ -212,3 +212,22 @@ from their own diffs and re-stamped at `f4615f9`.
   quotes only the README's "Where this comes from", which is history; every edit to the rest of the
   README marked it stale for nothing. The README is linked from the page instead. If that section
   ever changes, drift will no longer say so.
+
+## 2026-09-19 · wikipoke-ingest
+
+- Reconciled 16 stale pages with 14 commits since `fe78f53`: the fixes and skill changes that came
+  out of running wikipoke through OpenCode on a 1,480-file Laravel app.
+- components/install.md, flows/install.md, concepts/file-ownership.md, components/hooks.md: the git
+  hook follows husky 9 to `.husky/post-commit`, and a project-owned post-commit counts as installed
+  when it runs the notifier (`25997d8`); in a husky repository the git hook travels with the clone.
+- components/checks.md, concepts/over-broad-sources.md: `-v` labels ignored paths and keeps the count
+  last (`d3d5d3b`); over-broad now also means past fifty files, per source or per page (`dc452c1`,
+  `d63f692`).
+- components/cli.md, flows/check.md: `check` sets the exit code and lets stdout drain, so a large
+  `--json` is no longer cut at a pipe's 64 KB (`c82a188`).
+- components/skills.md, flows/ingest-pass.md, concepts/skills-as-product.md: ingest closes with what
+  it left and the pages by type, `all` gives every cluster one pass, page types name their evidence
+  and a part can be a topic (`3f36deb`, `da8898c`); lint --deep's missing-kind lens and the false
+  green rule (`86294e6`); query searches and reads in one call and re-reads what it files (`78adf3b`).
+- Citations re-pointed in install.ts (8, one inside a diagram drift does not read), lint.ts (5,
+  two re-found by hand) and bin/wikipoke.ts (1). No new page: every change extended one.

@@ -5,7 +5,7 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 60d592f
+synced: 78adf3b
 related:
   - ./file-ownership.md
   - ../components/checks.md
