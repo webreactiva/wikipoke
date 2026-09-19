@@ -530,6 +530,15 @@ test("a folder claiming more than fifty files is over-broad, however small a sha
   const broad = lint.warnings.filter((f) => /over-broad/.test(f.message)).map((f) => f.message);
   assert.equal(broad.length, 1, broad.join("\n"));
   assert.match(broad[0] as string, /`app\/features` claims 60 of the \d+ indexable files/);
+
+  // Split into subfolders under the limit, the page still claims them all.
+  for (let i = 0; i < 60; i++) put(root, `app/features/${i < 30 ? "a" : "b"}/g${i}.js`, "//\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "split");
+  page(root, "concepts/layer.md", { type: "concept", sources: ["app/features/a", "app/features/b/*.js"], body: "[map](../architecture.md)" });
+  const split = json<LintJson>(root, "check", "lint", "--json").warnings.filter((f) => /over-broad/.test(f.message));
+  assert.equal(split.length, 1, split.map((f) => f.message).join("\n"));
+  assert.match(split[0]?.message ?? "", /folders and wildcards claim 60 indexable files together/);
 });
 
 test("a --json larger than a pipe's buffer reaches the reader whole", () => {

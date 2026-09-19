@@ -104,25 +104,35 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     if (typeof meta.synced === "string" && meta.synced && !commitExists(root, meta.synced))
       add("error", `\`synced: ${meta.synced}\` is not a commit in this repository`, page.id);
 
+    // What the page's folders and wildcards claim together: fifty files split across subfolders are
+    // still more than one page read, and splitting them is how the limit below gets dodged.
+    const swept = new Set<string>();
+    let broad = false;
     for (const source of asList(meta.sources)) {
-      const re = globToRegExp(normalizeSource(source, root));
+      const glob = normalizeSource(source, root);
+      const re = globToRegExp(glob);
       if (!tracked.some((f) => re.test(f))) {
         add("error", `dead source (matches no tracked file): \`${source}\``, page.id);
         continue;
       }
-      const n = indexable.filter((f) => re.test(f)).length;
-      if (isOverBroad(source, root))
+      const claimed = indexable.filter((f) => re.test(f));
+      const n = claimed.length;
+      if (/[*?]/.test(glob)) for (const f of claimed) swept.add(f);
+      const whole = isOverBroad(source, root);
+      // A package's code usually sits in one folder, not at its root: `src/` in a single-package
+      // repository claims the package just the same. Ten files keeps a small repository quiet. In a
+      // large one no share is telling: a layer holding thirty modules can be a third of the
+      // repository, so past fifty files a claim is more than any one page read.
+      const most = n >= 10 && (n * 2 > indexable.length || n > 50);
+      broad ||= whole || most;
+      if (whole)
         add(
           "warn",
           `over-broad source \`${source}\` claims a whole package (${n} indexable file(s)): ` +
             `narrow it to what this page really documents, or coverage reads green for code nobody wrote up`,
           page.id,
         );
-      // A package's code usually sits in one folder, not at its root: `src/` in a single-package
-      // repository claims the package just the same. Ten files keeps a small repository quiet. In a
-      // large one no share is telling: a layer like `app/Features` is a third of the repository and
-      // thirty modules, so past fifty files a claim is more than any one page read.
-      else if (n >= 10 && (n * 2 > indexable.length || n > 50))
+      else if (most)
         add(
           "warn",
           `over-broad source \`${source}\` claims ${n} of the ${indexable.length} indexable files: ` +
@@ -130,6 +140,13 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
           page.id,
         );
     }
+    if (!broad && swept.size > 50)
+      add(
+        "warn",
+        `over-broad sources: this page's folders and wildcards claim ${swept.size} indexable files together: ` +
+          `list the files you read instead, or coverage reads green for code nobody wrote up`,
+        page.id,
+      );
 
     checkLinks(
       [...markdownLinks(page.body, page.rel, wikiDir, root), ...relatedLinks(meta, page.rel, wikiDir, root)],
