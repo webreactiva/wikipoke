@@ -1,6 +1,6 @@
 ---
 name: wikipoke-lint
-description: "Check the wiki's health and report what to fix. By default runs the deterministic checks (integrity, staleness, coverage) and explains each finding. With --deep, also reads the pages as a body of text to catch what no script can: contradictions, expired claims, concepts with no page, pages that only restate signatures, undocumented subsystems, wrong confidence. Proposes; fixes nothing without a yes. Use when: (1) the user invokes /wikipoke-lint, (2) the user says 'review the wiki', 'check the wiki', 'is the wiki still right?', (3) every few weeks."
+description: "Check the wiki's health and report what to fix. By default runs the deterministic checks (integrity, staleness, coverage) and explains each finding. With --deep, also reads the pages as a body of text to catch what no script can: contradictions, expired claims, concepts with no page, pages that only restate signatures, undocumented subsystems, missing flows and decisions, wrong confidence. Proposes; fixes nothing without a yes. Use when: (1) the user invokes /wikipoke-lint, (2) the user says 'review the wiki', 'check the wiki', 'is the wiki still right?', (3) every few weeks."
 argument-hint: "[--deep] [--fix-trivial] [--path=<glob>]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in wiki/CONVENTIONS.md. -->
@@ -15,9 +15,9 @@ Two layers under one verb. The first is a machine; the second is a reading.
           │
           ├── default ──► explain the findings · propose fixes
           │
-          └── --deep  ──► read the pages themselves, six lenses:
+          └── --deep  ──► read the pages themselves, seven lenses:
                           contradiction · expired · orphan concept
-                          density · gap · confidence
+                          density · gap · missing kind · confidence
                                    │
                                    ▼
                       prioritized findings + a proposed fix each
@@ -39,7 +39,8 @@ It **proposes; it does not rewrite.** Reconciling with the code is
    coverage are debt**, not breakage.
 3. Watch for the two false greens the machine cannot judge on its own. **An
    over-broad `sources:`** makes coverage read green for code nobody wrote up: read
-   those warnings and the coverage total together. **An ignore list nobody has
+   those warnings and the coverage total together, and report the total as false while
+   they stand, even when the log already calls them known debt. **An ignore list nobody has
    reviewed** does the same, more quietly — `wikipoke check coverage -v` ends with
    how many files `.wikipokeignore` took out; when that number is large, or the
    repository's product is prose the generic `*.md` line swallowed, say so and
@@ -48,7 +49,7 @@ It **proposes; it does not rewrite.** Reconciling with the code is
 ## `--deep` pass
 
 Also read the wiki **as a body of text**: the pages, not the code. Scope it with
-`--path` on a large wiki and say what you skipped. Six lenses:
+`--path` on a large wiki and say what you skipped. Seven lenses:
 
 - **Contradiction**: two pages asserting incompatible things. Name both, and which
   one the code supports.
@@ -61,6 +62,14 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
   screens.
 - **Gap**: a subsystem nobody explains, or an obvious question with no answer.
   Cross-check coverage, including the false green above.
+- **Missing kind**: coverage only asks for module pages, so count the pages by `type:`
+  and look for what it cannot see. Fewer flows than one per three module pages, or no
+  decision once the wiki has a dozen pages, is the usual sign. An entry point (a route,
+  a command, a job, a webhook) whose sequence no `flow` page follows. A "why", an
+  "instead of" or a fix that changed the design, buried in an `entity` page or only in
+  `git log`, with no `decision` page. A `concept` that is only a folder left over
+  (tests, config, tooling). Propose each as a command: `wikipoke-ingest "<the flow or
+  decision>"`.
 - **Confidence**: `high` on a claim you cannot find in the code, or `inferred` on
   something now confirmed.
 

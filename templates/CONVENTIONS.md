@@ -25,7 +25,7 @@ backlog is computed for you:
 
 ```
 wikipoke check coverage   → code no page claims, grouped by folder      (finite, mechanical)
-wikipoke-lint, deep pass  → missing flows, orphan concepts, thin pages  (qualitative)
+wikipoke-lint, deep pass  → missing flows and decisions, orphan concepts, thin pages  (qualitative)
 ```
 
 A hundred pages produced in one pass is a hundred pages nobody reviewed, which is worse than the
