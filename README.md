@@ -13,6 +13,12 @@ repository. When the page holds the answer, that is fewer tokens and the same an
 when it does not, the agent pays for the wiki and the code, and offers to file what it found so the
 next person does not ([measured on three repositories](#does-it-save-tokens)).
 
+*A session in OpenCode, cut down to 47 seconds: the agent runs `wikipoke init` and adds its hook,
+seeds the wiki with the `wikipoke-ingest` skill (six minutes: 20 pages, uncovered code files down
+from 43 to 1), and answers a question about the code citing the lines and the pages that cover it.*
+
+https://github.com/user-attachments/assets/05c7f03d-da40-41a2-8e53-c66d0dce32b7
+
 *Thirty seconds in `wikipoke atlas`, on the wiki this repository keeps of itself: the page list, the graph, a page with its sources, the filter.*
 
 https://github.com/user-attachments/assets/d72063c0-20ba-4632-83ca-31e9e391ba59
