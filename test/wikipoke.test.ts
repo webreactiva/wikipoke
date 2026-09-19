@@ -519,6 +519,17 @@ test("a source that claims most of the repository is over-broad even without a m
   assert.match(broad[0] as string, /`src\/` claims 15 of the 15 indexable files/);
 });
 
+test("a --json larger than a pipe's buffer reaches the reader whole", () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 400; i++) files[`src/gen/${"x".repeat(200)}${i}.js`] = "//\n";
+  const root = repo(files);
+  seed(root);
+  // spawnSync reads through a pipe, like `wikipoke check --json | jq` does.
+  const out = wikipoke(root, "check", "coverage", "--json").out;
+  assert.ok(out.length > 65536, `${out.length} bytes`);
+  assert.ok(json<CoverageJson>(root, "check", "coverage", "--json").unclaimed.length >= 400);
+});
+
 test("a citation is moved from the commit that wrote it, not from synced:", () => {
   const lines = (n: number, tag = "line"): string => Array.from({ length: n }, (_, i) => `${tag} ${i + 1}`).join("\n") + "\n";
   const root = repo({ "src/billing/invoice.js": lines(10) });

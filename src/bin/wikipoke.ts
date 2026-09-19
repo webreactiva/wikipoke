@@ -323,4 +323,6 @@ if (flags.json) {
 }
 
 const errors = lintResult?.errors.length ?? 0;
-process.exit(flags.strict ? (total ? 1 : 0) : errors ? 1 : 0);
+// Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
+// `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
+process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
