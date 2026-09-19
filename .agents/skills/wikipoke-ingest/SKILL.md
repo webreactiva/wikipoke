@@ -1,6 +1,6 @@
 ---
 name: wikipoke-ingest
-description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'seed the wiki', 'create the wiki', 'document <subsystem>', typically when closing a feature."
+description: "Take code into the wiki. Seeds the wiki when it does not exist yet; reconciles it with what changed since the last checkpoint; or, given a path, ingests a part of the repository no pass has covered. Use when: (1) the user invokes /wikipoke-ingest, (2) the wiki notifier says the wiki is behind or a page is stale, (3) the user says 'update the wiki', 'seed the wiki', 'create the wiki', 'document <subsystem>', typically when closing a feature, or 'document everything', 'keep going until it is done' (that is `all`)."
 argument-hint: "[<path> | all]"
 ---
 <!-- managed by wikipoke: `wikipoke init` rewrites this file. Project rules go in wiki/CONVENTIONS.md. -->
@@ -13,7 +13,7 @@ One verb, three ways in. Two are decided for you; the third is the one you aim.
 argument given?
    │
    ├── yes ──► INGEST A PART   that path, whether or not it ever changed
-   │           (`all` = the whole outstanding backlog)
+   │           (`all` = every part of the backlog, one after another)
    │
    └── no ──► wiki/.wikipoke-state.json exists?
                  ├── no  ──► SEED       the avenues, once per repository
@@ -109,7 +109,8 @@ wikipoke check must pass without errors before you are done
 per main subsystem — a dozen or so pages in a single package, one or two more per
 workspace in a monorepo. Then let Mode C fill in the
 neighbourhoods one at a time. Coverage will list exactly what you left, and that
-list being long is fine: it is the backlog, not a failure.
+list being long is fine: it is the backlog, not a failure. Say so when you close
+(see the end of this skill): a seed that does not say what it left reads as done.
 
 ---
 
@@ -177,8 +178,7 @@ pick ONE cluster ──► read that code ──► write the pages it earns
 index.md · inbound links · log.md      (checkpoint untouched)
 ```
 
-1. **Scope it.** With a path, work only inside it. With `all`, take the backlog from
-   `wikipoke check coverage -v`, and read the warning below first.
+1. **Scope it.** With a path, work only inside it. With `all`, run the loop below.
 2. **Decide what earns a page from the file list, then read for one page at a
    time.** A module page per subsystem, plus the flows that cross its files. Never a
    page per file: a cluster of 19 files is usually two pages, not nineteen.
@@ -191,10 +191,36 @@ index.md · inbound links · log.md      (checkpoint untouched)
    repository being indexed up to HEAD. Only Mode B moves the checkpoint.
 6. **Log it** as `## <date> · wikipoke-ingest <target>`.
 
-> **One part per pass.** Ingesting `all` on a repository with a real backlog
-> produces more pages than anyone will review, and an unreviewed page is worse than
-> a missing one. If you do run it, say how many pages it produced and recommend
-> reviewing them in batches.
+### `all`: every part gets its pass
+
+`all` is the person saying they want the whole repository, tokens and all ("document
+everything", "don't stop until it's done"). Do not stop to ask between parts:
+
+```
+wikipoke check coverage ──► its clusters are the parts
+      ▼
+next cluster with no `all` entry in log.md ──► steps 2–6 on it ──► wikipoke check
+      ▼
+every cluster has its entry ──► the flows and decisions ──► done
+```
+
+- **Done means every part had its pass, not that coverage reads zero.** Emptying it
+  honestly means reading every file. What you did not open stays uncovered, and the
+  close says how much.
+- **Never widen a source to make the number drop**: not to a folder you skimmed, not
+  on a page already written. Listing a file's classes and functions is not reading it.
+- **One cluster, one part, one entry**, `## <date> · wikipoke-ingest all: <cluster>`,
+  naming the pages written and what stayed uncovered. The entries are how the person
+  reviews the run part by part, and how a run cut short by the context or the session
+  resumes: `wikipoke-ingest all` again takes the clusters with no entry.
+- **Code that earns no page** (tests, migrations, translations) gets a
+  `.wikipokeignore` line with the reason in the log. When it is worth explaining, add
+  a page that cites a few representative files and name that page in the reason: the
+  schema, not ninety migrations.
+- **Then the pages no folder asks for.** Coverage counts files, so the loop only
+  writes module pages. Before closing, write the flows the log noted as deferred and
+  the decisions `git log` explains: a fix that changed the design, a "why not X".
+- When it ends, say how many pages it wrote, by type and by part.
 
 ---
 
@@ -202,7 +228,13 @@ index.md · inbound links · log.md      (checkpoint untouched)
 
 **Verify:** `wikipoke check`. Fix every error. Warnings about orphans, the index,
 over-broad sources or citations are yours to fix too. Coverage and staleness left
-over are debt: report them, do not chase them in the same pass.
+over are debt: report them, do not chase them in the same pass (unless the pass is `all`).
+
+**Close with what is left.** Run `wikipoke check coverage` and tell the person, in
+numbers: the code files the wiki now covers out of the total, the largest clusters
+still uncovered, and how many files the ignore list hides. Then the next step, as a
+command they can type: `wikipoke-ingest <largest cluster>` for the next part, or
+`wikipoke-ingest all` to give every remaining part its pass, whatever it costs.
 
 ## Notes
 

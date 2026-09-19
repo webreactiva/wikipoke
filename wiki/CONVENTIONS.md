@@ -18,8 +18,10 @@ A person launches the skills; the agent follows them and writes the pages direct
 
 ### Growth is deliberate, never a big bang
 
-The wiki is never written in one sitting. Seeding draws the avenues and stops; from then on it
-grows one part at a time, with a person reviewing each pass. The backlog is computed for you:
+The wiki is never written in one sitting unless someone asks for that. Seeding draws the avenues and
+stops; from then on it grows one part at a time, with a person reviewing each pass, and
+`wikipoke-ingest all` is how they ask for the rest in one go, still logged part by part. The
+backlog is computed for you:
 
 ```
 wikipoke check coverage   → code no page claims, grouped by folder      (finite, mechanical)
