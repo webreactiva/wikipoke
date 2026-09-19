@@ -386,6 +386,12 @@ test("a `!` line in .wikipokeignore brings paths back, and coverage says how man
   assert.equal(back.unclaimed.includes("prompts/agent.md"), true, "a ! line wins over the plain one above it");
   assert.equal(back.ignored.includes("prompts/agent.md"), false);
   assert.match(wikipoke(root, "check", "coverage").out, /file\(s\) ignored by \.wikipokeignore/);
+
+  // Read through `tail`, the verbose list still tells an ignored path from an uncovered one.
+  const verbose = wikipoke(root, "check", "coverage", "-v").out.trim().split("\n");
+  assert.match(verbose.at(-1) ?? "", /file\(s\) ignored by \.wikipokeignore$/);
+  assert.ok(verbose.some((line) => /^ {4}ignored {2}README\.md$/.test(line)), verbose.join("\n"));
+  assert.ok(!verbose.some((line) => /^ {4}README\.md$/.test(line)), "never bare, like an uncovered file");
 });
 
 test("a re-included path counts for the repo axis of drift too", () => {

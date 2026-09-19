@@ -54,10 +54,11 @@ export function report(res: CoverageResult, { verbose }: ReportOptions = {}): nu
     console.log(color.dim("    --"));
     for (const f of res.unclaimed) console.log(`    ${color.dim(f)}`);
   }
-  // Not a finding: a number, so nobody has to infer what the ignore list took out of the total.
+  // Not a finding: a number, so nobody has to infer what the ignore list took out of the total. It
+  // stays the last line, and each ignored path says so, because `-v | tail` is how the list gets read.
   if (res.ignored.length) {
-    console.log(color.dim(`    ${res.ignored.length} more file(s) ignored by ${IGNORE_FILE}${verbose ? ":" : ""}`));
-    if (verbose) for (const f of res.ignored) console.log(`    ${color.dim(f)}`);
+    if (verbose) for (const f of res.ignored) console.log(`    ${color.dim(`ignored  ${f}`)}`);
+    console.log(color.dim(`    ${res.ignored.length} more file(s) ignored by ${IGNORE_FILE}`));
   }
   return res.unclaimed.length;
 }
