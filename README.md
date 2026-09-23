@@ -103,6 +103,11 @@ What a repository gets once wikipoke is installed:
   opening code; `wikipoke-lint` explains what is wrong and, with `--deep`, reads the pages for
   contradictions and gaps. Installed where Claude Code looks (`.claude/skills/`) and where other
   agents do (`.agents/skills/`).
+- ✂️ **An `AGENTS.md` about the code, not the wiki** (experimental). `wikipoke-agents` audits or drafts the root
+  `AGENTS.md` and the nested ones a subdirectory really needs. It keeps only what an agent would
+  get wrong without it, checks every statement against the scripts, CI and git history, and shows
+  the change as a diff before writing it. It usually cuts more than it adds, and the result never
+  mentions wikipoke.
 - 🕰️ **A wiki that knows when it is out of date.** Every page names the files it documents and the
   commit it was checked against, so `wikipoke check drift` lists the stale pages and every
   `path:line` citation the code has moved, with the line it points at now.
@@ -225,14 +230,14 @@ so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on
 | --- | --- | --- |
 | `wiki/CONVENTIONS.md`¹ | the project | the schema: page types, the template, the writing rules |
 | `wiki/.wikipokeignore`¹ | the project | files that never count for coverage (tests, lockfiles, …); a `!` line brings some back |
-| `.agents/skills/wikipoke-*/SKILL.md` | wikipoke | the three skills, for agents that read the neutral folder |
+| `.agents/skills/wikipoke-*/SKILL.md` | wikipoke | the skills, for agents that read the neutral folder |
 | `.claude/skills/wikipoke-*/SKILL.md` | wikipoke | the same skills, for Claude Code, which reads only this one |
 
 ¹ Or the directory `--dir` set, see below.
 
 Both skill homes are always written. Claude Code reads only `.claude/skills` and runs perfectly
 well against a checkout with no `.claude/` and no `CLAUDE.md` in it, so there is nothing in a
-repository to detect it by; writing the skills for an agent that never comes costs three inert
+repository to detect it by; writing the skills for an agent that never comes costs four inert
 Markdown files, and not writing them costs the agent every skill it has. A skill is inert either
 way — nothing runs one until a person names it — which is the whole reason hooks are treated
 differently below.
@@ -317,6 +322,15 @@ are until someone runs it.
 | `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path or a topic, documents a part no pass has covered (`all`: every part, one pass each) |
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims, gaps, and the flows and decisions coverage cannot ask for |
+| `wikipoke-agents` *(experimental)* | audits or writes `AGENTS.md`, and the nested ones a subdirectory needs, about the code and not the wiki; shows the change as a diff and writes only after a yes |
+
+`wikipoke-agents` is the one skill that does not touch the wiki, and it does not need one: it works
+from the scripts, the CI, the toolchain's configuration and the `fix` commits in git history. It
+judges the file one statement at a time and keeps a statement only if an agent would get something
+wrong without it, the repository can back it up, and one `ls` or `grep` would not find it. The
+content always goes in `AGENTS.md`, and `CLAUDE.md` becomes a single `@AGENTS.md` import, so every
+agent reads the same file. It is experimental: it has been tried on this repository only, and
+whether agents make fewer mistakes with the file it writes is not measured yet.
 
 > [!TIP]
 > Ask questions through `/wikipoke-query <question>`. An agent does not always reach for the wiki
