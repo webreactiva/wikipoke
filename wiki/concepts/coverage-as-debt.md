@@ -6,7 +6,7 @@ sources:
   - src/lib/coverage.ts
   - templates/wikipokeignore
   - src/bin/wikipoke.ts
-synced: 78adf3b
+synced: e3139d1
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md

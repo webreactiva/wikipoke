@@ -4,7 +4,7 @@ type: entity
 responsibility: How init, hooks add/remove and uninstall write files without ever taking something the project owns.
 sources:
   - src/lib/install.ts
-synced: 78adf3b
+synced: e3139d1
 related:
   - ../concepts/file-ownership.md
   - ./hooks.md

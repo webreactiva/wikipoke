@@ -1,18 +1,19 @@
 ---
-title: The three skills
+title: The skills
 type: entity
-responsibility: What each skill template instructs the agent to do, and the boundaries all three share.
+responsibility: What each skill template instructs the agent to do, and the boundaries the three wiki skills share.
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/skills/wikipoke-query/SKILL.md
   - templates/skills/wikipoke-lint/SKILL.md
-synced: 78adf3b
+  - templates/skills/wikipoke-agents/SKILL.md
+synced: e3139d1
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
 ---
 
-Three Markdown files that no Node code ever reads. They are copied into `.agents/skills/` and
+Four Markdown files that no Node code ever reads. They are copied into `.agents/skills/` and
 `.claude/skills/` alike — since `08177b5` both, always, because Claude Code reads only the second
 and nothing in a repository reliably says it is used — an agent follows them, and the wiki appears.
 Most of wikipoke's behaviour is here rather than in `src/lib/`; see
@@ -54,15 +55,22 @@ Every step an agent takes re-sends the whole conversation, so an answer costs ro
 steps. The first version read the wiki and then explored the source anyway, and saved nothing on a
 well-commented repository. `34f14a3` made it read `index.md` and then every candidate page in one
 step; `78adf3b` goes further, after triage questions on the Laravel app cost *more* with the wiki
-than without it whenever the page only pointed at the code. It now searches and reads the pages in
-one call (`grep -ril … | head -3 | xargs cat`), trusts the lines a current page cites instead of
-re-reading them, and reads code by ranges when the page falls short. The lever that mattered most
+than without it whenever the page only pointed at the code. It trusts the lines a current page
+cites instead of re-reading them, and reads code by ranges when the page falls short. `eb11f31`
+split the search from the reading: the grep now returns each candidate page's `responsibility:`
+line and nothing else, and only the page that answers is read whole — 1,700 bytes instead of
+29,165 on a 22-page wiki. The same search leaves out `log.md` and `CONVENTIONS.md`, which match
+almost any term by construction and, in an alphabetical list cut at three, had crowded out the
+`flows/` pages. The lever that mattered most
 is filing: a detail that sent the answer back to the code counts as a gap, and a filed section is
 re-read against the question — every case of every condition — because two of four early filings
 left out the very fact asked for. With the gaps filed, four triage questions cost 26 to 75 % fewer
-tokens than without the wiki and never opened the code. The README has the earlier numbers. The same commit widened its
+tokens than without the wiki and never opened the code. The README has the earlier numbers. `78adf3b` widened its
 description from "how does X work, where does Y live" to any question about how the code behaves,
-and kept every trigger phrase in English (`a02c873`).
+and kept every trigger phrase in English (`a02c873`). Widening was not enough: on OpenCode the
+description still never fired for a plain question, so every answer was raw exploration.
+`eb11f31` made it open with the imperative ("Use for every question about how this repository's
+code behaves … before any grep, glob or opening a source file"), and it fired on the first try.
 
 **`wikipoke-lint`** reads `wikipoke check` and explains it, and with `--deep` reads the pages as a
 body of text through seven lenses no script can apply: contradiction, expired claim, orphan concept,
@@ -82,8 +90,21 @@ The ingest skill also says what to do when wikipoke itself was upgraded: `wikipo
 refreshes the skills and lists the outdated hooks, then ask before updating a hook — never copy the
 templates by hand.
 
-Four boundaries every one of them repeats, because a skill is read by an agent that has not read
-the others:
+**`wikipoke-agents`**, experimental, is the one skill that does not touch the wiki and does not
+need one. It audits or writes the repository's `AGENTS.md`, plus a nested one only where a
+subdirectory has rules the root file does not, and the result never mentions wikipoke. Its unit
+is the *statement*, not the line or the bullet: each one stays only if an agent would get
+something wrong without it, the repository backs it up (a script, a config value, a `fix` commit,
+a rule a person wrote), and one `ls` or `grep` would not find it. It verifies the statements it
+keeps from an existing file as well as the new ones: an agent asked for a `CLAUDE.md` without it,
+in a trial on this repository, copied a false statement from the old file, wrote a directory tour,
+and dropped a rule the person had written. The content always goes in `AGENTS.md`, with
+`CLAUDE.md` reduced to an `@AGENTS.md` import, so every agent reads one file. It writes outside the
+wiki, so its guard is different: every change is shown as a unified diff, created files included,
+and nothing is written until the person says yes to that diff.
+
+Four boundaries the three wiki skills repeat, because a skill is read by an agent that has not
+read the others (`wikipoke-agents` keeps only the first):
 
 - **Never modify code.** The pass touches `wiki/**` and nothing else — running a generator counts.
   A bug found on the way is noted on the page and reported to the person.

@@ -5,7 +5,7 @@ responsibility: The map of wikipoke: who writes the wiki, who only measures it, 
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: 78adf3b
+synced: e3139d1
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -32,7 +32,7 @@ split.
 
 ## The layers
 
-**The templates are the product.** `templates/` holds the three `SKILL.md` files, the
+**The templates are the product.** `templates/` holds the `SKILL.md` files, the
 `CONVENTIONS.md` schema, the notifier and one file per hook. They are plain files copied
 verbatim with `{{WIKI}}` substituted, never strings built in code — a rule the project states in
 [AGENTS.md](../AGENTS.md) and which keeps the behaviour readable in the file that carries it. So
@@ -87,7 +87,7 @@ explains the one piece of state that does matter: the checkpoint and each page's
 | `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |
 | `src/atlas/` | the atlas: the snapshot, the local server, the export, and the page in `web/` |
-| `templates/skills/*/SKILL.md` | the three skills: where the actual behaviour is |
+| `templates/skills/*/SKILL.md` | the skills: where the actual behaviour is |
 | `templates/CONVENTIONS.md` | the page schema, copied into every wiki and then owned by it |
 
 Node 22.18 or later, and no runtime dependencies: everything the CLI uses is in Node's standard

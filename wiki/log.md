@@ -231,3 +231,14 @@ from their own diffs and re-stamped at `f4615f9`.
   green rule (`86294e6`); query searches and reads in one call and re-reads what it files (`78adf3b`).
 - Citations re-pointed in install.ts (8, one inside a diagram drift does not read), lint.ts (5,
   two re-found by hand) and bin/wikipoke.ts (1). No new page: every change extended one.
+
+## 2026-09-23 · wikipoke-ingest
+- Reconciled 4 commits since `78adf3b`, plus the change that adds `wikipoke-agents`.
+- components/skills.md: query asks candidates for their `responsibility:` line and reads one page
+  whole, leaving `log.md` and `CONVENTIONS.md` out of the search, and its description opens with
+  the imperative so it fires (`eb11f31`); the new, experimental `wikipoke-agents`, which writes
+  `AGENTS.md` about the code, never the wiki, and only after a yes to a diff.
+- architecture.md, flows/install.md, index.md: the skills are four; `init` writes the fourth.
+- cli, install, coverage-as-debt, file-ownership, skills-as-product, cli-read-only, flows/check:
+  their sources changed only in wording ("the three skills" → "the skills"); re-read and
+  re-stamped. No citation moved. No new page.

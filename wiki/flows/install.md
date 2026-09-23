@@ -5,7 +5,7 @@ responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in
 sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
-synced: 78adf3b
+synced: e3139d1
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -20,8 +20,8 @@ wikipoke init [--dir docs/wiki]
    │
    ├─ wiki/CONVENTIONS.md    exists? kept (and said if it differs from the template) : written
    ├─ wiki/.wikipokeignore   exists? kept : written from the template
-   ├─ .agents/skills/wikipoke-{ingest,query,lint}/SKILL.md     ← always
-   ├─ .claude/skills/…                                         ← always: Claude Code reads no other
+   ├─ .agents/skills/wikipoke-{ingest,query,lint,agents}/SKILL.md  ← always
+   ├─ .claude/skills/…                                             ← always: Claude Code reads no other
    │
    ├─ list the hooks: installed, installed but outdated, or used here   (outdated: not touched)
    └─ TTY?  ask which to install        no TTY?  install none; if none is installed either,
