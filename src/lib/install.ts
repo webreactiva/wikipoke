@@ -1,6 +1,6 @@
 // Puts the wiki's working parts into a repository and takes them out again.
 //
-// `init` writes what every wiki needs: the schema, the ignore list and the three skills. Hooks are
+// `init` writes what every wiki needs: the schema, the ignore list and the skills. Hooks are
 // optional and only installed on request (`wikipoke hooks add <name>`). Each one runs the wiki's
 // notifier at a moment where knowing that the wiki is behind is useful: after a commit, or when an
 // agent starts a session. None of them writes the wiki.
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, chooseWiki, gitOrNull, wikiDir } from "./lib.ts";
 
 export const MARKER = "managed by wikipoke";
-export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint"];
+export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents"];
 const NEUTRAL_SKILLS = ".agents/skills";
 const CLAUDE_SKILLS = ".claude/skills";
 const SETTINGS = ".claude/settings.json";

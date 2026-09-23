@@ -107,7 +107,7 @@ test("init writes the schema, the ignore list and the skills in both homes, and 
   const { code, out } = wikipoke(root, "init");
   assert.equal(code, 0);
   for (const home of [".agents/skills", ".claude/skills"])
-    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint"])
+    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents"])
       assert.ok(existsSync(join(root, home, skill, "SKILL.md")), `${home}/${skill}`);
   for (const path of ["wiki/CONVENTIONS.md", "wiki/.wikipokeignore"]) assert.ok(existsSync(join(root, path)), path);
   // A skill is inert until someone names it; a hook fires on its own. Only the second needs a yes.

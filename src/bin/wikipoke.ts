@@ -47,7 +47,7 @@ const isHook = (name: string): name is HookName => (HOOK_NAMES as string[]).incl
 const HELP = `wikipoke: a code wiki that agents maintain
 
   wikipoke init [--dir <path>]
-                               write CONVENTIONS.md, ${IGNORE_FILE} and the three skills, into
+                               write CONVENTIONS.md, ${IGNORE_FILE} and the skills, into
                                .agents/skills/ and .claude/skills/ both. The wiki lives in wiki/
                                unless --dir moves it, which is then remembered in .wikipoke.json.
                                Re-run after upgrading wikipoke: it refreshes the skills, and says
