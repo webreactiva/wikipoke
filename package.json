@@ -10,11 +10,11 @@
     "skills",
     "cli"
   ],
-  "homepage": "https://github.com/delineas/wikipoke#readme",
-  "bugs": "https://github.com/delineas/wikipoke/issues",
+  "homepage": "https://github.com/webreactiva/wikipoke#readme",
+  "bugs": "https://github.com/webreactiva/wikipoke/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/delineas/wikipoke.git"
+    "url": "git+https://github.com/webreactiva/wikipoke.git"
   },
   "license": "MIT",
   "author": "Daniel Primo",

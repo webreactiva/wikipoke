@@ -136,7 +136,7 @@ a terminal.
 
 The skills write the wiki, the hooks notice when it falls behind, and each pass brings it back.
 
-1. `npm install -g wikipoke`, then `wikipoke init` in the repository.
+1. `npm install wikipoke`, then `npx wikipoke init` in the repository.
 2. At the hook prompt, name `git` for a notice after each commit, plus the one for your agent:
    `claude`, `opencode`, `cursor` or `agents`.
 3. `/wikipoke-ingest` seeds the wiki: the architecture, the main flows, a page per subsystem.
@@ -194,11 +194,14 @@ library. The one library atlas uses, [marked](https://marked.js.org), renders Ma
 browser; it is a devDependency the build copies next to the compiled code.
 
 ```sh
-npm install -g wikipoke        # any repository, any language
-npm install -D wikipoke        # or as a dependency of a JavaScript project
+npm install wikipoke           # in the repository; run it as `npx wikipoke`
+npm install -g wikipoke        # or globally, to type `wikipoke` in any repository
 ```
 
-Before the first npm release, or to run a checkout, `github:delineas/wikipoke` works in either
+The commands in this README are written as `wikipoke …`; with a local install, prefix them with
+`npx`.
+
+To run the latest unreleased code, `github:webreactiva/wikipoke` works in either
 command, and `npm run link` inside this repository compiles it and puts `wikipoke` on your `PATH`
 (`npm run unlink` takes it off again).
 
