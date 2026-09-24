@@ -1,9 +1,13 @@
-<p align="center"><img src="assets/wikipoke.webp" alt="wikipoke" width="520"></p>
+<p align="center"><img src="assets/wikipoke-light.webp" alt="wikipoke" width="520"></p>
 
 # Wikipoke
 
 <p align="center"><b>A code wiki your agent writes, keeps true to the code,<br>
 and grows from the questions you ask it.</b></p>
+
+```sh
+npm i wikipoke
+```
 
 Wikipoke has your coding agent write a wiki of your repository: the map, the flows that cross
 files, the decisions and why they were taken, with every claim pointing at a line of code. When the
