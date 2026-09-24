@@ -6,7 +6,7 @@
 and grows from the questions you ask it.</b></p>
 
 ```sh
-npm i wikipoke
+npm install -D wikipoke    # or: pnpm add -D wikipoke
 ```
 
 Wikipoke has your coding agent write a wiki of your repository: the map, the flows that cross
@@ -140,7 +140,7 @@ a terminal.
 
 The skills write the wiki, the hooks notice when it falls behind, and each pass brings it back.
 
-1. `npm install wikipoke`, then `npx wikipoke init` in the repository.
+1. `npm install -D wikipoke` (or `pnpm add -D wikipoke`), then `npx wikipoke init` in the repository.
 2. At the hook prompt, name `git` for a notice after each commit, plus the one for your agent:
    `claude`, `opencode`, `cursor` or `agents`.
 3. `/wikipoke-ingest` seeds the wiki: the architecture, the main flows, a page per subsystem.
@@ -198,12 +198,13 @@ library. The one library atlas uses, [marked](https://marked.js.org), renders Ma
 browser; it is a devDependency the build copies next to the compiled code.
 
 ```sh
-npm install wikipoke           # in the repository; run it as `npx wikipoke`
-npm install -g wikipoke        # or globally, to type `wikipoke` in any repository
+npm install -D wikipoke        # in a JavaScript project; run it as `npx wikipoke`
+pnpm add -D wikipoke           # the same with pnpm; run it as `pnpm wikipoke`
+npm install -g wikipoke        # any other repository, any language: `wikipoke` everywhere
 ```
 
 The commands in this README are written as `wikipoke …`; with a local install, prefix them with
-`npx`.
+`npx` or `pnpm`.
 
 To run the latest unreleased code, `github:webreactiva/wikipoke` works in either
 command, and `npm run link` inside this repository compiles it and puts `wikipoke` on your `PATH`
