@@ -215,16 +215,39 @@ test("--dir moves the wiki, and everything written names the new place", () => {
   assert.ok(!existsSync(join(root, "docs/wiki/.wikipoke-hook.sh")));
 });
 
-test("--dir refuses git's own directory, ignored folders, ~ and backslashes, before writing", () => {
+test("--dir refuses git's own directory, ignored folders, ~, backslashes and symlinks out, each for its reason", () => {
   const root = repo({ ".gitignore": "node_modules/\ndist\n" });
-  for (const dir of [".git/wiki", "node_modules/wiki", "dist/wiki", "~/wiki", "docs\\wiki"]) {
+  symlinkSync(tmpdir(), join(root, "out"));
+  symlinkSync(".git", join(root, "g"));
+  const refused: [string, RegExp][] = [
+    [".git/wiki", /git keeps its own files there/],
+    [".GIT/wiki", /git keeps its own files there/],
+    ["a/.git/wiki", /git keeps its own files there/],
+    ["././.git/wiki", /git keeps its own files there/],
+    ["node_modules/wiki", /git ignores it/],
+    ["dist/wiki", /git ignores it/],
+    ["~/wiki", /~ is not expanded here/],
+    ["docs\\wiki", /Separate folders with "\/"/],
+    ["out/wiki", /leads outside the repository/],
+    ["g/wiki", /leads into git's own directory/],
+    ["../wiki", /Give a path inside the repository/],
+    ["src/billing/invoice.js", /It is a file/],
+  ];
+  for (const [dir, reason] of refused) {
     const { code, out } = wikipoke(root, "init", "--dir", dir);
     assert.equal(code, 2, dir);
-    assert.match(out, /Not a usable wiki directory/, dir);
+    assert.match(out, /^Not a usable wiki directory: /, dir);
+    assert.match(out, reason, dir);
   }
   assert.ok(!existsSync(join(root, ".agents")), "nothing written");
-  // A folder that does not exist yet, next to an ignored one, is still fine.
+  // Fine: a folder that does not exist yet, one that only looks like .git, and ./ spelled out.
+  for (const dir of ["docs/.git-notes", "./docs/./wiki/"]) assert.equal(wikipoke(root, "init", "--dir", dir).code, 0, dir);
+  assert.deepEqual(JSON.parse(read(root, ".wikipoke.json")), { wiki: "docs/wiki" });
+
+  // A wiki already set up under an ignore rule is the project's: init re-runs on it.
+  put(root, ".gitignore", "node_modules/\ndist\ndocs/\n");
   assert.equal(wikipoke(root, "init", "--dir", "docs/wiki").code, 0);
+  assert.equal(wikipoke(root, "init", "--dir", "docs/other").code, 2);
 });
 
 test("init and hooks leave files they do not manage alone and say what to do by hand", () => {
