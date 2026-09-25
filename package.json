@@ -40,7 +40,9 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.8.1",
     "@types/node": "^22.18.0",
+    "esbuild": "^0.28.2",
     "marked": "^18.0.13",
     "typescript": "^5.9.3"
   }
