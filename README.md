@@ -194,8 +194,10 @@ The ingest writes the pages; the atlas puts them in a browser, or in a folder yo
 
 Node 22.18 or later and git. Wikipoke has no runtime dependencies: the CLI is TypeScript
 compiled to plain ESM on install, and everything it needs at run time is in Node's standard
-library. The one library atlas uses, [marked](https://marked.js.org), renders Markdown in the
-browser; it is a devDependency the build copies next to the compiled code.
+library. Two libraries travel inside the package instead of being installed with it:
+[marked](https://marked.js.org), which renders Markdown in atlas's page, and
+[@clack/prompts](https://github.com/bombshell-dev/clack), which draws `init`'s questions. Both are
+devDependencies the build copies or bundles next to the compiled code, with their licences.
 
 ```sh
 npm install -D wikipoke        # in a JavaScript project; run it as `npx wikipoke`
@@ -222,12 +224,21 @@ Then, in the repository:
 wikipoke init
 ```
 
-In a terminal, `init` ends by asking which hooks to install; Enter installs none. Then, in your
-agent, run the `wikipoke-ingest` skill to seed the wiki. It draws the avenues (architecture, the
-main flows, one page per subsystem) and stops; later passes grow it one part at a time.
+In a terminal, `init` asks one thing at a time: where the wiki should live (`wiki/` unless you
+say otherwise), a yes to the list of files it is about to write — nothing is written before that,
+and a cancel there exits 1 — and which hooks you want. Above the hook checklist it says what each
+one touches, whether it is committed, and which are installed or outdated. Hooks your agent's
+files suggest start ticked; unticking one that is installed leaves it alone. Choosing another
+folder for an existing wiki starts a new, empty one there, and `init` says so before asking:
+moving the pages is yours to do. `--dir` answers the first question in advance; `--yes` asks
+nothing, like a run with no terminal. It ends by saying how to start: in your
+agent, run the `wikipoke-ingest` skill (`/wikipoke-ingest` in Claude Code) to seed the wiki. It
+draws the avenues (architecture, the main flows, one page per subsystem) and stops; later passes
+grow it one part at a time.
 
 **Installing through an agent.** An agent can run `wikipoke init` for you. With nobody at the
-terminal there is no one to answer the hook question, so `init` installs none and hands the
+terminal — or with `--yes`, for an agent whose commands run in a real terminal — there are no
+questions: `init` writes the files at once, installs no hook, and hands the
 decision to the agent instead of dropping it: it prints what is missing, what each hook would do,
 and the command. Which one fits is something the agent knows about itself and `init` cannot see —
 so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on its own.
@@ -520,7 +531,7 @@ The CLI is TypeScript under `src/`, and it is read two different ways.
 ```sh
 npm test         # node --test test/*.test.ts — runs the sources, no build first
 npm run typecheck
-npm run build    # tsc -> dist/, the ESM that actually ships, plus atlas's page and marked
+npm run build    # tsc -> dist/, the ESM that actually ships, plus atlas's page, marked and clack
 npm run link     # build, then `npm link`: the working copy becomes your global wikipoke
 npm run unlink   # take it off the PATH again
 ```
@@ -538,3 +549,8 @@ the check rather than letting one through.
 atlas's page, in `src/atlas/web/`, is the exception: plain HTML, CSS and JavaScript the browser
 runs as they are, which `scripts/build.ts` copies into `dist/` along with marked. `atlas.js` is
 still type-checked, through its own `tsconfig.json`, against the snapshot's types.
+
+`init`'s prompts reach `@clack/prompts` through one module, `src/lib/prompts.ts`, and nothing else
+may import it. The build bundles that module with esbuild into `dist/lib/prompts.js`, writes the
+licences of what went in beside it, and fails if any other file in `dist/` still imports `@clack/`:
+that import would resolve on your machine and break every install.
