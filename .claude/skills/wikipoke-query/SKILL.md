@@ -68,7 +68,7 @@ question ──► search wiki/  (the candidates' responsibility lines, or index
    `git rev-parse --short HEAD` as `synced:`, and `confidence: inferred` when the
    answer is your reading rather than something the code states. **Link the new
    page from the pages it relates to**, then add its line to `index.md` and an entry
-   to `log.md` (`## <date> · wikipoke-query`).
+   to `log.md` (`* **wikipoke-query**: …` at the top of today's heading).
 8. **Re-read what you wrote against the question.** The next person will ask it with
    the page and nothing else: every fact your answer gave has to be there, each
    condition with all its cases (not "requires X" when a neighbouring case behaves

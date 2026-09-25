@@ -70,8 +70,7 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
 
   const logRaw = readIfExists(join(wikiDir, "log.md"));
   if (!logRaw) add("error", `${wiki}/log.md is missing`);
-  else if (!/^## \d{4}-\d{2}-\d{2} · /m.test(logRaw))
-    add("warn", `${wiki}/log.md has no \`## YYYY-MM-DD · <skill>\` entry`);
+  else for (const problem of logProblems(logRaw)) add("warn", `${wiki}/log.md ${problem}`);
 
   if (!existsSync(join(wikiDir, "CONVENTIONS.md")))
     add("error", `${wiki}/CONVENTIONS.md is missing: the schema this check enforces`);
@@ -260,6 +259,33 @@ function misread(value: string): string | null {
   if (/:(?:[ \t]|$)/.test(value)) return "holds `: `";
   if (/[ \t]#/.test(value)) return "holds ` #`, where YAML starts a comment";
   return null;
+}
+
+/**
+ * The log's shape is the Open Knowledge Format's (§9): newest first, one `## YYYY-MM-DD` heading per
+ * day, each pass a `* **<skill>**: …` entry under it. Wikis written before that have one
+ * `## YYYY-MM-DD · <skill>` heading per pass, oldest first: still read, and named as the old shape,
+ * because the next ingest pass rewrites it. Warnings only: the log is history, not the wiki's truth.
+ */
+export function logProblems(raw: string): string[] {
+  const headings = [...raw.matchAll(/^## (\d{4}-\d{2}-\d{2})(.*)$/gm)].map((m) => ({ date: m[1] as string, rest: (m[2] as string).trim() }));
+  if (!headings.length) return ["has no `## YYYY-MM-DD` heading: one per day, newest first"];
+  if (headings.some((h) => h.rest.startsWith("·")))
+    return [
+      "has the old shape, a `## YYYY-MM-DD · <skill>` heading per pass, oldest first: " +
+        "the next wikipoke-ingest pass rewrites it newest first, one heading per day, each pass a `* **<skill>**: …` entry",
+    ];
+  const problems: string[] = [];
+  const odd = headings.find((h) => h.rest);
+  if (odd) problems.push(`heading \`## ${odd.date} ${odd.rest}\` holds more than the date: the skill goes in the entry, \`* **<skill>**: …\``);
+  for (let i = 1; i < headings.length; i++) {
+    const [before, here] = [headings[i - 1]?.date ?? "", headings[i]?.date ?? ""];
+    if (here === before) problems.push(`has two \`## ${here}\` headings: one per day, every pass of that day under it`);
+    else if (here > before) problems.push(`is not newest first: \`## ${here}\` comes after \`## ${before}\``);
+    else continue;
+    break;
+  }
+  return problems;
 }
 
 /** Reads a repository file once, split into lines. Pages cite the same file many times over. */

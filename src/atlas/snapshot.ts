@@ -14,6 +14,7 @@ import {
   markdownLinks,
   pageCitations,
   pageTypes,
+  parseFrontmatter,
   readPage,
   relatedLinks,
 } from "../lib/lib.ts";
@@ -127,7 +128,8 @@ export function snapshot(ctx: CheckContext, { live }: { live: boolean }): Snapsh
     id,
     rel: `${id}.md`,
     title,
-    body: readFileSync(join(wikiDir, `${id}.md`), "utf8"),
+    // CONVENTIONS and index may open with a frontmatter for other tools (OKF): not something to read.
+    body: parseFrontmatter(readFileSync(join(wikiDir, `${id}.md`), "utf8")).body,
   }));
 
   const commit = gitOrNull(root, ["rev-parse", "HEAD"])?.trim() ?? "";
