@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: e3139d1
+synced: 542edcd
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -74,6 +74,6 @@ before it re-stamps `synced:`. That is the whole integration surface between the
 the CLI hands over measurements, and the agent decides what to write.
 
 Because the skills read it through a pipe, the run ends by setting the exit code and letting stdout
-drain (`src/bin/wikipoke.ts:328`). It used to call `process.exit`, which drops what a pipe has not
+drain (`src/bin/wikipoke.ts:330`). It used to call `process.exit`, which drops what a pipe has not
 taken yet: on a 1,480-file repository `check coverage --json` is about 75 KB, and every agent that
 piped it into `jq` or `python3` got the first 64 KB and a parse error (`c82a188`).
