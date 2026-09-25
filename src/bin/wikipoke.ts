@@ -2,7 +2,7 @@
 // wikipoke: a code wiki that agents maintain. Three skills write it; this CLI sets it up, checks
 // it and shows it, and never writes a page.
 //
-//   wikipoke init [--dir <path>]          the schema, the ignore list and the skills; re-run to refresh
+//   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
@@ -12,7 +12,6 @@
 // Staleness and coverage are debt, not breakage: they do not fail a plain run.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 
 import { exportSite } from "../atlas/export.ts";
@@ -27,6 +26,7 @@ import type { CheckContext, ReportOptions } from "../lib/lib.ts";
 import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
+import { interactiveInit } from "../lib/setup.ts";
 
 const CHECKS = ["drift", "coverage", "lint"] as const;
 type CheckName = (typeof CHECKS)[number];
@@ -50,8 +50,10 @@ const HELP = `wikipoke: a code wiki that agents maintain
                                write CONVENTIONS.md, ${IGNORE_FILE} and the skills, into
                                .agents/skills/ and .claude/skills/ both. The wiki lives in wiki/
                                unless --dir moves it, which is then remembered in .wikipoke.json.
-                               Re-run after upgrading wikipoke: it refreshes the skills, and says
-                               which hooks are outdated without touching them
+                               In a terminal it asks first; re-run after upgrading wikipoke: it
+                               refreshes the skills, and says which hooks are outdated
+      -y, --yes                no questions: write at once and install no hook, as when an
+                               agent or a pipe runs it
   wikipoke hooks               list the optional hooks, which are installed, which are outdated
   wikipoke hooks add <name>... install hooks, or update installed ones: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
@@ -75,6 +77,7 @@ try {
       strict: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
       dir: { type: "string" },
+      yes: { type: "boolean", short: "y" },
       out: { type: "string" },
       port: { type: "string" },
       help: { type: "boolean", short: "h" },
@@ -88,9 +91,11 @@ try {
 const { values: flags, positionals } = args;
 const [command, ...rest] = positionals;
 
+const version = (): string =>
+  (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
+
 if (flags.version) {
-  const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
-  console.log(manifest.version);
+  console.log(version());
   process.exit(0);
 }
 if (flags.help || !command) {
@@ -181,24 +186,21 @@ if (command === "init") {
       process.exit(2);
     }
   }
+  // A person at the terminal is asked step by step; anyone else gets the plain run below, unchanged.
+  // --yes is for an agent that runs its commands in a real terminal, where nobody would answer.
+  if (process.stdin.isTTY && process.stdout.isTTY && !flags.yes) {
+    await interactiveInit(root, flags.dir, version());
+    process.exit(0);
+  }
   print(init(root, flags.dir === undefined ? {} : { dir: flags.dir }));
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);
   console.log(`\nHooks are optional. Each one tells you or your agent when the wiki falls behind the code:\n`);
-  const { installed } = printHooks();
-  if (process.stdin.isTTY && process.stdout.isTTY) {
-    const prompt = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await prompt.question(`\nInstall which? Names separated by spaces, Enter for none: `).catch(() => ""); // Ctrl+D or Ctrl+C: none
-    prompt.close();
-    const names = answer.split(/[\s,]+/).filter(Boolean);
-    if (names.length) print(addHooks(root, hookNames(names)));
-  } else if (!installed) {
-    // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
-    // Which hook fits is something the agent knows about itself and this command cannot see, so
-    // the invitation names the choice and the command instead of guessing at one. A re-run on a
-    // repository that already has one says nothing: "no hook was installed" would read as none is.
-    console.log(invitation());
-  }
+  // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
+  // Which hook fits is something the agent knows about itself and this command cannot see, so
+  // the invitation names the choice and the command instead of guessing at one. A re-run on a
+  // repository that already has one says nothing: "no hook was installed" would read as none is.
+  if (!printHooks().installed) console.log(invitation());
   console.log(
     existsSync(join(wikiPath, STATE_FILE))
       ? `\nThe wiki is already seeded: \`wikipoke check\` shows what it owes.`

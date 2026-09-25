@@ -5,7 +5,7 @@ responsibility: "The map of wikipoke: who writes the wiki, who only measures it,
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: e3139d1
+synced: 542edcd
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -55,7 +55,7 @@ Until `df4db0e` the CLI kept the three in one object and indexed it by name, whi
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
 name (`src/bin/wikipoke.ts:39`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:289`). The uniform `run`/`report` contract is unchanged; what changed is that
+(`src/bin/wikipoke.ts:291`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
 
 **The atlas shows the wiki and writes only outside it.** `src/atlas/` gathers the pages, their
@@ -85,14 +85,16 @@ explains the one piece of state that does matter: the checkpoint and each page's
 | --- | --- |
 | `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `atlas`, `uninstall` |
 | `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
+| `src/lib/setup.ts` | `init` when a person is at the terminal: the questions, then `install.ts` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |
 | `src/atlas/` | the atlas: the snapshot, the local server, the export, and the page in `web/` |
 | `templates/skills/*/SKILL.md` | the skills: where the actual behaviour is |
 | `templates/CONVENTIONS.md` | the page schema, copied into every wiki and then owned by it |
 
 Node 22.18 or later, and no runtime dependencies: everything the CLI uses is in Node's standard
-library, and marked, the one library the atlas's page loads, is copied in by the build rather than
-installed alongside. Until `df4db0e` there was no build step either and the sources were `.mjs` under `bin/`
+library, except two libraries that travel inside the package rather than being installed
+alongside: marked, which the atlas's page loads, copied in by the build, and @clack/prompts, which
+draws [the interactive `init`](decisions/interactive-init.md), bundled into `dist/lib/prompts.js`. Until `df4db0e` there was no build step either and the sources were `.mjs` under `bin/`
 and `lib/`; they are now TypeScript under `src/`, read from source in development and shipped
 compiled, for the reasons in
 [decisions/typescript-two-ways.md](decisions/typescript-two-ways.md). `npm test` runs

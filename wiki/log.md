@@ -242,3 +242,21 @@ from their own diffs and re-stamped at `f4615f9`.
 - cli, install, coverage-as-debt, file-ownership, skills-as-product, cli-read-only, flows/check:
   their sources changed only in wording ("the three skills" → "the skills"); re-read and
   re-stamped. No citation moved. No new page.
+
+## 2026-09-25 · wikipoke-ingest
+- Reconciled 9 commits since `e3139d1`: the interactive `init` of issue #2 (PR #10), the bundled
+  @clack/prompts, and a pull request template.
+- new: decisions/interactive-init.md, from PR #10's Decisions section: the intent, the two paths,
+  what is hard to undo (`--yes`, the exit codes, the rule for asking), the reversible choices and
+  the discarded ones (a regular dependency, prompts on `node:readline`).
+- flows/install.md: `init` splits on TTY and `--yes` (`f5879b8`); before, it wrote first and then
+  read hook names typed on one line. The interactive path, its exit codes, the folder-move warning
+  and the three wordings each hook has. Now also sources `src/lib/setup.ts`.
+- components/cli.md: the `init` section says what the terminal branch used to be; 11 citations
+  re-pointed. decisions/typescript-two-ways.md: esbuild bundles clack into `dist/lib/prompts.js`
+  and the build refuses a stray `@clack/` import (`ea005d1`). architecture.md: `setup.ts` in the
+  entry points, and the two libraries that travel inside the package.
+- components/atlas.md, concepts/coverage-as-debt.md, flows/check.md: citations re-pointed only.
+  decisions/cli-read-only.md: the questions do not move the line; `AGENTS.md` changed only by the
+  PR-template rule, re-read.
+- Left uncovered: `src/atlas/web` (1 file), as before.

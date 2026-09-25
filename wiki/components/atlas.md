@@ -11,7 +11,7 @@ sources:
   - src/atlas/web/index.html
   - src/atlas/web/tsconfig.json
   - scripts/build.ts
-synced: f4615f9
+synced: 542edcd
 related:
   - ../architecture.md
   - ./cli.md
@@ -105,7 +105,7 @@ into the wiki. This is read from the code, not tried.
 The page renders Markdown with [marked](https://marked.js.org), which is a devDependency and never a
 copy kept in the repository (`src/atlas/export.ts:16`). Run from the sources, it is read from
 `node_modules`. The build copies it next to the compiled code along with the page
-(`scripts/build.ts:7`), so the published package still has no runtime dependency and atlas works
+(`scripts/build.ts:11`), so the published package still has no runtime dependency and atlas works
 offline. This is the "anything else the shipped tree needs has to be added by hand" cost that
 [TypeScript read two ways](../decisions/typescript-two-ways.md) predicted.
 
