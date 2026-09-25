@@ -76,7 +76,7 @@ file, onto a blank line or onto a lone closing bracket.
   .wikipokeignore       # git pathspecs of files that never count for coverage
   .wikipoke-hook.sh     # the notifier the optional hooks run (managed by wikipoke)
   index.md              # the map: one line per page, from each page's `responsibility`
-  log.md                # append-only narrative of every pass
+  log.md                # the history of every pass, newest first
   architecture.md       # the map and the layers
   flows/                # end-to-end sequences
   concepts/             # cross-cutting patterns and conventions
@@ -200,7 +200,7 @@ Details go in nested items:
       - new: flows/refund.md
 
 A log from before this shape (`## 2026-09-11 · wikipoke-ingest`, oldest first) still counts: lint
-warns about it, and the next `wikipoke-ingest` pass rewrites it, reordering the entries and moving
+warns about it, and the next pass that writes the log rewrites it, reordering the entries and moving
 each skill from its heading into its entry, without changing what they say.
 
 ## Health checks

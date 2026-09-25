@@ -82,7 +82,9 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
    line, an obviously wrong `type:`), and only with `--fix-trivial`. List those
    apart from the proposals.
 6. **Log a `--deep` pass** at the top of today's heading in `wiki/log.md`
-   (newest first, one `## YYYY-MM-DD` per day):
+   (newest first, one `## YYYY-MM-DD` per day; if the log still has the old
+   `## <date> · <skill>` shape, rewrite it first as the ingest skill says under
+   "The log"):
    ```
    ## <date>
 

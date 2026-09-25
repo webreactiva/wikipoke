@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 
 import type { RepoAxis } from "../lib/drift.ts";
 import * as drift from "../lib/drift.ts";
+import { yamlProblems } from "../lib/lint.ts";
 import type { CheckContext, Citation } from "../lib/lib.ts";
 import {
   asList,
@@ -70,6 +71,16 @@ const DOCS: [id: string, title: string][] = [
   ["CONVENTIONS", "Conventions"],
 ];
 
+/**
+ * CONVENTIONS and index may open with a frontmatter for other tools (OKF): not something to read.
+ * Only a block that is all `key: value` and `- item` lines goes. One that never closes would run to
+ * the next `---` in the text and take the prose with it, so it stays, where lint names it.
+ */
+function docBody(raw: string): string {
+  const { data, body } = parseFrontmatter(raw);
+  return data && !yamlProblems(raw).some((problem) => problem.includes("is not `key: value`")) ? body : raw;
+}
+
 export function snapshot(ctx: CheckContext, { live }: { live: boolean }): Snapshot {
   const { root, wikiDir, wiki } = ctx;
   const loaded = listPages(wikiDir).map(readPage);
@@ -128,8 +139,7 @@ export function snapshot(ctx: CheckContext, { live }: { live: boolean }): Snapsh
     id,
     rel: `${id}.md`,
     title,
-    // CONVENTIONS and index may open with a frontmatter for other tools (OKF): not something to read.
-    body: parseFrontmatter(readFileSync(join(wikiDir, `${id}.md`), "utf8")).body,
+    body: docBody(readFileSync(join(wikiDir, `${id}.md`), "utf8")),
   }));
 
   const commit = gitOrNull(root, ["rev-parse", "HEAD"])?.trim() ?? "";

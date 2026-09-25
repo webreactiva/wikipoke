@@ -382,12 +382,17 @@ test("the log is newest first, one heading per day, and the old shape is named f
     [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-12\n\n* **b**: y"), /two `## 2026-09-12` headings/],
     [log("## 2026-09-12 wikipoke-ingest\n\n* **a**: x"), /holds more than the date/],
     [log("Nothing yet."), /no `## YYYY-MM-DD` heading/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-02-31\n\n* **b**: y"), /`## 2026-02-31` is not a real date/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-11 · wikipoke-ingest\n- y"), /mixes the new shape with the old one/],
   ];
   for (const [raw, reason] of cases) {
     const found = logProblems(raw);
     assert.equal(found.length, 1, `${raw}\n${found.join("\n")}`);
     assert.match(found[0] ?? "", reason);
   }
+  // A heading inside a code block is an example, not a day; a day seen twice far apart is both.
+  assert.deepEqual(logProblems(log("## 2026-09-12\n\n* **a**: x\n\n```\n## 2020-01-01\n## 2030-01-01\n```")), []);
+  assert.equal(logProblems(log("## 2026-09-20\n\n* **a**: x", "## 2026-09-10\n\n* **b**: y", "## 2026-09-20\n\n* **c**: z")).length, 2);
 
   // A seeded wiki in the new shape is clean; one in the old shape warns, and still passes.
   const root = repo();
@@ -399,12 +404,23 @@ test("the log is newest first, one heading per day, and the old shape is named f
   assert.match(out, /wiki\/log\.md has the old shape/);
 });
 
-test("the wiki is an OKF bundle: CONVENTIONS.md carries a type", () => {
+test("the wiki is an OKF bundle: CONVENTIONS.md carries a type, and an older one is named on upgrade", () => {
   const root = repo();
-  wikipoke(root, "init");
+  seed(root);
   const conventions = parseFrontmatter(read(root, "wiki/CONVENTIONS.md"));
   assert.equal(conventions.data?.type, "schema");
   assert.doesNotMatch(conventions.body, /^\s*---/);
+  assert.doesNotMatch(wikipoke(root, "check", "lint").out, /CONVENTIONS/);
+
+  // A CONVENTIONS.md written by an older wikipoke: lint warns, and init says what to carry over.
+  put(root, "wiki/CONVENTIONS.md", conventions.body.replace(/^\s+/, ""));
+  assert.match(wikipoke(root, "check", "lint").out, /CONVENTIONS\.md has no frontmatter with a `type`/);
+  assert.match(wikipoke(root, "init").out, /predates the Open Knowledge Format shape: .*"State and log"/);
+
+  // One that never closes keeps its text in atlas instead of losing it to the next `---`.
+  put(root, "wiki/CONVENTIONS.md", `---\ntype: schema\n${conventions.body}`);
+  assert.equal(wikipoke(root, "atlas", "--out", "site").code, 0);
+  assert.match(read(root, "site/wiki.js"), /# Wiki conventions/);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {
