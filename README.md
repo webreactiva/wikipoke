@@ -499,9 +499,11 @@ table.
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle:
 every file other than `index.md` and `log.md` has frontmatter a strict YAML parser reads, with a
 `type`; `index.md` declares `okf_version: "0.2"`; and `log.md` lists passes newest first, one
-`## YYYY-MM-DD` heading per day. `lint` warns when a page or the log drifts from that. This
-repository's own wiki loads with no error in the OKF reference agent's parser. Pages carry more
-than OKF asks (`sources:`, `synced:`, `responsibility:`); OKF allows extra keys.
+`## YYYY-MM-DD` heading per day. `lint` warns when a page, `CONVENTIONS.md` or the log drifts
+from that; a wiki made by an older wikipoke gets its log rewritten by the next pass that writes it.
+Every document in this repository's own wiki loads with no error in the OKF reference agent's
+parser. Pages carry more than OKF asks (`sources:`, `synced:`, `responsibility:`); OKF allows
+extra keys.
 
 ## Uninstall
 
