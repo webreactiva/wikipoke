@@ -1,7 +1,7 @@
 ---
 title: Architecture
 type: architecture
-responsibility: The map of wikipoke: who writes the wiki, who only measures it, and where the boundary between them is drawn.
+responsibility: "The map of wikipoke: who writes the wiki, who only measures it, and where the boundary between them is drawn."
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
