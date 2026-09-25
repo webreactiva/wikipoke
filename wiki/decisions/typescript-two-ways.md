@@ -8,7 +8,9 @@ sources:
   - package.json
   - scripts/build.ts
   - src/atlas/web/tsconfig.json
-synced: f4615f9
+synced: 542edcd
+related:
+  - ./interactive-init.md
 ---
 
 Node 22.18 runs a `.ts` file by stripping the types out of it and executing what is left. That is
@@ -43,8 +45,18 @@ That second half came due in `12ff4b8`. Until then the build was `tsc` followed 
 `node -e` that set the bit. [The atlas](../components/atlas.md) brought files `tsc` never sees —
 its HTML, CSS and browser JavaScript, and marked, which renders the Markdown — so the build became
 `tsc` followed by `scripts/build.ts` (`package.json:35`), which copies the page and marked into
-`dist/atlas/web/` and then sets the bit (`scripts/build.ts:7`). marked is a devDependency, so
-copying it at build time is what keeps the published package free of runtime dependencies.
+`dist/atlas/web/` (`scripts/build.ts:11`) and then sets the bit (`scripts/build.ts:40`). marked is a
+devDependency, so copying it at build time is what keeps the published package free of runtime
+dependencies.
+
+The second library to travel that way is @clack/prompts, which draws the questions of
+[the interactive `init`](./interactive-init.md) since `ea005d1`. It is not copied but bundled: `tsc`
+emits `src/lib/prompts.ts` as a one-line re-export, and esbuild then replaces it with clack and its
+four small dependencies inside (`scripts/build.ts:14`). Their licences are written next to it
+(`scripts/build.ts:31`), and tsc's map and declarations for that file are deleted because they
+describe the re-export, not the bundle (`scripts/build.ts:33`). The build fails if any other file in
+`dist/` still names `@clack/` (`scripts/build.ts:37`): that import would resolve in a working copy,
+where `node_modules` has it, and break every install, where it does not.
 
 ## The rules this puts on `src/`
 
