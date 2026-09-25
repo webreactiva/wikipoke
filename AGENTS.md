@@ -7,6 +7,12 @@
   check that is deterministic and read-only, or to `wikipoke atlas`, which reads the wiki and
   writes only outside it; never make full coverage a precondition for anything.
 - Templates are plain files under `templates/`, copied as they are. Do not move them into strings.
+- Every wiki wikipoke produces is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
+  v0.2 bundle, and every change keeps it one (SPEC §11). Each `.md` other than `index.md` and
+  `log.md` has frontmatter a strict YAML parser reads, with a non-empty `type`. `index.md` has no
+  frontmatter but `okf_version`. `log.md` is newest first, one `## YYYY-MM-DD` heading per day.
+  A change to the page template, `CONVENTIONS.md`, the index or the log checks these first, and
+  lint warns about what it can.
 - The CLI is TypeScript in `src/`: run straight from source in development (Node strips the types)
   and shipped compiled from `dist/`. Imports name the `.ts` file, and only erasable syntax is
   allowed — no `enum`, no `namespace`, no parameter properties. Run `npm run typecheck` and
