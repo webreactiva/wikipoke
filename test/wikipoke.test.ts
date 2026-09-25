@@ -215,6 +215,18 @@ test("--dir moves the wiki, and everything written names the new place", () => {
   assert.ok(!existsSync(join(root, "docs/wiki/.wikipoke-hook.sh")));
 });
 
+test("--dir refuses git's own directory, ignored folders, ~ and backslashes, before writing", () => {
+  const root = repo({ ".gitignore": "node_modules/\ndist\n" });
+  for (const dir of [".git/wiki", "node_modules/wiki", "dist/wiki", "~/wiki", "docs\\wiki"]) {
+    const { code, out } = wikipoke(root, "init", "--dir", dir);
+    assert.equal(code, 2, dir);
+    assert.match(out, /Not a usable wiki directory/, dir);
+  }
+  assert.ok(!existsSync(join(root, ".agents")), "nothing written");
+  // A folder that does not exist yet, next to an ignored one, is still fine.
+  assert.equal(wikipoke(root, "init", "--dir", "docs/wiki").code, 0);
+});
+
 test("init and hooks leave files they do not manage alone and say what to do by hand", () => {
   const root = repo({ ".agents/skills/wikipoke-query/SKILL.md": "mine\n", ".cursor/rules/wikipoke.mdc": "ours\n" });
   put(root, ".git/hooks/post-commit", "#!/bin/sh\necho mine\n");

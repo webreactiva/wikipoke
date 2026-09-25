@@ -103,15 +103,24 @@ export function wikiDir(root: string): string {
 export type WikiChoice = { ok: true; wiki: string } | { ok: false; problem: string };
 
 /**
- * A wiki path a project may set: relative, inside the repository, not the repository itself, and
- * not a path something else already occupies. The last one is checked here rather than left to
- * `mkdir`, so a bad `--dir` is a sentence the caller can print instead of a stack trace from
- * halfway through writing the files.
+ * A wiki path a project may set: relative, inside the repository, not the repository itself, a
+ * place git commits, and not a path something else already occupies. These are checked here rather
+ * than left to `mkdir`, so a bad `--dir` is a sentence the caller can print instead of a stack trace
+ * from halfway through writing the files, or a wiki that is never committed.
  */
 export function chooseWiki(value: unknown, root: string): WikiChoice {
   const clean = String(value ?? "").trim().replace(/^\.\//, "").replace(/\/+$/, "");
+  const unusable = (why: string): WikiChoice => ({ ok: false, problem: `Not a usable wiki directory: ${String(value)}. ${why}` });
   if (!clean || clean === "." || clean.startsWith("/") || clean.split("/").includes(".."))
-    return { ok: false, problem: `Not a usable wiki directory: ${String(value)}. Give a path inside the repository, such as docs/wiki.` };
+    return unusable("Give a path inside the repository, such as docs/wiki.");
+  // The shell expands ~ only unquoted and at the start of a word: here it would be a folder named ~.
+  if (clean.startsWith("~")) return unusable("~ is not expanded here: give a path inside the repository, such as docs/wiki.");
+  // Every template embeds this path, and the hooks run it through sh: "/" is the only separator.
+  if (clean.includes("\\")) return unusable('Separate folders with "/", such as docs/wiki.');
+  if (clean.split("/")[0] === ".git") return unusable("That is git's own directory.");
+  // check-ignore exits 0 when the path is ignored and 1 when it is not; gitOrNull turns 1 into null.
+  if (gitOrNull(root, ["check-ignore", "-q", "--no-index", `${clean}/`]) !== null)
+    return unusable("git ignores it, so the wiki would never be committed.");
   const full = join(root, clean);
   if (existsSync(full) && !statSync(full).isDirectory())
     return { ok: false, problem: `${clean} is a file, not a directory: the wiki needs a directory of its own.` };
