@@ -89,6 +89,8 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
       continue;
     }
 
+    for (const problem of yamlProblems(page.raw)) add("warn", problem, page.id);
+
     for (const key of REQUIRED_KEYS) {
       const value = meta[key];
       if (value === undefined || value === "" || (Array.isArray(value) && !value.length))
@@ -186,6 +188,78 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     warnings: findings.filter((f) => f.level === "warn"),
     pages: pages.length,
   };
+}
+
+/** A plain value opening with one of these is read by YAML as something else: a list, a map, a tag, an anchor… */
+const INDICATOR = /^(?:[[\]{},#&*!|>'"%@`]|[-?:](?:[ \t]|$))/;
+
+/**
+ * Frontmatter lines a strict YAML parser reads differently from wikipoke, or not at all. wikipoke's
+ * own reader splits a line at the first ": " on purpose, so it accepts them, while Obsidian, static
+ * site generators and every YAML library reject or misread the page. The same line walk as
+ * `parseFrontmatter`: `key: value` and `  - item`. A warning, not an error: wikipoke itself reads
+ * the page fine, and what breaks is every other tool.
+ */
+export function yamlProblems(raw: string): string[] {
+  if (!raw.startsWith("---")) return [];
+  const end = raw.indexOf("\n---", 3);
+  if (end === -1) return [];
+  const problems: string[] = [];
+  let list = false; // whether a `- item` line has an empty `key:` above it to belong to
+  for (const line of raw.slice(raw.indexOf("\n") + 1, end).split("\n")) {
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    if (line.includes("\t")) {
+      problems.push(`frontmatter line \`${line.trim()}\` holds a tab, which YAML rejects there: use spaces`);
+      continue;
+    }
+    const item = line.match(/^( +- +)(.*)$/);
+    const pair = item ? null : line.match(/^([A-Za-z_][\w-]*:)(.*)$/);
+    if (item && !list) continue; // wikipoke skips it too; nothing to compare
+    if (!item && !pair) {
+      problems.push(`frontmatter line \`${line.trim()}\` is not \`key: value\` or \`- item\`: wikipoke skips it, YAML reads it into the value above or rejects it`);
+      continue;
+    }
+    const [, lead = "", rest = ""] = item ?? pair ?? [];
+    if (pair) list = rest.trim() === "";
+    if (pair && rest && !/^ /.test(rest)) {
+      problems.push(`frontmatter \`${line.trim()}\` has no space after \`${lead}\`, so YAML reads the whole line as text: write \`${lead} ${rest}\``);
+      continue;
+    }
+    const value = rest.trim();
+    // `- [a, b]` is a list inside the list to YAML, and one string to wikipoke.
+    const reason = value && (item && value.startsWith("[") ? "is a `[…]` list inside a list" : misread(value));
+    if (!reason) continue;
+    const fix = value.startsWith("[")
+      ? "write it as a block list, one `- item` per line"
+      : `quote it, \`${lead.trim()} ${singleQuoted(value)}\``;
+    problems.push(`frontmatter \`${lead.trim()} …\` ${reason}, which a strict YAML parser reads differently: ${fix}`);
+  }
+  return problems;
+}
+
+/**
+ * The value a quoted line should hold. Single quotes, because inside them YAML reads every character
+ * as written, backslashes included, and an inner `'` is written twice; `unquote` reads it back the
+ * same. A value that was already quoted, badly, keeps what is inside its quotes.
+ */
+function singleQuoted(value: string): string {
+  const text = /^(["']).*\1$/.test(value) ? value.slice(1, -1) : value;
+  return `'${text.replaceAll("'", "''")}'`;
+}
+
+function misread(value: string): string | null {
+  if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value) ? null : "is single-quoted with a lone `'` inside";
+  // Only the escapes `unquote` decodes: YAML reads any other backslash differently, or rejects it.
+  if (value.startsWith('"')) return /^"(?:[^"\\]|\\["\\/])*"$/.test(value) ? null : 'is double-quoted with a backslash or a lone `"` inside';
+  if (value.startsWith("["))
+    // wikipoke splits a flow list at every comma, so an item YAML reads another way is a different list.
+    return /^\[[^[\]{}]*\]$/.test(value) && value.slice(1, -1).split(",").every((item) => !item.trim() || !misread(item.trim()))
+      ? null
+      : "is a `[…]` list with an item YAML reads as something else";
+  if (INDICATOR.test(value)) return `starts with \`${value[0]}\``;
+  if (/:(?:[ \t]|$)/.test(value)) return "holds `: `";
+  if (/[ \t]#/.test(value)) return "holds ` #`, where YAML starts a comment";
+  return null;
 }
 
 /** Reads a repository file once, split into lines. Pages cite the same file many times over. */
