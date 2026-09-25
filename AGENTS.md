@@ -11,6 +11,8 @@
   and shipped compiled from `dist/`. Imports name the `.ts` file, and only erasable syntax is
   allowed — no `enum`, no `namespace`, no parameter properties. Run `npm run typecheck` and
   `npm test` before committing.
+- A pull request body follows `.github/pull_request_template.md`, including when it is opened
+  with `gh pr create --body-file`, which skips the template.
 
 <!-- wikipoke:start · managed by wikipoke: `wikipoke hooks remove agents` takes this block out -->
 ## Code wiki
