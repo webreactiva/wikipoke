@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 
 import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
+import { hookStatus } from "../src/lib/install.ts";
+import { hookChoices } from "../src/lib/setup.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -117,6 +119,8 @@ test("init writes the schema, the ignore list and the skills in both homes, and 
   assert.match(out, /No hook was installed/);
   assert.match(out, /If you are an agent reading this/);
   assert.match(out, /wikipoke hooks add <name>/);
+  // --yes, for an agent in a real terminal, is that same plain run.
+  assert.equal(wikipoke(repo(), "init", "--yes").out, out);
 });
 
 test("the skills reach Claude Code even in a repository that shows no sign of it", () => {
@@ -141,6 +145,22 @@ test("a repository with no hook installed is told so, and told what to run", () 
   wikipoke(root, "hooks", "add", "agents");
   assert.doesNotMatch(wikipoke(root, "hooks").out, /No hook was installed/, "silent once one is in");
   assert.doesNotMatch(wikipoke(root, "init").out, /No hook was installed/, "and so is a re-run of init");
+});
+
+test("the interactive checklist ticks what is used or installed, and unticking never removes", () => {
+  const root = repo();
+  put(root, "CLAUDE.md", "# project\n");
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "git");
+  const choices = hookChoices(hookStatus(root));
+  assert.deepEqual(choices.initial, ["git", "claude"]);
+  // An installed, current hook ticked again changes nothing; one left unticked stays installed.
+  assert.deepEqual(choices.wanted(["git", "claude", "agents"]), ["claude", "agents"]);
+  assert.deepEqual(choices.wanted([]), []);
+  // Every row fits 80 columns with its hint; a narrower terminal drops the hint instead of wrapping.
+  assert.ok(choices.options.every((option) => option.hint));
+  assert.match(choices.options[0]?.hint ?? "", /installed$/);
+  assert.ok(hookChoices(hookStatus(root), 30).options.every((option) => !option.hint));
 });
 
 test("hooks add wires every agent, keeps what the files already hold, and is idempotent", () => {
