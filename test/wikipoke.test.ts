@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
-import { DEFAULT_NEVER_SOURCES, neverSourceHit } from "../src/lib/lib.ts";
+import { DEFAULT_NEVER_SOURCES, neverMatchers, neverSourceHit } from "../src/lib/lib.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -318,27 +318,40 @@ test("lint catches broken links, dead sources, orphans and wikilinks, and fails 
 });
 
 test("a source that changes with most commits is warned about, from the list CONVENTIONS.md owns", () => {
-  assert.equal(neverSourceHit("package-lock.json", DEFAULT_NEVER_SOURCES), "package-lock.json");
-  assert.equal(neverSourceHit("./apps/web/pnpm-lock.yaml", DEFAULT_NEVER_SOURCES), "pnpm-lock.yaml");
+  const root = repo({ "package-lock.json": "{}\n", "src/routes.js": "export const routes = [];\n", "src/config/app.js": "x\n" });
+  const defaults = neverMatchers(DEFAULT_NEVER_SOURCES);
+  assert.equal(neverSourceHit("package-lock.json", defaults, root), "package-lock.json");
+  assert.equal(neverSourceHit("./apps/web/pnpm-lock.yaml", defaults, root), "pnpm-lock.yaml");
   // A folder or a glob is the over-broad rule's business, and package.json is not a lock file.
-  for (const source of ["apps/", "**/*.lock", "package.json", "src/lock.ts"]) assert.equal(neverSourceHit(source, DEFAULT_NEVER_SOURCES), undefined, source);
-  assert.equal(neverSourceHit("src/bin/cli.ts", ["src/bin/cli.ts"]), "src/bin/cli.ts");
-  assert.equal(neverSourceHit("other/src/bin/cli.ts", ["src/bin/cli.ts"]), undefined);
+  for (const source of ["apps/", "**/*.lock", "package.json", "src/lock.ts"]) assert.equal(neverSourceHit(source, defaults, root), undefined, source);
+  assert.equal(neverSourceHit("src/config", neverMatchers(["config"]), root), undefined, "a folder, even without its slash");
+  // Entries are read the way sources are: `./` dropped, a trailing `/` meaning everything under it.
+  assert.equal(neverSourceHit("src/bin/cli.ts", neverMatchers(["./src/bin/cli.ts"]), root), "./src/bin/cli.ts");
+  assert.equal(neverSourceHit("src/routes/users.ts", neverMatchers(["src/routes/"]), root), "src/routes/");
+  assert.equal(neverSourceHit("other/src/bin/cli.ts", neverMatchers(["src/bin/cli.ts"]), root), undefined);
 
-  const root = repo({ "package-lock.json": "{}\n", "src/routes.js": "export const routes = [];\n" });
   seed(root);
   page(root, "components/billing.md", { sources: ["src/billing/invoice.js", "package-lock.json", "src/routes.js"] });
-  const lint = (): string[] => json<LintJson>(root, "check", "lint", "--json").warnings.map((f) => f.message);
-  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 1);
+  const warned = (): string[] =>
+    json<LintJson>(root, "check", "lint", "--json").warnings.map((f) => f.message).filter((m) => /changes with most commits/.test(m));
+  assert.deepEqual(warned().map((m) => m.match(/^source `([^`]+)`/)?.[1]), ["package-lock.json"]);
+  assert.match(warned()[0] ?? "", /under "Never a source" in CONVENTIONS\.md/);
   assert.equal(wikipoke(root, "check", "lint").code, 0, "a warning, not an error");
 
-  // The project adds its registry, or empties the list to switch the warning off.
+  // The project adds its registry, in any of the ways a list item gets written, or empties the list.
   const conventions = join(root, "wiki/CONVENTIONS.md");
   const text = readFileSync(conventions, "utf8");
-  writeFileSync(conventions, text.replace("- `go.sum`\n", "- `go.sum`\n- `src/routes.js`\n"));
-  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 2);
-  writeFileSync(conventions, text.replace(/(## Never a source\n[\s\S]*?)\n- `package-lock\.json`[\s\S]*?- `go\.sum`\n/, "$1\n"));
-  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 0);
+  const section = (items: string): string => text.replace(/(## Never a source\n[\s\S]*?\n)- `package-lock\.json`[\s\S]*?- `go\.sum`\n/, `$1${items}`);
+  writeFileSync(conventions, section("- `package-lock.json`, `src/routes.js`\n"));
+  assert.equal(warned().length, 2);
+  writeFileSync(conventions, section("- package-lock.json, src/routes.js\n"));
+  assert.equal(warned().length, 2);
+  writeFileSync(conventions, section("```\n- `src/routes.js`\n```\n"));
+  assert.equal(warned().length, 0, "an example in a code block is not the list");
+
+  // A CONVENTIONS.md from before the list: the defaults stand in, and the message says whose they are.
+  writeFileSync(conventions, text.replace(/## Never a source\n[\s\S]*?(?=\n## )/, ""));
+  assert.match(warned()[0] ?? "", /wikipoke's default list; a "## Never a source" section/);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {

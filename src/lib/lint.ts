@@ -21,6 +21,7 @@ import {
   isOverBroad,
   listPages,
   markdownLinks,
+  neverMatchers,
   neverSourceHit,
   neverSources,
   normalizeSource,
@@ -61,6 +62,7 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
   const pages = listPages(wikiDir).map(readPage);
   const types = pageTypes(wikiDir);
   const never = neverSources(wikiDir);
+  const neverMatch = neverMatchers(never.entries);
   const pageFiles = new Set(pages.map((p) => p.rel));
   const inbound = new Map(pages.map((p) => [p.rel, 0]));
   const tracked = trackedFiles(root);
@@ -113,12 +115,15 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     let broad = false;
     for (const source of asList(meta.sources)) {
       // A warning, not an error: a page that really is about the lock file keeps it.
-      const hit = neverSourceHit(source, never);
+      const hit = neverSourceHit(source, neverMatch, root);
       if (hit)
         add(
           "warn",
           `source \`${source}\` changes with most commits, whatever they are about, so it flags this page stale for work ` +
-            `unrelated to it: cite the files the claim rests on (\`${hit}\` is under "Never a source" in CONVENTIONS.md)`,
+            `unrelated to it: cite the files the claim rests on (` +
+            (never.owned
+              ? `\`${hit}\` is under "Never a source" in CONVENTIONS.md)`
+              : `\`${hit}\` is on wikipoke's default list; a "## Never a source" section in CONVENTIONS.md makes the list the project's)`),
           page.id,
         );
       const glob = normalizeSource(source, root);
