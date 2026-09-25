@@ -202,7 +202,11 @@ export function init(root: string, { dir }: InitOptions = {}): Report {
   if (out.kept.includes(relative(root, conventions)) && read(conventions) !== template("CONVENTIONS.md", wiki))
     out.manual.push(
       `${relative(root, conventions)} differs from the template this version ships, ${join(templates, "CONVENTIONS.md")} ` +
-        `({{WIKI}} stands for ${wiki}). It is the project's and was kept: carry over what you want from the template.`,
+        `({{WIKI}} stands for ${wiki}). It is the project's and was kept: carry over what you want from the template.` +
+        // The one change the skills depend on: they now write the log newest first, one heading per day.
+        (read(conventions)?.startsWith("---")
+          ? ""
+          : ` It predates the Open Knowledge Format shape: take at least its frontmatter (\`type: schema\`) and its "State and log" section, which the skills now follow.`),
     );
   for (const home of SKILL_HOMES) writeSkills(root, home, wiki, out);
   return out;

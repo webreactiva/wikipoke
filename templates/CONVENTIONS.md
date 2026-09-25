@@ -1,3 +1,8 @@
+---
+type: schema
+title: Wiki conventions
+---
+
 # Wiki conventions
 
 This file is the schema of the code wiki: how it is structured and how it is maintained. The
@@ -71,7 +76,7 @@ file, onto a blank line or onto a lone closing bracket.
   .wikipokeignore       # git pathspecs of files that never count for coverage
   .wikipoke-hook.sh     # the notifier the optional hooks run (managed by wikipoke)
   index.md              # the map: one line per page, from each page's `responsibility`
-  log.md                # append-only narrative of every pass
+  log.md                # the history of every pass, newest first
   architecture.md       # the map and the layers
   flows/                # end-to-end sequences
   concepts/             # cross-cutting patterns and conventions
@@ -79,8 +84,12 @@ file, onto a blank line or onto a lone closing bracket.
   decisions/            # "which X when" comparisons and the choices behind them
 ```
 
-`CONVENTIONS.md`, `index.md` and `log.md` are not pages (no frontmatter); every other `.md` file
-under `{{WIKI}}/` is a page and carries the template below.
+`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `{{WIKI}}/` is a
+page and carries the template below. The wiki is also an
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle,
+which other tools can read without knowing wikipoke. That is why this file opens with a two-line
+frontmatter (`type: schema`), why `index.md` may open with `okf_version: "0.2"` and nothing else,
+and why `log.md` has the shape below. The checks never read `index.md` or this file as pages.
 
 ## Page types
 
@@ -118,6 +127,13 @@ Five required keys, two optional. That is the whole schema. A page may carry any
 finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. There is
 deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
 page was verified against, which is the date that matters.
+
+The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
+**Quote a value that holds `: ` or ` #`, or starts with a symbol** such as `{`, `*`, `&`, `!`, `|`,
+`>`, `%`, `@` or `-`, in single quotes, where a backslash is just a backslash and an inner `'` is
+written twice: `responsibility: 'The map: who writes, who measures.'`. A short list may stay
+`[a, b]` when no item needs quoting; otherwise write it one `- item` per line. Use spaces, not
+tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns about the rest.
 
 - **`sources:`** is the inverted index: it is what lets `wikipoke check drift` map a changed file
   back to the pages that document it. Be **specific**: a source that claims a whole package, or
@@ -191,11 +207,22 @@ hand-copied sha keeps its first seven characters and invents the rest:
 
     printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > {{WIKI}}/.wikipoke-state.json
 
-`log.md` is append-only, one entry per pass:
+`log.md` is the history, **newest first**: one `## YYYY-MM-DD` heading per day, and under it one
+`* **<skill>**: …` entry per pass, the newest at the top. The bold part names the skill and, when
+there is one, the mode or target (`wikipoke-ingest all: src/billing`, `wikipoke-lint --deep`).
+Details go in nested items:
 
-    ## 2026-09-11 · wikipoke-ingest
-    - components/billing.md: invoices now round per line, not per total (a1b2c3d)
-    - new: flows/refund.md
+    # Log
+
+    ## 2026-09-11
+
+    * **wikipoke-ingest**: reconciled 3 commits since `f00ba47`.
+      - components/billing.md: invoices now round per line, not per total (a1b2c3d)
+      - new: flows/refund.md
+
+A log from before this shape (`## 2026-09-11 · wikipoke-ingest`, oldest first) still counts: lint
+warns about it, and the next pass that writes the log rewrites it, reordering the entries and moving
+each skill from its heading into its entry, without changing what they say.
 
 ## Health checks
 
@@ -221,7 +248,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   with how many files the ignore list took out, so a rule that hides too much is visible rather
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
-- **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
+- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, a source listed under "Never a source", over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
   or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading

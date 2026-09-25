@@ -81,10 +81,14 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
 5. **Fix nothing without a yes**, except trivia (a broken link, a missing `index.md`
    line, an obviously wrong `type:`), and only with `--fix-trivial`. List those
    apart from the proposals.
-6. **Log a `--deep` pass** in `wiki/log.md`:
+6. **Log a `--deep` pass** at the top of today's heading in `wiki/log.md`
+   (newest first, one `## YYYY-MM-DD` per day; if the log still has the old
+   `## <date> · <skill>` shape, rewrite it first as the ingest skill says under
+   "The log"):
    ```
-   ## <date> · wikipoke-lint --deep
-   - N findings (M critical) · <one line on the state of the wiki>
+   ## <date>
+
+   * **wikipoke-lint --deep**: N findings (M critical) · <one line on the state of the wiki>
    ```
    Do **not** touch `.wikipoke-state.json` and do **not** re-stamp any `synced:`: a review
    verifies nothing against the code on its own. A default pass needs no entry.

@@ -27,6 +27,7 @@ import {
   normalizeSource,
   pageCitations,
   pageTypes,
+  parseFrontmatter,
   readPage,
   relatedLinks,
   trackedFiles,
@@ -75,11 +76,18 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
 
   const logRaw = readIfExists(join(wikiDir, "log.md"));
   if (!logRaw) add("error", `${wiki}/log.md is missing`);
-  else if (!/^## \d{4}-\d{2}-\d{2} · /m.test(logRaw))
-    add("warn", `${wiki}/log.md has no \`## YYYY-MM-DD · <skill>\` entry`);
+  else for (const problem of logProblems(logRaw)) add("warn", `${wiki}/log.md ${problem}`);
 
-  if (!existsSync(join(wikiDir, "CONVENTIONS.md")))
-    add("error", `${wiki}/CONVENTIONS.md is missing: the schema this check enforces`);
+  const conventionsRaw = readIfExists(join(wikiDir, "CONVENTIONS.md"));
+  if (!conventionsRaw) add("error", `${wiki}/CONVENTIONS.md is missing: the schema this check enforces`);
+  // Not a page, but a Markdown file in the bundle, so OKF asks it for a frontmatter with a `type`.
+  else if (parseFrontmatter(conventionsRaw).data?.type === undefined)
+    add(
+      "warn",
+      `${wiki}/CONVENTIONS.md has no frontmatter with a \`type\`, so tools that read the wiki as an Open Knowledge Format bundle reject it: ` +
+        "open it with `---`, `type: schema`, `title: Wiki conventions`, `---`",
+    );
+  else for (const problem of yamlProblems(conventionsRaw)) add("warn", `${wiki}/CONVENTIONS.md ${problem}`);
   if (!existsSync(join(wikiDir, STATE_FILE)))
     add("error", `${wiki}/${STATE_FILE} is missing: no repository checkpoint`);
 
@@ -93,6 +101,8 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
       add("error", "no frontmatter", page.id);
       continue;
     }
+
+    for (const problem of yamlProblems(page.raw)) add("warn", problem, page.id);
 
     for (const key of REQUIRED_KEYS) {
       const value = meta[key];
@@ -203,6 +213,109 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     warnings: findings.filter((f) => f.level === "warn"),
     pages: pages.length,
   };
+}
+
+/** A plain value opening with one of these is read by YAML as something else: a list, a map, a tag, an anchor… */
+const INDICATOR = /^(?:[[\]{},#&*!|>'"%@`]|[-?:](?:[ \t]|$))/;
+
+/**
+ * Frontmatter lines a strict YAML parser reads differently from wikipoke, or not at all. wikipoke's
+ * own reader splits a line at the first ": " on purpose, so it accepts them, while Obsidian, static
+ * site generators and every YAML library reject or misread the page. The same line walk as
+ * `parseFrontmatter`: `key: value` and `  - item`. A warning, not an error: wikipoke itself reads
+ * the page fine, and what breaks is every other tool.
+ */
+export function yamlProblems(raw: string): string[] {
+  if (!raw.startsWith("---")) return [];
+  const end = raw.indexOf("\n---", 3);
+  if (end === -1) return [];
+  const problems: string[] = [];
+  let list = false; // whether a `- item` line has an empty `key:` above it to belong to
+  for (const line of raw.slice(raw.indexOf("\n") + 1, end).split("\n")) {
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    if (line.includes("\t")) {
+      problems.push(`frontmatter line \`${line.trim()}\` holds a tab, which YAML rejects there: use spaces`);
+      continue;
+    }
+    const item = line.match(/^( +- +)(.*)$/);
+    const pair = item ? null : line.match(/^([A-Za-z_][\w-]*:)(.*)$/);
+    if (item && !list) continue; // wikipoke skips it too; nothing to compare
+    if (!item && !pair) {
+      problems.push(`frontmatter line \`${line.trim()}\` is not \`key: value\` or \`- item\`: wikipoke skips it, YAML reads it into the value above or rejects it`);
+      continue;
+    }
+    const [, lead = "", rest = ""] = item ?? pair ?? [];
+    if (pair) list = rest.trim() === "";
+    if (pair && rest && !/^ /.test(rest)) {
+      problems.push(`frontmatter \`${line.trim()}\` has no space after \`${lead}\`, so YAML reads the whole line as text: write \`${lead} ${rest}\``);
+      continue;
+    }
+    const value = rest.trim();
+    // `- [a, b]` is a list inside the list to YAML, and one string to wikipoke.
+    const reason = value && (item && value.startsWith("[") ? "is a `[…]` list inside a list" : misread(value));
+    if (!reason) continue;
+    const fix = value.startsWith("[")
+      ? "write it as a block list, one `- item` per line"
+      : `quote it, \`${lead.trim()} ${singleQuoted(value)}\``;
+    problems.push(`frontmatter \`${lead.trim()} …\` ${reason}, which a strict YAML parser reads differently: ${fix}`);
+  }
+  return problems;
+}
+
+/**
+ * The value a quoted line should hold. Single quotes, because inside them YAML reads every character
+ * as written, backslashes included, and an inner `'` is written twice; `unquote` reads it back the
+ * same. A value that was already quoted, badly, keeps what is inside its quotes.
+ */
+function singleQuoted(value: string): string {
+  const text = /^(["']).*\1$/.test(value) ? value.slice(1, -1) : value;
+  return `'${text.replaceAll("'", "''")}'`;
+}
+
+function misread(value: string): string | null {
+  if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value) ? null : "is single-quoted with a lone `'` inside";
+  // Only the escapes `unquote` decodes: YAML reads any other backslash differently, or rejects it.
+  if (value.startsWith('"')) return /^"(?:[^"\\]|\\["\\/])*"$/.test(value) ? null : 'is double-quoted with a backslash or a lone `"` inside';
+  if (value.startsWith("["))
+    // wikipoke splits a flow list at every comma, so an item YAML reads another way is a different list.
+    return /^\[[^[\]{}]*\]$/.test(value) && value.slice(1, -1).split(",").every((item) => !item.trim() || !misread(item.trim()))
+      ? null
+      : "is a `[…]` list with an item YAML reads as something else";
+  if (INDICATOR.test(value)) return `starts with \`${value[0]}\``;
+  if (/:(?:[ \t]|$)/.test(value)) return "holds `: `";
+  if (/[ \t]#/.test(value)) return "holds ` #`, where YAML starts a comment";
+  return null;
+}
+
+/**
+ * The log's shape is the Open Knowledge Format's (§9): newest first, one `## YYYY-MM-DD` heading per
+ * day, each pass a `* **<skill>**: …` entry under it. Wikis written before that have one
+ * `## YYYY-MM-DD · <skill>` heading per pass, oldest first: still read, and named as the old shape,
+ * because the next pass that writes the log rewrites it. Warnings only: the log is history, not the
+ * wiki's truth. Headings inside fenced code are examples, not days.
+ */
+export function logProblems(raw: string): string[] {
+  const text = raw.replace(/^```[\s\S]*?^```/gm, "");
+  const headings = [...text.matchAll(/^## (\d{4}-\d{2}-\d{2})(?=\s|$)(.*)$/gm)].map((m) => ({ date: m[1] as string, rest: (m[2] as string).trim() }));
+  if (!headings.length) return ["has no `## YYYY-MM-DD` heading: one per day, newest first"];
+  const old = headings.filter((h) => h.rest.startsWith("·")).length;
+  if (old)
+    return [
+      `${old === headings.length ? "has the old shape" : "mixes the new shape with the old one"}, a \`## YYYY-MM-DD · <skill>\` heading per pass, oldest first: ` +
+        "the next pass that writes the log rewrites it newest first, one heading per day, each pass a `* **<skill>**: …` entry",
+    ];
+  const problems: string[] = [];
+  // A date the calendar does not have (2026-02-31) is not ISO 8601, whatever its digits look like.
+  const bad = headings.find((h) => new Date(`${h.date}T00:00:00Z`).toISOString().slice(0, 10) !== h.date);
+  if (bad) problems.push(`heading \`## ${bad.date}\` is not a real date`);
+  const odd = headings.find((h) => h.rest);
+  if (odd) problems.push(`heading \`## ${odd.date} ${odd.rest}\` holds more than the date: the skill goes in the entry, \`* **<skill>**: …\``);
+  const seen = new Set<string>();
+  const twice = headings.find((h) => (seen.has(h.date) ? true : (seen.add(h.date), false)));
+  if (twice) problems.push(`has two \`## ${twice.date}\` headings: one per day, every pass of that day under it`);
+  const order = headings.findIndex((h, i) => i > 0 && h.date > (headings[i - 1]?.date ?? ""));
+  if (order > 0) problems.push(`is not newest first: \`## ${headings[order]?.date}\` comes after \`## ${headings[order - 1]?.date}\``);
+  return problems;
 }
 
 /** Reads a repository file once, split into lines. Pages cite the same file many times over. */

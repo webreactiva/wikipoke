@@ -112,8 +112,11 @@ wikipoke check must pass without errors before you are done
    name) is `confidence: inferred` and carries no `path:line`: a line number you
    never read is a guess that lands on real code, and no check can tell it apart
    from a true one.
-7. **Write `index.md`** grouped by type, one line per page (its `responsibility`).
-8. **Write the first `log.md` entry, then the checkpoint**, with this exact command —
+7. **Write `index.md`** grouped by type, one line per page (its `responsibility`). It
+   opens with a frontmatter holding `okf_version: "0.2"` and nothing else.
+8. **Write the first `log.md` entry, then the checkpoint**. The entry is
+   `* **wikipoke-ingest (seed)**: …` under today's `## YYYY-MM-DD` (the log's shape is
+   below, under "Every mode ends here"). The checkpoint goes with this exact command —
    never type the sha yourself; a hand-copied sha keeps its first seven characters
    and invents the rest:
    ```sh
@@ -171,7 +174,8 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    page.
 6. **Refresh `index.md`** for any page added, retitled or with a new
    `responsibility`.
-7. **Seal.** Append a `log.md` entry and, **only after the final check passes**,
+7. **Seal.** Add a `* **wikipoke-ingest**: …` entry to `log.md` (its shape is under
+   "Every mode ends here"). Then, **only after the final check passes**,
    advance the checkpoint with the same command as a seed — never by typing the sha:
    ```sh
    printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > {{WIKI}}/.wikipoke-state.json
@@ -206,7 +210,7 @@ index.md · inbound links · log.md      (checkpoint untouched)
    exists (usually `architecture.md` or its module page) and its line in `index.md`.
 5. **Do not advance `.wikipoke-state.json`.** Closing a coverage gap says nothing about the
    repository being indexed up to HEAD. Only Mode B moves the checkpoint.
-6. **Log it** as `## <date> · wikipoke-ingest <target>`.
+6. **Log it** as `* **wikipoke-ingest <target>**: …` at the top of today's heading.
 
 ### `all`: every part gets its pass
 
@@ -217,6 +221,7 @@ everything", "don't stop until it's done"). Do not stop to ask between parts:
 wikipoke check coverage ──► its clusters are the parts
       ▼
 next cluster with no `all` entry in log.md ──► steps 2–6 on it ──► wikipoke check
+      (an entry is `**wikipoke-ingest all: <cluster>**`, or `## <date> · wikipoke-ingest all: <cluster>` in an old log)
       ▼
 every cluster has its entry ──► the flows and decisions ──► done
 ```
@@ -226,7 +231,7 @@ every cluster has its entry ──► the flows and decisions ──► done
   close says how much.
 - **Never widen a source to make the number drop**: not to a folder you skimmed, not
   on a page already written. Listing a file's classes and functions is not reading it.
-- **One cluster, one part, one entry**, `## <date> · wikipoke-ingest all: <cluster>`,
+- **One cluster, one part, one entry**, `* **wikipoke-ingest all: <cluster>**: …`,
   naming the pages written and what stayed uncovered. The entries are how the person
   reviews the run part by part, and how a run cut short by the context or the session
   resumes: `wikipoke-ingest all` again takes the clusters with no entry.
@@ -242,6 +247,24 @@ every cluster has its entry ──► the flows and decisions ──► done
 ---
 
 ## Every mode ends here
+
+**The log.** `log.md` is newest first, one `## YYYY-MM-DD` heading per day, and each
+pass one entry at the top of its day:
+
+```
+## 2026-09-25
+
+* **wikipoke-ingest**: reconciled 3 commits since `f00ba47`.
+  - components/billing.md: invoices now round per line (a1b2c3d)
+```
+
+If the log still has the old shape, one `## <date> · <skill>` heading per pass, oldest
+first, rewrite it before adding your entry. Each old heading becomes an entry under its
+date: `## 2026-09-12 · wikipoke-ingest (reconcile)` becomes
+`* **wikipoke-ingest (reconcile)**:`, followed by the entry's first paragraph, or by
+nothing when it opened with a list. Its lists and paragraphs follow as they were,
+indented two spaces under it. Days go newest first, and so do the entries within a day.
+Say in your own entry that you rewrote it. Never change what an old entry says.
 
 **Verify:** `wikipoke check`. Fix every error. Warnings about orphans, the index,
 over-broad sources or citations are yours to fix too. Coverage and staleness left

@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 
 import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
-import { DEFAULT_NEVER_SOURCES, neverMatchers, neverSourceHit } from "../src/lib/lib.ts";
+import { hookStatus } from "../src/lib/install.ts";
+import { DEFAULT_NEVER_SOURCES, neverMatchers, neverSourceHit, parseFrontmatter } from "../src/lib/lib.ts";
+import { logProblems, yamlProblems } from "../src/lib/lint.ts";
+import { hookChoices } from "../src/lib/setup.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -76,7 +79,7 @@ function seed(root: string, wiki = "wiki"): void {
   page(root, "architecture.md", { type: "architecture", sources: ["src/cli.js"], body: "See [billing](./components/billing.md).", wiki });
   page(root, "components/billing.md", { body: "Back to [the map](../architecture.md).", wiki });
   put(root, `${wiki}/index.md`, "# Wiki\n\n- [Architecture](./architecture.md)\n- [Billing](./components/billing.md)\n");
-  put(root, `${wiki}/log.md`, "# Log\n\n## 2026-09-11 · wikipoke-ingest\n- seeded\n");
+  put(root, `${wiki}/log.md`, "# Log\n\n## 2026-09-11\n\n* **wikipoke-ingest (seed)**: seeded\n");
   put(root, `${wiki}/.wikipoke-state.json`, JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
   git(root, "add", "-A");
   git(root, "commit", "-qm", "seed wiki");
@@ -118,6 +121,8 @@ test("init writes the schema, the ignore list and the skills in both homes, and 
   assert.match(out, /No hook was installed/);
   assert.match(out, /If you are an agent reading this/);
   assert.match(out, /wikipoke hooks add <name>/);
+  // --yes, for an agent in a real terminal, is that same plain run.
+  assert.equal(wikipoke(repo(), "init", "--yes").out, out);
 });
 
 test("the skills reach Claude Code even in a repository that shows no sign of it", () => {
@@ -142,6 +147,22 @@ test("a repository with no hook installed is told so, and told what to run", () 
   wikipoke(root, "hooks", "add", "agents");
   assert.doesNotMatch(wikipoke(root, "hooks").out, /No hook was installed/, "silent once one is in");
   assert.doesNotMatch(wikipoke(root, "init").out, /No hook was installed/, "and so is a re-run of init");
+});
+
+test("the interactive checklist ticks what is used or installed, and unticking never removes", () => {
+  const root = repo();
+  put(root, "CLAUDE.md", "# project\n");
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "git");
+  const choices = hookChoices(hookStatus(root));
+  assert.deepEqual(choices.initial, ["git", "claude"]);
+  // An installed, current hook ticked again changes nothing; one left unticked stays installed.
+  assert.deepEqual(choices.wanted(["git", "claude", "agents"]), ["claude", "agents"]);
+  assert.deepEqual(choices.wanted([]), []);
+  // Every row fits 80 columns with its hint; a narrower terminal drops the hint instead of wrapping.
+  assert.ok(choices.options.every((option) => option.hint));
+  assert.match(choices.options[0]?.hint ?? "", /installed$/);
+  assert.ok(hookChoices(hookStatus(root), 30).options.every((option) => !option.hint));
 });
 
 test("hooks add wires every agent, keeps what the files already hold, and is idempotent", () => {
@@ -214,6 +235,41 @@ test("--dir moves the wiki, and everything written names the new place", () => {
   wikipoke(root, "uninstall");
   assert.ok(existsSync(join(root, "docs/wiki/index.md")), "the wiki stays");
   assert.ok(!existsSync(join(root, "docs/wiki/.wikipoke-hook.sh")));
+});
+
+test("--dir refuses git's own directory, ignored folders, ~, backslashes and symlinks out, each for its reason", () => {
+  const root = repo({ ".gitignore": "node_modules/\ndist\n" });
+  symlinkSync(tmpdir(), join(root, "out"));
+  symlinkSync(".git", join(root, "g"));
+  const refused: [string, RegExp][] = [
+    [".git/wiki", /git keeps its own files there/],
+    [".GIT/wiki", /git keeps its own files there/],
+    ["a/.git/wiki", /git keeps its own files there/],
+    ["././.git/wiki", /git keeps its own files there/],
+    ["node_modules/wiki", /git ignores it/],
+    ["dist/wiki", /git ignores it/],
+    ["~/wiki", /~ is not expanded here/],
+    ["docs\\wiki", /Separate folders with "\/"/],
+    ["out/wiki", /leads outside the repository/],
+    ["g/wiki", /leads into git's own directory/],
+    ["../wiki", /Give a path inside the repository/],
+    ["src/billing/invoice.js", /It is a file/],
+  ];
+  for (const [dir, reason] of refused) {
+    const { code, out } = wikipoke(root, "init", "--dir", dir);
+    assert.equal(code, 2, dir);
+    assert.match(out, /^Not a usable wiki directory: /, dir);
+    assert.match(out, reason, dir);
+  }
+  assert.ok(!existsSync(join(root, ".agents")), "nothing written");
+  // Fine: a folder that does not exist yet, one that only looks like .git, and ./ spelled out.
+  for (const dir of ["docs/.git-notes", "./docs/./wiki/"]) assert.equal(wikipoke(root, "init", "--dir", dir).code, 0, dir);
+  assert.deepEqual(JSON.parse(read(root, ".wikipoke.json")), { wiki: "docs/wiki" });
+
+  // A wiki already set up under an ignore rule is the project's: init re-runs on it.
+  put(root, ".gitignore", "node_modules/\ndist\ndocs/\n");
+  assert.equal(wikipoke(root, "init", "--dir", "docs/wiki").code, 0);
+  assert.equal(wikipoke(root, "init", "--dir", "docs/other").code, 2);
 });
 
 test("init and hooks leave files they do not manage alone and say what to do by hand", () => {
@@ -352,6 +408,111 @@ test("a source that changes with most commits is warned about, from the list CON
   // A CONVENTIONS.md from before the list: the defaults stand in, and the message says whose they are.
   writeFileSync(conventions, text.replace(/## Never a source\n[\s\S]*?(?=\n## )/, ""));
   assert.match(warned()[0] ?? "", /wikipoke's default list; a "## Never a source" section/);
+});
+
+test("lint warns about frontmatter a strict YAML parser reads differently, and its fix reads the same in both", () => {
+  const front = (...lines: string[]): string => `---\n${lines.join("\n")}\n---\nbody\n`;
+  const warns: [string, RegExp][] = [
+    ["responsibility: The map: who writes", /holds `: `/],
+    ["title: Setup:", /holds `: `/],
+    ["title: Colours #red", /holds ` #`/],
+    ...["]", "{", "}", ",", "#", "&", "*", "!", "|", ">", "%", "@", "`"].map((c): [string, RegExp] => [`title: ${c}x`, /starts with/]),
+    ["title: [x", /`\[…\]` list/],
+    ["title: - a list", /starts with `-`/],
+    ["sources:\n  - src/a: b.ts", /holds `: `/],
+    ["title: 'it's'", /single-quoted with a lone `'`/],
+    ['title: "match \\d+"', /double-quoted with a backslash/],
+    ["sources: [**/*.js]", /`\[…\]` list with an item/],
+    ["sources:\n  - [a, b]", /list inside a list/],
+    ["title:Billing", /no space after `title:`/],
+    ["title:\tBilling", /holds a tab/],
+    ["summary: first\n  second line", /is not `key: value` or `- item`/],
+  ];
+  for (const [line, reason] of warns) {
+    const found = yamlProblems(front(line));
+    assert.equal(found.length, 1, `${line}\n${found.join("\n")}`);
+    assert.match(found[0] ?? "", reason, line);
+  }
+  for (const line of [
+    "responsibility: 'The map: who writes'",
+    'responsibility: "The map: who writes"',
+    "title: 'it''s'",
+    'title: "C:\\\\dir"',
+    "related: [./a.md, ./b.md]",
+    "title: C# for money",
+    "title: -\"q\"",
+    "title: https://example.com/x",
+    "sources:\n  - src/billing/invoice.ts",
+  ])
+    assert.deepEqual(yamlProblems(front(line)), [], line);
+
+  // The fix is single-quoted, whole, and wikipoke reads it back as the text that was there.
+  const [message] = yamlProblems(front("title: Paths: C:\\dir, it's here"));
+  assert.match(message ?? "", /quote it, `title: 'Paths: C:\\dir, it''s here'`$/);
+  const fixed = front("title: 'Paths: C:\\dir, it''s here'");
+  assert.deepEqual(yamlProblems(fixed), []);
+  assert.equal(parseFrontmatter(fixed).data?.title, "Paths: C:\\dir, it's here");
+
+  // A warning: wikipoke reads the page, other tools do not. --strict turns it into a failure.
+  const root = repo();
+  seed(root);
+  page(root, "components/billing.md");
+  const path = join(root, "wiki/components/billing.md");
+  writeFileSync(path, readFileSync(path, "utf8").replace(/^title: .*$/m, "title: Billing: invoices and tax"));
+  const { code, out } = wikipoke(root, "check", "lint");
+  assert.equal(code, 0, out);
+  assert.match(out, /warn .*components\/billing — frontmatter `title: …` holds `: `/);
+  assert.equal(wikipoke(root, "check", "lint", "--strict").code, 1);
+});
+
+test("the log is newest first, one heading per day, and the old shape is named for the next ingest to rewrite", () => {
+  const log = (...days: string[]): string => `# Log\n\n${days.join("\n\n")}\n`;
+  assert.deepEqual(logProblems(log("## 2026-09-12\n\n* **wikipoke-query**: filed\n* **wikipoke-ingest**: reconciled", "## 2026-09-11\n\n* **wikipoke-ingest (seed)**: seeded")), []);
+  const cases: [string, RegExp][] = [
+    [log("## 2026-09-11 · wikipoke-ingest (seed)\n- seeded", "## 2026-09-12 · wikipoke-ingest\n- more"), /old shape/],
+    [log("## 2026-09-11\n\n* **a**: x", "## 2026-09-12\n\n* **b**: y"), /not newest first: `## 2026-09-12` comes after `## 2026-09-11`/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-12\n\n* **b**: y"), /two `## 2026-09-12` headings/],
+    [log("## 2026-09-12 wikipoke-ingest\n\n* **a**: x"), /holds more than the date/],
+    [log("Nothing yet."), /no `## YYYY-MM-DD` heading/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-02-31\n\n* **b**: y"), /`## 2026-02-31` is not a real date/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-11 · wikipoke-ingest\n- y"), /mixes the new shape with the old one/],
+  ];
+  for (const [raw, reason] of cases) {
+    const found = logProblems(raw);
+    assert.equal(found.length, 1, `${raw}\n${found.join("\n")}`);
+    assert.match(found[0] ?? "", reason);
+  }
+  // A heading inside a code block is an example, not a day; a day seen twice far apart is both.
+  assert.deepEqual(logProblems(log("## 2026-09-12\n\n* **a**: x\n\n```\n## 2020-01-01\n## 2030-01-01\n```")), []);
+  assert.equal(logProblems(log("## 2026-09-20\n\n* **a**: x", "## 2026-09-10\n\n* **b**: y", "## 2026-09-20\n\n* **c**: z")).length, 2);
+
+  // A seeded wiki in the new shape is clean; one in the old shape warns, and still passes.
+  const root = repo();
+  seed(root);
+  assert.match(wikipoke(root, "check").out, /current, covered and sound/);
+  put(root, "wiki/log.md", "# Log\n\n## 2026-09-11 · wikipoke-ingest\n- seeded\n");
+  const { code, out } = wikipoke(root, "check", "lint");
+  assert.equal(code, 0, out);
+  assert.match(out, /wiki\/log\.md has the old shape/);
+});
+
+test("the wiki is an OKF bundle: CONVENTIONS.md carries a type, and an older one is named on upgrade", () => {
+  const root = repo();
+  seed(root);
+  const conventions = parseFrontmatter(read(root, "wiki/CONVENTIONS.md"));
+  assert.equal(conventions.data?.type, "schema");
+  assert.doesNotMatch(conventions.body, /^\s*---/);
+  assert.doesNotMatch(wikipoke(root, "check", "lint").out, /CONVENTIONS/);
+
+  // A CONVENTIONS.md written by an older wikipoke: lint warns, and init says what to carry over.
+  put(root, "wiki/CONVENTIONS.md", conventions.body.replace(/^\s+/, ""));
+  assert.match(wikipoke(root, "check", "lint").out, /CONVENTIONS\.md has no frontmatter with a `type`/);
+  assert.match(wikipoke(root, "init").out, /predates the Open Knowledge Format shape: .*"State and log"/);
+
+  // One that never closes keeps its text in atlas instead of losing it to the next `---`.
+  put(root, "wiki/CONVENTIONS.md", `---\ntype: schema\n${conventions.body}`);
+  assert.equal(wikipoke(root, "atlas", "--out", "site").code, 0);
+  assert.match(read(root, "site/wiki.js"), /# Wiki conventions/);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {
@@ -724,6 +885,8 @@ test("atlas --out writes the page and a snapshot of the wiki, and only where it 
   assert.equal(snap.live, false);
   assert.deepEqual(snap.pages.map((p) => p.id), ["architecture", "components/billing"]);
   assert.deepEqual(snap.docs.map((d) => d.id), ["index", "log", "CONVENTIONS"]);
+  // CONVENTIONS.md opens with a frontmatter for other tools: atlas shows the text, not the block.
+  assert.doesNotMatch(snap.docs.find((d) => d.id === "CONVENTIONS")?.body ?? "---", /^\s*---/);
   const billing = snap.pages.find((p) => p.id === "components/billing");
   assert.deepEqual(billing?.backlinks, ["architecture"]);
   assert.deepEqual(billing?.stale, ["src/billing/tax.js"]);

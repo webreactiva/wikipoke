@@ -5,7 +5,7 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - AGENTS.md
   - src/bin/wikipoke.ts
-synced: e3139d1
+synced: 542edcd
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
@@ -49,6 +49,10 @@ takes the typing away from the agent without giving the CLI its first write. A c
 one file is how 0.1 started. The next ask was a `wikipoke refresh`; `init` already refreshed the
 skills, and what was missing was saying so, and listing the outdated hooks instead of rewriting
 them.
+
+`init` asking questions since `f5879b8` does not move the line either. The interactive path in
+`src/lib/setup.ts` writes through the same `init()` and `addHooks()` as the plain run, so it writes
+the setup a wiki needs and never a page; see [the interactive init](./interactive-init.md).
 
 This page is `confidence: inferred` about the reasoning: the outcome is documented in the README's
 ["Where this comes from"](../../README.md#where-this-comes-from), but the repository was squashed to a single commit, so the 0.1 code and

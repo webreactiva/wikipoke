@@ -4,8 +4,8 @@
 // edit. This file must never become the place where the schema is defined by accident: when the
 // two disagree, CONVENTIONS.md wins and this file gets fixed.
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, posix, relative, resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
 /** Where the wiki lives when the repository does not say otherwise. */
 export const DEFAULT_WIKI = "wiki";
@@ -103,19 +103,50 @@ export function wikiDir(root: string): string {
 export type WikiChoice = { ok: true; wiki: string } | { ok: false; problem: string };
 
 /**
- * A wiki path a project may set: relative, inside the repository, not the repository itself, and
- * not a path something else already occupies. The last one is checked here rather than left to
- * `mkdir`, so a bad `--dir` is a sentence the caller can print instead of a stack trace from
- * halfway through writing the files.
+ * A wiki path a project may set: relative, inside the repository, not the repository itself, a
+ * place git commits, and not a path something else already occupies. These are checked here rather
+ * than left to `mkdir`, so a bad `--dir` is a sentence the caller can print instead of a stack trace
+ * from halfway through writing the files, or a wiki that is never committed. The wiki already
+ * set up is never refused for being ignored: it is the project's, and `init` must be able to re-run
+ * on it.
  */
 export function chooseWiki(value: unknown, root: string): WikiChoice {
-  const clean = String(value ?? "").trim().replace(/^\.\//, "").replace(/\/+$/, "");
-  if (!clean || clean === "." || clean.startsWith("/") || clean.split("/").includes(".."))
-    return { ok: false, problem: `Not a usable wiki directory: ${String(value)}. Give a path inside the repository, such as docs/wiki.` };
+  const raw = String(value ?? "").trim();
+  const unusable = (why: string): WikiChoice => ({ ok: false, problem: `Not a usable wiki directory: ${String(value)}. ${why}` });
+  // The shell expands ~ only unquoted and at the start of a word: here it would be a folder named ~.
+  if (raw.startsWith("~")) return unusable("~ is not expanded here: give a path inside the repository, such as docs/wiki.");
+  // Every template embeds this path, and the hooks run it through sh: "/" is the only separator.
+  if (raw.includes("\\")) return unusable('Separate folders with "/", such as docs/wiki.');
+  const clean = posix.normalize(raw).replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+  if (!raw || clean === "." || clean.startsWith("/") || clean.split("/").includes(".."))
+    return unusable("Give a path inside the repository, such as docs/wiki.");
+  // At any depth, in any case: macOS reads .GIT as .git, and git refuses to track a .git component.
+  if (clean.split("/").some((segment) => segment.toLowerCase() === ".git"))
+    return unusable("git keeps its own files there and never tracks it: use a folder such as docs/wiki.");
+  // A symlink on the way can lead out of the repository, or into .git, whatever the path says.
+  const real = realInside(root, clean);
+  if (real === null) return unusable("A symlink on the way leads outside the repository: give a folder inside it, such as docs/wiki.");
+  if (real.split(sep).some((segment) => segment.toLowerCase() === ".git"))
+    return unusable("A symlink on the way leads into git's own directory: use a folder such as docs/wiki.");
+  // Exit 0 means ignored; 1 (not ignored) and any git error come back as null and let it through.
+  // A wiki already tracked under an ignore rule is committed all the same, so git's own answer counts.
+  const existing = clean === wikiDir(root) && existsSync(join(root, clean, "CONVENTIONS.md"));
+  if (!existing && gitOrNull(root, ["check-ignore", "-q", `${clean}/`]) !== null)
+    return unusable("git ignores it, so the wiki would never be committed.");
   const full = join(root, clean);
-  if (existsSync(full) && !statSync(full).isDirectory())
-    return { ok: false, problem: `${clean} is a file, not a directory: the wiki needs a directory of its own.` };
+  if (existsSync(full) && !statSync(full).isDirectory()) return unusable("It is a file: the wiki needs a directory of its own.");
   return { ok: true, wiki: clean };
+}
+
+/**
+ * Where `path` really lands, relative to the repository, following symlinks through its deepest
+ * part that exists; null when that is outside the repository.
+ */
+function realInside(root: string, path: string): string | null {
+  let existing = join(root, path);
+  while (!existsSync(existing) && existing !== root) existing = dirname(existing);
+  const rel = relative(realpathSync(root), realpathSync(existing));
+  return rel.startsWith("..") || isAbsolute(rel) ? null : rel;
 }
 
 /** The page types a wiki gets when its CONVENTIONS.md does not list its own. */
@@ -418,8 +449,16 @@ export function parseFrontmatter(raw: string): { data: Frontmatter | null; body:
   return { data, body };
 }
 
+/**
+ * A frontmatter value as YAML reads it, as far as the pages use quotes: inside single quotes `''` is
+ * one `'`; inside double quotes `\"`, `\\` and `\/` are escapes. Anything else is read as written,
+ * as YAML does: until #4 a stray quote at either end was dropped, and `-"q"` read as `-"q`.
+ */
 function unquote(value: string): string {
-  return value.replace(/^["']|["']$/g, "").trim();
+  const v = value.trim();
+  if (/^'.*'$/.test(v)) return v.slice(1, -1).replaceAll("''", "'").trim();
+  if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\(["\\/])/g, "$1").trim();
+  return v;
 }
 
 export function readPage(page: Page): LoadedPage {

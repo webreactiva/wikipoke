@@ -1,3 +1,7 @@
+---
+okf_version: "0.2"
+---
+
 # The wikipoke wiki
 
 What this repository knows about itself. Start at
@@ -36,6 +40,7 @@ What this repository knows about itself. Start at
 ## Decisions
 
 - [decisions/cli-read-only.md](./decisions/cli-read-only.md) — why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
+- [decisions/interactive-init.md](./decisions/interactive-init.md) — why `wikipoke init` asks a person step by step with a bundled @clack/prompts, why agents never see it, and which of its choices are hard to undo.
 - [decisions/notify-never-write.md](./decisions/notify-never-write.md) — why no hook updates the wiki automatically, and why the notifier can never fail.
 - [decisions/plain-markdown-links.md](./decisions/plain-markdown-links.md) — why the wiki uses `[text](./page.md)` and reports `[[term]]` instead of resolving it.
 - [decisions/typescript-two-ways.md](./decisions/typescript-two-ways.md) — why the CLI runs from its TypeScript sources in development but ships compiled, and what that costs.
