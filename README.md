@@ -495,6 +495,14 @@ blank line or on a lone closing bracket. The full contract is in
 the `CONVENTIONS.md` that `init` writes, and the valid `type:` values are the rows of its page-type
 table.
 
+**Readable without wikipoke.** A wiki is also an
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle:
+every file other than `index.md` and `log.md` has frontmatter a strict YAML parser reads, with a
+`type`; `index.md` declares `okf_version: "0.2"`; and `log.md` lists passes newest first, one
+`## YYYY-MM-DD` heading per day. `lint` warns when a page or the log drifts from that. This
+repository's own wiki loads with no error in the OKF reference agent's parser. Pages carry more
+than OKF asks (`sources:`, `synced:`, `responsibility:`); OKF allows extra keys.
+
 ## Uninstall
 
 ```sh

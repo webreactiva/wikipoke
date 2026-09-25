@@ -1,3 +1,8 @@
+---
+type: schema
+title: Wiki conventions
+---
+
 # Wiki conventions
 
 This file is the schema of the code wiki: how it is structured and how it is maintained. The
@@ -79,8 +84,12 @@ wiki/
   decisions/            # "which X when" comparisons and the choices behind them
 ```
 
-`CONVENTIONS.md`, `index.md` and `log.md` are not pages (no frontmatter); every other `.md` file
-under `wiki/` is a page and carries the template below.
+`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `wiki/` is a
+page and carries the template below. The wiki is also an
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle,
+which other tools can read without knowing wikipoke. That is why this file opens with a two-line
+frontmatter (`type: schema`), why `index.md` may open with `okf_version: "0.2"` and nothing else,
+and why `log.md` has the shape below. The checks never read `index.md` or this file as pages.
 
 ## Page types
 
@@ -177,11 +186,22 @@ hand-copied sha keeps its first seven characters and invents the rest:
 
     printf '{"version":1,"last_indexed_commit":"%s"}\n' "$(git rev-parse HEAD)" > wiki/.wikipoke-state.json
 
-`log.md` is append-only, one entry per pass:
+`log.md` is the history, **newest first**: one `## YYYY-MM-DD` heading per day, and under it one
+`* **<skill>**: …` entry per pass, the newest at the top. The bold part names the skill and, when
+there is one, the mode or target (`wikipoke-ingest all: src/billing`, `wikipoke-lint --deep`).
+Details go in nested items:
 
-    ## 2026-09-11 · wikipoke-ingest
-    - components/billing.md: invoices now round per line, not per total (a1b2c3d)
-    - new: flows/refund.md
+    # Log
+
+    ## 2026-09-11
+
+    * **wikipoke-ingest**: reconciled 3 commits since `f00ba47`.
+      - components/billing.md: invoices now round per line, not per total (a1b2c3d)
+      - new: flows/refund.md
+
+A log from before this shape (`## 2026-09-11 · wikipoke-ingest`, oldest first) still counts: lint
+warns about it, and the next `wikipoke-ingest` pass rewrites it, reordering the entries and moving
+each skill from its heading into its entry, without changing what they say.
 
 ## Health checks
 
