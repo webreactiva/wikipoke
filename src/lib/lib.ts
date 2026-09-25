@@ -347,8 +347,16 @@ export function parseFrontmatter(raw: string): { data: Frontmatter | null; body:
   return { data, body };
 }
 
+/**
+ * A frontmatter value as YAML reads it, as far as the pages use quotes: inside single quotes `''` is
+ * one `'`; inside double quotes `\"`, `\\` and `\/` are escapes. Anything else is read as written,
+ * as YAML does: until #4 a stray quote at either end was dropped, and `-"q"` read as `-"q`.
+ */
 function unquote(value: string): string {
-  return value.replace(/^["']|["']$/g, "").trim();
+  const v = value.trim();
+  if (/^'.*'$/.test(v)) return v.slice(1, -1).replaceAll("''", "'").trim();
+  if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\(["\\/])/g, "$1").trim();
+  return v;
 }
 
 export function readPage(page: Page): LoadedPage {

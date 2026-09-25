@@ -119,6 +119,13 @@ finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore
 deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
 page was verified against, which is the date that matters.
 
+The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
+**Quote a value that holds `: ` or ` #`, or starts with a symbol** such as `{`, `*`, `&`, `!`, `|`,
+`>`, `%`, `@` or `-`, in single quotes, where a backslash is just a backslash and an inner `'` is
+written twice: `responsibility: 'The map: who writes, who measures.'`. A short list may stay
+`[a, b]` when no item needs quoting; otherwise write it one `- item` per line. Use spaces, not
+tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns about the rest.
+
 - **`sources:`** is the inverted index: it is what lets `wikipoke check drift` map a changed file
   back to the pages that document it. Be **specific**: a source that claims a whole package, or
   most of the repository, makes coverage read green for code nobody wrote up, and the check warns
@@ -200,7 +207,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   with how many files the ignore list took out, so a rule that hides too much is visible rather
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
-- **lint**: required keys, valid `type` and `confidence`, `synced` is a real commit, sources still
+- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit, sources still
   match a tracked file, over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
   or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading

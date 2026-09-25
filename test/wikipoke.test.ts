@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 
 import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
+import { parseFrontmatter } from "../src/lib/lib.ts";
+import { yamlProblems } from "../src/lib/lint.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -314,6 +316,61 @@ test("lint catches broken links, dead sources, orphans and wikilinks, and fails 
     /concepts\/money: not listed in index\.md/,
   ])
     assert.ok(messages.some((m) => expected.test(m)), `${expected} in\n${messages.join("\n")}`);
+});
+
+test("lint warns about frontmatter a strict YAML parser reads differently, and its fix reads the same in both", () => {
+  const front = (...lines: string[]): string => `---\n${lines.join("\n")}\n---\nbody\n`;
+  const warns: [string, RegExp][] = [
+    ["responsibility: The map: who writes", /holds `: `/],
+    ["title: Setup:", /holds `: `/],
+    ["title: Colours #red", /holds ` #`/],
+    ...["]", "{", "}", ",", "#", "&", "*", "!", "|", ">", "%", "@", "`"].map((c): [string, RegExp] => [`title: ${c}x`, /starts with/]),
+    ["title: [x", /`\[…\]` list/],
+    ["title: - a list", /starts with `-`/],
+    ["sources:\n  - src/a: b.ts", /holds `: `/],
+    ["title: 'it's'", /single-quoted with a lone `'`/],
+    ['title: "match \\d+"', /double-quoted with a backslash/],
+    ["sources: [**/*.js]", /`\[…\]` list with an item/],
+    ["sources:\n  - [a, b]", /list inside a list/],
+    ["title:Billing", /no space after `title:`/],
+    ["title:\tBilling", /holds a tab/],
+    ["summary: first\n  second line", /is not `key: value` or `- item`/],
+  ];
+  for (const [line, reason] of warns) {
+    const found = yamlProblems(front(line));
+    assert.equal(found.length, 1, `${line}\n${found.join("\n")}`);
+    assert.match(found[0] ?? "", reason, line);
+  }
+  for (const line of [
+    "responsibility: 'The map: who writes'",
+    'responsibility: "The map: who writes"',
+    "title: 'it''s'",
+    'title: "C:\\\\dir"',
+    "related: [./a.md, ./b.md]",
+    "title: C# for money",
+    "title: -\"q\"",
+    "title: https://example.com/x",
+    "sources:\n  - src/billing/invoice.ts",
+  ])
+    assert.deepEqual(yamlProblems(front(line)), [], line);
+
+  // The fix is single-quoted, whole, and wikipoke reads it back as the text that was there.
+  const [message] = yamlProblems(front("title: Paths: C:\\dir, it's here"));
+  assert.match(message ?? "", /quote it, `title: 'Paths: C:\\dir, it''s here'`$/);
+  const fixed = front("title: 'Paths: C:\\dir, it''s here'");
+  assert.deepEqual(yamlProblems(fixed), []);
+  assert.equal(parseFrontmatter(fixed).data?.title, "Paths: C:\\dir, it's here");
+
+  // A warning: wikipoke reads the page, other tools do not. --strict turns it into a failure.
+  const root = repo();
+  seed(root);
+  page(root, "components/billing.md");
+  const path = join(root, "wiki/components/billing.md");
+  writeFileSync(path, readFileSync(path, "utf8").replace(/^title: .*$/m, "title: Billing: invoices and tax"));
+  const { code, out } = wikipoke(root, "check", "lint");
+  assert.equal(code, 0, out);
+  assert.match(out, /warn .*components\/billing — frontmatter `title: …` holds `: `/);
+  assert.equal(wikipoke(root, "check", "lint", "--strict").code, 1);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {
