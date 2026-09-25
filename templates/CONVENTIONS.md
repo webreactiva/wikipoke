@@ -148,6 +148,27 @@ tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns ab
   rationale and history you reconstructed rather than found. Prefer asking the person over
   guessing; when you do guess, say so here.
 
+## Never a source
+
+Some files change with most commits, whatever those commits are about: lock files, and in many
+projects the entry point, the route or command registry, a version catalog. A page that lists one
+in `sources:` is flagged stale by work that has nothing to do with it, and people learn to ignore
+the flag. Cite the files the claim rests on instead. `wikipoke check lint` warns about a source
+that names a file below; a page that really is about one of them keeps it, and the warning. Add
+this project's own; an entry with no `/` is a file name, found in any folder.
+
+- `package-lock.json`
+- `pnpm-lock.yaml`
+- `yarn.lock`
+- `bun.lock`
+- `bun.lockb`
+- `composer.lock`
+- `Gemfile.lock`
+- `poetry.lock`
+- `uv.lock`
+- `Cargo.lock`
+- `go.sum`
+
 ## Links and language
 
 - Plain Markdown links only: `[text](./other.md)`. `wikipoke check` verifies every one, so a page
@@ -228,7 +249,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
 - **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit, sources still
-  match a tracked file, over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
+  match a tracked file, a source listed under "Never a source", over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
   or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
   `index.md` first stops telling pages apart.

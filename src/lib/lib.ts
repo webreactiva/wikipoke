@@ -319,6 +319,77 @@ export function pageTypes(wikiDir: string): string[] {
   return types.length ? types : DEFAULT_TYPES;
 }
 
+/** Lock files: they change with most commits, whatever those commits are about. */
+export const DEFAULT_NEVER_SOURCES = [
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "composer.lock",
+  "Gemfile.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Cargo.lock",
+  "go.sum",
+];
+
+/** The "Never a source" list, and whether the project wrote it or wikipoke's defaults stand in. */
+export interface NeverSources {
+  entries: string[];
+  owned: boolean;
+}
+
+/**
+ * The files CONVENTIONS.md lists under its "## Never a source" heading: every backticked token in a
+ * list item, or the comma-separated words of an item written without backticks. Read the way the
+ * page types are, so the project owns the list. The defaults stand in only when the heading is
+ * missing, as in a wiki whose CONVENTIONS.md predates the list; a heading with an empty list
+ * switches the warning off. Fenced code is an example, not the list.
+ */
+export function neverSources(wikiDir: string): NeverSources {
+  const file = join(wikiDir, "CONVENTIONS.md");
+  const fallback = { entries: DEFAULT_NEVER_SOURCES, owned: false };
+  if (!existsSync(file)) return fallback;
+  const text = readFileSync(file, "utf8").replace(/^```[\s\S]*?^```/gm, "").split("\n");
+  const start = text.findIndex((line) => /^##\s+never a source\s*$/i.test(line));
+  if (start === -1) return fallback;
+  const entries: string[] = [];
+  for (const line of text.slice(start + 1)) {
+    if (/^#{1,2}\s/.test(line)) break;
+    const item = line.match(/^\s*[-*]\s+(.*)$/)?.[1];
+    if (!item) continue;
+    const ticked = [...item.matchAll(/`([^`]+)`/g)].map((m) => m[1] as string);
+    entries.push(...(ticked.length ? ticked : item.split(",").map((word) => word.trim()).filter(Boolean)));
+  }
+  return { entries, owned: true };
+}
+
+/**
+ * Each entry as a matcher: `./` dropped and a trailing `/` read as everything under that folder, as
+ * sources are. An entry with no "/" is a file name, found in any folder, so a monorepo's nested lock
+ * files count too. Compiled once per lint run, not once per source.
+ */
+export function neverMatchers(entries: string[]): { entry: string; re: RegExp; byName: boolean }[] {
+  return entries.map((entry) => {
+    const glob = entry.replace(/^\.\//, "").replace(/\/$/, "/**");
+    return { entry, re: globToRegExp(glob), byName: !glob.includes("/") };
+  });
+}
+
+/**
+ * The "Never a source" entry a `sources:` line names, if any. Only a single file counts: a folder or a
+ * glob is judged by the over-broad rule instead.
+ */
+export function neverSourceHit(source: string, matchers: ReturnType<typeof neverMatchers>, root: string): string | undefined {
+  const path = source.replace(/^\.\//, "");
+  if (/[*?]/.test(path) || path.endsWith("/")) return undefined;
+  const full = join(root, path);
+  if (existsSync(full) && statSync(full).isDirectory()) return undefined;
+  const name = path.split("/").at(-1) ?? path;
+  return matchers.find((m) => m.re.test(m.byName ? name : path))?.entry;
+}
+
 /** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */
 export function listPages(wikiDir: string): Page[] {
   const out: Page[] = [];

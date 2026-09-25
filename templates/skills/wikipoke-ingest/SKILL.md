@@ -101,7 +101,9 @@ wikipoke check must pass without errors before you are done
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
    what you actually read; never claim a whole package or a folder like `src/`, and
    never list a file you only named — coverage is how the next pass finds it, and a
-   claim hides it from that pass. Mark anything you
+   claim hides it from that pass. Read the "Never a source" list in `CONVENTIONS.md`
+   first (lock files, when it has none): a lock file or a registry changes with every
+   commit, so cite the files the claim rests on unless the page is about that file. Mark anything you
    reconstructed rather than read with `confidence: inferred`. Link only to pages
    that already exist. **Cite only files you opened in this pass**, and take every
    line number (`path:line`, or a `#L42` link) from that file alone, as you write the page — a number carried over
