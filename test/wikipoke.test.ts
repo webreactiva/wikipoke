@@ -11,7 +11,7 @@ import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
 import { hookStatus } from "../src/lib/install.ts";
 import { parseFrontmatter } from "../src/lib/lib.ts";
-import { yamlProblems } from "../src/lib/lint.ts";
+import { logProblems, yamlProblems } from "../src/lib/lint.ts";
 import { hookChoices } from "../src/lib/setup.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
@@ -79,7 +79,7 @@ function seed(root: string, wiki = "wiki"): void {
   page(root, "architecture.md", { type: "architecture", sources: ["src/cli.js"], body: "See [billing](./components/billing.md).", wiki });
   page(root, "components/billing.md", { body: "Back to [the map](../architecture.md).", wiki });
   put(root, `${wiki}/index.md`, "# Wiki\n\n- [Architecture](./architecture.md)\n- [Billing](./components/billing.md)\n");
-  put(root, `${wiki}/log.md`, "# Log\n\n## 2026-09-11 · wikipoke-ingest\n- seeded\n");
+  put(root, `${wiki}/log.md`, "# Log\n\n## 2026-09-11\n\n* **wikipoke-ingest (seed)**: seeded\n");
   put(root, `${wiki}/.wikipoke-state.json`, JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
   git(root, "add", "-A");
   git(root, "commit", "-qm", "seed wiki");
@@ -426,6 +426,56 @@ test("lint warns about frontmatter a strict YAML parser reads differently, and i
   assert.equal(code, 0, out);
   assert.match(out, /warn .*components\/billing — frontmatter `title: …` holds `: `/);
   assert.equal(wikipoke(root, "check", "lint", "--strict").code, 1);
+});
+
+test("the log is newest first, one heading per day, and the old shape is named for the next ingest to rewrite", () => {
+  const log = (...days: string[]): string => `# Log\n\n${days.join("\n\n")}\n`;
+  assert.deepEqual(logProblems(log("## 2026-09-12\n\n* **wikipoke-query**: filed\n* **wikipoke-ingest**: reconciled", "## 2026-09-11\n\n* **wikipoke-ingest (seed)**: seeded")), []);
+  const cases: [string, RegExp][] = [
+    [log("## 2026-09-11 · wikipoke-ingest (seed)\n- seeded", "## 2026-09-12 · wikipoke-ingest\n- more"), /old shape/],
+    [log("## 2026-09-11\n\n* **a**: x", "## 2026-09-12\n\n* **b**: y"), /not newest first: `## 2026-09-12` comes after `## 2026-09-11`/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-12\n\n* **b**: y"), /two `## 2026-09-12` headings/],
+    [log("## 2026-09-12 wikipoke-ingest\n\n* **a**: x"), /holds more than the date/],
+    [log("Nothing yet."), /no `## YYYY-MM-DD` heading/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-02-31\n\n* **b**: y"), /`## 2026-02-31` is not a real date/],
+    [log("## 2026-09-12\n\n* **a**: x", "## 2026-09-11 · wikipoke-ingest\n- y"), /mixes the new shape with the old one/],
+  ];
+  for (const [raw, reason] of cases) {
+    const found = logProblems(raw);
+    assert.equal(found.length, 1, `${raw}\n${found.join("\n")}`);
+    assert.match(found[0] ?? "", reason);
+  }
+  // A heading inside a code block is an example, not a day; a day seen twice far apart is both.
+  assert.deepEqual(logProblems(log("## 2026-09-12\n\n* **a**: x\n\n```\n## 2020-01-01\n## 2030-01-01\n```")), []);
+  assert.equal(logProblems(log("## 2026-09-20\n\n* **a**: x", "## 2026-09-10\n\n* **b**: y", "## 2026-09-20\n\n* **c**: z")).length, 2);
+
+  // A seeded wiki in the new shape is clean; one in the old shape warns, and still passes.
+  const root = repo();
+  seed(root);
+  assert.match(wikipoke(root, "check").out, /current, covered and sound/);
+  put(root, "wiki/log.md", "# Log\n\n## 2026-09-11 · wikipoke-ingest\n- seeded\n");
+  const { code, out } = wikipoke(root, "check", "lint");
+  assert.equal(code, 0, out);
+  assert.match(out, /wiki\/log\.md has the old shape/);
+});
+
+test("the wiki is an OKF bundle: CONVENTIONS.md carries a type, and an older one is named on upgrade", () => {
+  const root = repo();
+  seed(root);
+  const conventions = parseFrontmatter(read(root, "wiki/CONVENTIONS.md"));
+  assert.equal(conventions.data?.type, "schema");
+  assert.doesNotMatch(conventions.body, /^\s*---/);
+  assert.doesNotMatch(wikipoke(root, "check", "lint").out, /CONVENTIONS/);
+
+  // A CONVENTIONS.md written by an older wikipoke: lint warns, and init says what to carry over.
+  put(root, "wiki/CONVENTIONS.md", conventions.body.replace(/^\s+/, ""));
+  assert.match(wikipoke(root, "check", "lint").out, /CONVENTIONS\.md has no frontmatter with a `type`/);
+  assert.match(wikipoke(root, "init").out, /predates the Open Knowledge Format shape: .*"State and log"/);
+
+  // One that never closes keeps its text in atlas instead of losing it to the next `---`.
+  put(root, "wiki/CONVENTIONS.md", `---\ntype: schema\n${conventions.body}`);
+  assert.equal(wikipoke(root, "atlas", "--out", "site").code, 0);
+  assert.match(read(root, "site/wiki.js"), /# Wiki conventions/);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {
@@ -798,6 +848,8 @@ test("atlas --out writes the page and a snapshot of the wiki, and only where it 
   assert.equal(snap.live, false);
   assert.deepEqual(snap.pages.map((p) => p.id), ["architecture", "components/billing"]);
   assert.deepEqual(snap.docs.map((d) => d.id), ["index", "log", "CONVENTIONS"]);
+  // CONVENTIONS.md opens with a frontmatter for other tools: atlas shows the text, not the block.
+  assert.doesNotMatch(snap.docs.find((d) => d.id === "CONVENTIONS")?.body ?? "---", /^\s*---/);
   const billing = snap.pages.find((p) => p.id === "components/billing");
   assert.deepEqual(billing?.backlinks, ["architecture"]);
   assert.deepEqual(billing?.stale, ["src/billing/tax.js"]);

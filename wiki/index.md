@@ -1,3 +1,7 @@
+---
+okf_version: "0.2"
+---
+
 # The wikipoke wiki
 
 What this repository knows about itself. Start at

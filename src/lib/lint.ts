@@ -24,6 +24,7 @@ import {
   normalizeSource,
   pageCitations,
   pageTypes,
+  parseFrontmatter,
   readPage,
   relatedLinks,
   trackedFiles,
@@ -70,11 +71,18 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
 
   const logRaw = readIfExists(join(wikiDir, "log.md"));
   if (!logRaw) add("error", `${wiki}/log.md is missing`);
-  else if (!/^## \d{4}-\d{2}-\d{2} · /m.test(logRaw))
-    add("warn", `${wiki}/log.md has no \`## YYYY-MM-DD · <skill>\` entry`);
+  else for (const problem of logProblems(logRaw)) add("warn", `${wiki}/log.md ${problem}`);
 
-  if (!existsSync(join(wikiDir, "CONVENTIONS.md")))
-    add("error", `${wiki}/CONVENTIONS.md is missing: the schema this check enforces`);
+  const conventionsRaw = readIfExists(join(wikiDir, "CONVENTIONS.md"));
+  if (!conventionsRaw) add("error", `${wiki}/CONVENTIONS.md is missing: the schema this check enforces`);
+  // Not a page, but a Markdown file in the bundle, so OKF asks it for a frontmatter with a `type`.
+  else if (parseFrontmatter(conventionsRaw).data?.type === undefined)
+    add(
+      "warn",
+      `${wiki}/CONVENTIONS.md has no frontmatter with a \`type\`, so tools that read the wiki as an Open Knowledge Format bundle reject it: ` +
+        "open it with `---`, `type: schema`, `title: Wiki conventions`, `---`",
+    );
+  else for (const problem of yamlProblems(conventionsRaw)) add("warn", `${wiki}/CONVENTIONS.md ${problem}`);
   if (!existsSync(join(wikiDir, STATE_FILE)))
     add("error", `${wiki}/${STATE_FILE} is missing: no repository checkpoint`);
 
@@ -260,6 +268,37 @@ function misread(value: string): string | null {
   if (/:(?:[ \t]|$)/.test(value)) return "holds `: `";
   if (/[ \t]#/.test(value)) return "holds ` #`, where YAML starts a comment";
   return null;
+}
+
+/**
+ * The log's shape is the Open Knowledge Format's (§9): newest first, one `## YYYY-MM-DD` heading per
+ * day, each pass a `* **<skill>**: …` entry under it. Wikis written before that have one
+ * `## YYYY-MM-DD · <skill>` heading per pass, oldest first: still read, and named as the old shape,
+ * because the next pass that writes the log rewrites it. Warnings only: the log is history, not the
+ * wiki's truth. Headings inside fenced code are examples, not days.
+ */
+export function logProblems(raw: string): string[] {
+  const text = raw.replace(/^```[\s\S]*?^```/gm, "");
+  const headings = [...text.matchAll(/^## (\d{4}-\d{2}-\d{2})(?=\s|$)(.*)$/gm)].map((m) => ({ date: m[1] as string, rest: (m[2] as string).trim() }));
+  if (!headings.length) return ["has no `## YYYY-MM-DD` heading: one per day, newest first"];
+  const old = headings.filter((h) => h.rest.startsWith("·")).length;
+  if (old)
+    return [
+      `${old === headings.length ? "has the old shape" : "mixes the new shape with the old one"}, a \`## YYYY-MM-DD · <skill>\` heading per pass, oldest first: ` +
+        "the next pass that writes the log rewrites it newest first, one heading per day, each pass a `* **<skill>**: …` entry",
+    ];
+  const problems: string[] = [];
+  // A date the calendar does not have (2026-02-31) is not ISO 8601, whatever its digits look like.
+  const bad = headings.find((h) => new Date(`${h.date}T00:00:00Z`).toISOString().slice(0, 10) !== h.date);
+  if (bad) problems.push(`heading \`## ${bad.date}\` is not a real date`);
+  const odd = headings.find((h) => h.rest);
+  if (odd) problems.push(`heading \`## ${odd.date} ${odd.rest}\` holds more than the date: the skill goes in the entry, \`* **<skill>**: …\``);
+  const seen = new Set<string>();
+  const twice = headings.find((h) => (seen.has(h.date) ? true : (seen.add(h.date), false)));
+  if (twice) problems.push(`has two \`## ${twice.date}\` headings: one per day, every pass of that day under it`);
+  const order = headings.findIndex((h, i) => i > 0 && h.date > (headings[i - 1]?.date ?? ""));
+  if (order > 0) problems.push(`is not newest first: \`## ${headings[order]?.date}\` comes after \`## ${headings[order - 1]?.date}\``);
+  return problems;
 }
 
 /** Reads a repository file once, split into lines. Pages cite the same file many times over. */
