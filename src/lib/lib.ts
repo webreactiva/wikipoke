@@ -288,6 +288,53 @@ export function pageTypes(wikiDir: string): string[] {
   return types.length ? types : DEFAULT_TYPES;
 }
 
+/** Lock files: they change with most commits, whatever those commits are about. */
+export const DEFAULT_NEVER_SOURCES = [
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "composer.lock",
+  "Gemfile.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Cargo.lock",
+  "go.sum",
+];
+
+/**
+ * The files CONVENTIONS.md lists under its "Never a source" heading, one backticked path or glob per
+ * list item. Read the way the page types are, so the project owns the list; the defaults stand in
+ * only when the heading is missing, and a heading with an empty list switches the warning off.
+ */
+export function neverSources(wikiDir: string): string[] {
+  const file = join(wikiDir, "CONVENTIONS.md");
+  if (!existsSync(file)) return DEFAULT_NEVER_SOURCES;
+  const text = readFileSync(file, "utf8").split("\n");
+  const start = text.findIndex((line) => /^##\s.*never a source/i.test(line));
+  if (start === -1) return DEFAULT_NEVER_SOURCES;
+  const entries: string[] = [];
+  for (const line of text.slice(start + 1)) {
+    if (/^##\s/.test(line)) break;
+    const entry = line.match(/^[-*]\s+`([^`]+)`/)?.[1];
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * The "Never a source" entry a `sources:` line names, if any. Only a single file counts: a folder or a
+ * glob is judged by the over-broad rule instead. An entry with no "/" is a file name, found in any
+ * folder, so a monorepo's nested lock files count too.
+ */
+export function neverSourceHit(source: string, never: string[]): string | undefined {
+  const path = source.replace(/^\.\//, "");
+  if (/[*?]/.test(path) || path.endsWith("/")) return undefined;
+  const name = path.split("/").at(-1) ?? path;
+  return never.find((entry) => globToRegExp(entry).test(entry.includes("/") ? path : name));
+}
+
 /** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */
 export function listPages(wikiDir: string): Page[] {
   const out: Page[] = [];

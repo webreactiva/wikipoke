@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
+import { DEFAULT_NEVER_SOURCES, neverSourceHit } from "../src/lib/lib.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
 // `npm run build` first and the tests exercise exactly the file a contributor edits.
@@ -314,6 +315,30 @@ test("lint catches broken links, dead sources, orphans and wikilinks, and fails 
     /concepts\/money: not listed in index\.md/,
   ])
     assert.ok(messages.some((m) => expected.test(m)), `${expected} in\n${messages.join("\n")}`);
+});
+
+test("a source that changes with most commits is warned about, from the list CONVENTIONS.md owns", () => {
+  assert.equal(neverSourceHit("package-lock.json", DEFAULT_NEVER_SOURCES), "package-lock.json");
+  assert.equal(neverSourceHit("./apps/web/pnpm-lock.yaml", DEFAULT_NEVER_SOURCES), "pnpm-lock.yaml");
+  // A folder or a glob is the over-broad rule's business, and package.json is not a lock file.
+  for (const source of ["apps/", "**/*.lock", "package.json", "src/lock.ts"]) assert.equal(neverSourceHit(source, DEFAULT_NEVER_SOURCES), undefined, source);
+  assert.equal(neverSourceHit("src/bin/cli.ts", ["src/bin/cli.ts"]), "src/bin/cli.ts");
+  assert.equal(neverSourceHit("other/src/bin/cli.ts", ["src/bin/cli.ts"]), undefined);
+
+  const root = repo({ "package-lock.json": "{}\n", "src/routes.js": "export const routes = [];\n" });
+  seed(root);
+  page(root, "components/billing.md", { sources: ["src/billing/invoice.js", "package-lock.json", "src/routes.js"] });
+  const lint = (): string[] => json<LintJson>(root, "check", "lint", "--json").warnings.map((f) => f.message);
+  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 1);
+  assert.equal(wikipoke(root, "check", "lint").code, 0, "a warning, not an error");
+
+  // The project adds its registry, or empties the list to switch the warning off.
+  const conventions = join(root, "wiki/CONVENTIONS.md");
+  const text = readFileSync(conventions, "utf8");
+  writeFileSync(conventions, text.replace("- `go.sum`\n", "- `go.sum`\n- `src/routes.js`\n"));
+  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 2);
+  writeFileSync(conventions, text.replace(/(## Never a source\n[\s\S]*?)\n- `package-lock\.json`[\s\S]*?- `go\.sum`\n/, "$1\n"));
+  assert.equal(lint().filter((m) => /changes with most commits/.test(m)).length, 0);
 });
 
 test("the page types come from the CONVENTIONS.md table, so a project can add its own", () => {
