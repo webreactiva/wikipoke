@@ -71,9 +71,10 @@ wikipoke check must pass without errors before you are done
 
 1. **Record the base SHA:** `git rev-parse --short HEAD` for every page's `synced:`,
    copied from the command's output. The full form goes into the checkpoint at the
-   end, written by a command rather than by hand (step 8). Read
-   `git log --oneline`: the history explains why the code looks like this and lives
-   in no file.
+   end, written by a command rather than by hand (step 8). Its companion
+   `sources_key:` is hashed from the files rather than from a commit, so it comes
+   from `wikipoke key` once the pages exist. Read `git log --oneline`: the history
+   explains why the code looks like this and lives in no file.
 2. **Survey without reading the sources.** `git ls-files`, the manifests, the
    READMEs and the project's agent instructions are enough to name the layers and
    the entry points. Source files come later, one page at a time.
@@ -166,7 +167,8 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    (update a line number repeated in the link text too). `now` is the line each
    points at today; `now: null` means the cited line itself was edited or deleted,
    so open the file and find what the sentence was about. Then set `synced:` to
-   `git rev-parse --short HEAD`. Re-stamping does not hide a pointer you skipped —
+   `git rev-parse --short HEAD`, and `sources_key:` to what `wikipoke key` prints for
+   the page (see "Every mode ends here"). Re-stamping does not hide a pointer you skipped —
    drift dates each citation by the commit that wrote it and reports the page under
    `moved[]` — and one you already re-pointed is current, committed or not.
 5. **New and moved code.** Changed files no page covers: propose a page, or leave
@@ -205,7 +207,8 @@ index.md · inbound links · log.md      (checkpoint untouched)
    page per file: a cluster of 19 files is usually two pages, not nineteen.
 3. **Write each page as soon as you have read for it**, with the template, narrow
    `sources:` covering exactly what you read, and `synced:` set to
-   `git rev-parse --short HEAD`.
+   `git rev-parse --short HEAD`. `sources_key:` comes from `wikipoke key` at the end
+   of the pass.
 4. **Link them in.** Every new page needs an inbound link from a page that already
    exists (usually `architecture.md` or its module page) and its line in `index.md`.
 5. **Do not advance `.wikipoke-state.json`.** Closing a coverage gap says nothing about the
@@ -265,6 +268,20 @@ date: `## 2026-09-12 · wikipoke-ingest (reconcile)` becomes
 nothing when it opened with a list. Its lists and paragraphs follow as they were,
 indented two spaces under it. Days go newest first, and so do the entries within a day.
 Say in your own entry that you rewrote it. Never change what an old entry says.
+
+**Stamp the pages.** Every page you wrote or re-read in this pass carries `synced:`
+(`git rev-parse --short HEAD`) and, next to it, the key those same sources hash to:
+
+```sh
+wikipoke key            # every page, one `<key>  <page>` line each; name pages to narrow it
+```
+
+Copy each key into its page's `sources_key:`. One run at the end of the pass covers
+them all. This is not bookkeeping: `synced:` names a commit on the branch you are
+working on, and a squash or rebase merge throws that commit away, after which nothing
+can tell whether the page is still true. The key survives the merge. Never type or
+guess one, and never move `sources_key:` on a page whose `synced:` you did not move —
+the pair is the claim "I read this page against this code".
 
 **Verify:** `wikipoke check`. Fix every error. Warnings about orphans, the index,
 over-broad sources or citations are yours to fix too. Coverage and staleness left

@@ -114,7 +114,9 @@ What a repository gets once wikipoke is installed:
   mentions wikipoke.
 - 🕰️ **A wiki that knows when it is out of date.** Every page names the files it documents and the
   commit it was checked against, so `wikipoke check drift` lists the stale pages and every
-  `path:line` citation the code has moved, with the line it points at now.
+  `path:line` citation the code has moved, with the line it points at now. It survives a squash or
+  rebase merge, which throws that commit away: each page also carries what its sources hashed to,
+  so the answer does not depend on how the team merges.
 - 📋 **Coverage as a backlog.** The code no page covers, grouped by folder, so the next pass knows
   where to go, and a count of what the ignore list hides.
 - 🩺 **Lint for the wiki.** Missing fields, broken links, sources that no longer exist, citations that
@@ -444,6 +446,7 @@ wikipoke check              # all three
 wikipoke check drift        # commits not indexed, stale pages, and citations the code moved
 wikipoke check coverage     # tracked files no page's `sources:` claims
 wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
+wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.

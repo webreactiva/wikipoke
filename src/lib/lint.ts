@@ -10,6 +10,7 @@ import type { CheckContext, Citation, Link } from "./lib.ts";
 import {
   CONFIDENCE,
   INDEX_SCALE_LIMIT,
+  KEY_SHAPE,
   NON_PAGES,
   REQUIRED_KEYS,
   STATE_FILE,
@@ -116,8 +117,25 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     if (typeof meta.confidence === "string" && meta.confidence && !CONFIDENCE.includes(meta.confidence))
       add("error", `unknown confidence \`${meta.confidence}\` (valid: ${CONFIDENCE.join(", ")})`, page.id);
 
-    if (typeof meta.synced === "string" && meta.synced && !commitExists(root, meta.synced))
-      add("error", `\`synced: ${meta.synced}\` is not a commit in this repository`, page.id);
+    // A `sources_key:` that is not the shape `wikipoke key` prints answers nothing, so it must not
+    // be what turns the error below into a warning: a typo there would hide a genuinely broken page.
+    const key = typeof meta.sources_key === "string" ? meta.sources_key : "";
+    if (key && !KEY_SHAPE.test(key))
+      add("warn", `\`sources_key: ${key}\` is not a content key: \`wikipoke key ${page.id}\` prints the one this page should carry`, page.id);
+
+    if (typeof meta.synced === "string" && meta.synced && !commitExists(root, meta.synced)) {
+      // Squash and rebase merges throw away the commit a wiki pass stamped. With a content key the
+      // page is still checkable — drift compares the sources themselves — so it is debt, not a
+      // broken wiki, and `check` must not fail the branch that merged.
+      if (key && KEY_SHAPE.test(key))
+        add(
+          "warn",
+          `\`synced: ${meta.synced}\` is not a commit in this repository, which is what a squash or rebase merge leaves behind: ` +
+            "`sources_key:` answers instead, so drift still judges this page. The next pass re-stamps both.",
+          page.id,
+        );
+      else add("error", `\`synced: ${meta.synced}\` is not a commit in this repository`, page.id);
+    }
 
     // What the page's folders and wildcards claim together: fifty files split across subfolders are
     // still more than one page read, and splitting them is how the limit below gets dodged.

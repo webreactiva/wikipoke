@@ -5,6 +5,7 @@
 //   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
+//   wikipoke key [<page>...] [--json]     the content key each page's sources: hash to right now
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
@@ -23,7 +24,7 @@ import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
 import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import { IGNORE_FILE, KEY_LENGTH, STATE_FILE, chooseWiki, color, listPages, readPage, repoRoot, sourcesKey, wikiDir, workingFiles } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 import { interactiveInit } from "../lib/setup.ts";
@@ -61,6 +62,10 @@ const HELP = `wikipoke: a code wiki that agents maintain
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
+  wikipoke key [<page>...]     the content key each page's sources: hash to right now, to copy
+                               into its \`sources_key:\`. Every page when none is named. It is what
+                               keeps a page checkable once a squash merge has thrown its commit away
+      --json                   machine-readable, for the skills
   wikipoke atlas               browse the wiki at http://127.0.0.1:${DEFAULT_PORT}, redrawn as pages change
       --port <n>               another port
       --out <dir>              write it as a static site instead, citations linked to the remote
@@ -257,6 +262,30 @@ if (command === "atlas") {
   });
   console.log(`${color.green("atlas")}  ${served.url} ${color.dim("· redrawn as the wiki changes · Ctrl+C to stop")}`);
   await new Promise<never>(() => {});
+}
+
+// Read-only, like the checks: it hashes the working tree and prints. The skill copies the value
+// into the page, because only a skill writes the wiki.
+if (command === "key") {
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
+  const wanted = new Set(rest.map((name) => name.replace(/\.md$/, "")));
+  const pages = listPages(wikiPath).filter((p) => !wanted.size || wanted.has(p.id));
+  const unknown = [...wanted].filter((name) => !pages.some((p) => p.id === name));
+  if (unknown.length) {
+    console.error(`no such page: ${unknown.join(", ")} (a page id is its path under ${wiki}/ without .md)`);
+    process.exit(2);
+  }
+  // One `git ls-files` for the whole run, whether it keys one page or ninety.
+  const working = workingFiles(root);
+  const keys = pages.map((p) => ({ page: p.id, sources_key: sourcesKey(root, readPage(p).meta, working) }));
+  if (flags.json) console.log(JSON.stringify(keys, null, 2));
+  else
+    for (const { page, sources_key } of keys)
+      console.log(`${sources_key ?? color.dim("—".padEnd(KEY_LENGTH))}  ${page}${sources_key ? "" : color.dim("  (no sources:)")}`);
+  process.exit(0);
 }
 
 if (command !== "check") {

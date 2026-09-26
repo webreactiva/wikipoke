@@ -65,7 +65,9 @@ question ──► search {{WIKI}}/  (the candidates' responsibility lines, or i
    when it extends one, a **new page** of the right type when it is its own unit,
    pattern or comparison. Write only on a yes.
 7. **When filing:** the template, **narrow** `sources:` for what you actually read,
-   `git rev-parse --short HEAD` as `synced:`, and `confidence: inferred` when the
+   `git rev-parse --short HEAD` as `synced:`, `wikipoke key <page>` as
+   `sources_key:` (it is what keeps the page checkable after a squash merge, and
+   `CONVENTIONS.md` explains it), and `confidence: inferred` when the
    answer is your reading rather than something the code states. **Link the new
    page from the pages it relates to**, then add its line to `index.md` and an entry
    to `log.md` (`* **wikipoke-query**: …` at the top of today's heading; if the log
