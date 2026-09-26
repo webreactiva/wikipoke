@@ -249,14 +249,25 @@ export function workingFiles(root: string): string[] {
 }
 
 /**
- * The files one page's `sources:` match in the working tree, deleted ones dropped: a tracked file
- * removed but not yet committed has no contents to hash, and its absence is itself the change the
- * key reports.
+ * The files one page's `sources:` match in the working tree. Only regular files, and only ones that
+ * are there: a tracked file deleted but not yet committed has no contents to hash, and its absence
+ * is itself the change the key reports. A submodule is a path `git ls-files` prints and
+ * `git hash-object` refuses — one of those under a page's folder used to fail the whole batch and
+ * leave the page unkeyable.
  */
 export function sourceFiles(root: string, meta: Frontmatter | null, universe?: string[]): string[] {
   const patterns = sourcePatterns(meta, root);
   if (!patterns.length) return [];
-  return (universe ?? workingFiles(root)).filter((f) => matchesAny(f, patterns) && existsSync(join(root, f)));
+  return (universe ?? workingFiles(root)).filter((f) => matchesAny(f, patterns) && isFile(join(root, f)));
+}
+
+/** A regular file that is really there: false for a directory, a submodule or a broken symlink. */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**

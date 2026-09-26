@@ -158,6 +158,13 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
 2. **Read the diff, not the repository.** For each stale page, read only its own
    diff: `git diff <its synced> HEAD -- <its sources>`. Anything in `skipped[]` has
    a broken contract; fix that first.
+   A page whose entry says `"by": "sources_key"` is the exception: its `synced:`
+   commit is gone (a squash or rebase merge), so there is no diff to read and
+   `files[]` and `citations[]` come back empty. Do not run `git diff` against that
+   sha — it fails. **Read the page's `sources:` as they are now** and check the page
+   against them, then re-stamp both `synced:` and `sources_key:`. That is more
+   reading than a diff, and it is the price of the merge style; it is still bounded
+   by the page's own sources.
 3. **Reconcile.** Rewrite only the stale sections, so hand-written notes survive.
    When the change **contradicts** what the page claimed, say what it used to be and
    what changed it, with the SHA. Re-check `confidence:` while you are there.

@@ -24,7 +24,7 @@ import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
 import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, KEY_LENGTH, STATE_FILE, chooseWiki, color, listPages, readPage, repoRoot, sourcesKey, wikiDir, workingFiles } from "../lib/lib.ts";
+import { IGNORE_FILE, KEY_LENGTH, STATE_FILE, asList, chooseWiki, color, listPages, readPage, repoRoot, sourcesKey, wikiDir, workingFiles } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 import { interactiveInit } from "../lib/setup.ts";
@@ -280,80 +280,90 @@ if (command === "key") {
   }
   // One `git ls-files` for the whole run, whether it keys one page or ninety.
   const working = workingFiles(root);
-  const keys = pages.map((p) => ({ page: p.id, sources_key: sourcesKey(root, readPage(p).meta, working) }));
-  if (flags.json) console.log(JSON.stringify(keys, null, 2));
+  const keys = pages.map((p) => {
+    const meta = readPage(p).meta;
+    // Two different silences: a page claiming nothing has nothing to key, and one whose files git
+    // could not hash has a key that exists and could not be read. Saying "no sources:" to the
+    // second sends the reader to fix a `sources:` line that is perfectly fine.
+    return { page: p.id, sources_key: sourcesKey(root, meta, working), sources: asList(meta?.sources).length };
+  });
+  if (flags.json) console.log(JSON.stringify(keys.map(({ page, sources_key }) => ({ page, sources_key })), null, 2));
   else
-    for (const { page, sources_key } of keys)
-      console.log(`${sources_key ?? color.dim("—".padEnd(KEY_LENGTH))}  ${page}${sources_key ? "" : color.dim("  (no sources:)")}`);
-  process.exit(0);
-}
-
-if (command !== "check") {
+    for (const { page, sources_key, sources } of keys)
+      console.log(
+        `${sources_key ?? color.dim("—".padEnd(KEY_LENGTH))}  ${page}` +
+          (sources_key ? "" : color.dim(sources ? "  (its sources could not be hashed)" : "  (no sources:)")),
+      );
+  // Not process.exit(): see the note at the end of this file. On a pipe stdout is written
+  // asynchronously, and a wiki of a few hundred pages is more `--json` than a pipe's buffer holds —
+  // which is exactly the output the ingest skill parses.
+} else if (command !== "check") {
   console.error(`unknown command: ${command}\n\n${HELP}`);
   process.exit(2);
-}
-
-const unknown = rest.filter((name) => !isCheck(name));
-if (unknown.length) {
-  console.error(`unknown check: ${unknown.join(", ")} (expected: ${CHECKS.join(", ")})`);
-  process.exit(2);
-}
-
-if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
-  console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
-  process.exit(1);
-}
-
-const all = !rest.length;
-
-// Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
-// still runs: seeding reads coverage to decide what to ignore.
-if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
-  if (flags.json) console.log(JSON.stringify({ seeded: false }));
-  else console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
-  process.exit(flags.strict ? 1 : 0);
-}
-
-const names: CheckName[] = all ? [...CHECKS] : [...new Set(rest.filter(isCheck))];
-const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
-
-const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
-  name === "drift"
-    ? { name, result: drift.run(ctx) }
-    : name === "coverage"
-      ? { name, result: coverage.run(ctx) }
-      : { name, result: lint.run(ctx) };
-
-const countFindings = (ran: Ran): number =>
-  ran.name === "drift"
-    ? ran.result.stale.length + ran.result.moved.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
-    : ran.name === "coverage"
-      ? ran.result.unclaimed.length
-      : ran.result.errors.length + ran.result.warnings.length;
-
-const reportOne = (ran: Ran, opts: ReportOptions): void => {
-  if (ran.name === "drift") drift.report(ran.result, opts);
-  else if (ran.name === "coverage") coverage.report(ran.result, opts);
-  else lint.report(ran.result);
-};
-
-const results = names.map((name) => runCheck(name, ctx));
-const total = results.reduce((sum, ran) => sum + countFindings(ran), 0);
-const lintResult = results.find((ran) => ran.name === "lint")?.result as LintResult | undefined;
-
-if (flags.json) {
-  const first = results[0];
-  console.log(
-    JSON.stringify(results.length === 1 && first ? first.result : Object.fromEntries(results.map((r) => [r.name, r.result])), null, 2),
-  );
-} else if (all && !total) {
-  console.log(color.green(`✓ wiki: current, covered and sound (${lintResult?.pages ?? 0} pages)`));
 } else {
-  for (const ran of results)
-    if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
-}
+  const unknown = rest.filter((name) => !isCheck(name));
+  if (unknown.length) {
+    console.error(`unknown check: ${unknown.join(", ")} (expected: ${CHECKS.join(", ")})`);
+    process.exit(2);
+  }
 
-const errors = lintResult?.errors.length ?? 0;
-// Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
-// `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
-process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
+
+  const all = !rest.length;
+
+  // Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
+  // still runs: seeding reads coverage to decide what to ignore.
+  if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
+    if (flags.json) console.log(JSON.stringify({ seeded: false }));
+    else console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
+    process.exit(flags.strict ? 1 : 0);
+  }
+
+  const names: CheckName[] = all ? [...CHECKS] : [...new Set(rest.filter(isCheck))];
+  const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
+
+  const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
+    name === "drift"
+      ? { name, result: drift.run(ctx) }
+      : name === "coverage"
+        ? { name, result: coverage.run(ctx) }
+        : { name, result: lint.run(ctx) };
+
+  const countFindings = (ran: Ran): number =>
+    ran.name === "drift"
+      ? ran.result.stale.length + ran.result.moved.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
+      : ran.name === "coverage"
+        ? ran.result.unclaimed.length
+        : ran.result.errors.length + ran.result.warnings.length;
+
+  const reportOne = (ran: Ran, opts: ReportOptions): void => {
+    if (ran.name === "drift") drift.report(ran.result, opts);
+    else if (ran.name === "coverage") coverage.report(ran.result, opts);
+    else lint.report(ran.result);
+  };
+
+  const results = names.map((name) => runCheck(name, ctx));
+  const total = results.reduce((sum, ran) => sum + countFindings(ran), 0);
+  const lintResult = results.find((ran) => ran.name === "lint")?.result as LintResult | undefined;
+
+  if (flags.json) {
+    const first = results[0];
+    console.log(
+      JSON.stringify(results.length === 1 && first ? first.result : Object.fromEntries(results.map((r) => [r.name, r.result])), null, 2),
+    );
+  } else if (all && !total) {
+    console.log(color.green(`✓ wiki: current, covered and sound (${lintResult?.pages ?? 0} pages)`));
+  } else {
+    for (const ran of results)
+      if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
+  }
+
+  const errors = lintResult?.errors.length ?? 0;
+  // Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
+  // `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
+  process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
+
+}

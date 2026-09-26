@@ -17,6 +17,7 @@ import {
   changedSince,
   color,
   commitExists,
+  KEY_SHAPE,
   commitsSince,
   gitOrNull,
   indexableChanges,
@@ -129,11 +130,18 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     // so they are left to lint, which re-reads every one of them against the file as it is.
     if (!commitExists(root, synced)) {
       const stored = meta.sources_key;
-      if (typeof stored !== "string" || !stored) {
-        skipped.push({ id: page.id, reason: `unknown sha: ${synced}` });
+      // Only a key of the right shape answers. A typo would never match anything, so trusting it
+      // would pin the page to "stale" for good, however often someone re-read it — the one failure
+      // this whole mechanism exists to avoid. Lint names the typo; here it is simply no answer.
+      if (typeof stored !== "string" || !KEY_SHAPE.test(stored)) {
+        skipped.push({ id: page.id, reason: `unknown sha: ${synced}${stored ? `, and \`sources_key: ${stored}\` is not a content key` : ""}` });
         continue;
       }
-      if (stored !== sourcesKey(root, meta, working())) stale.push({ id: page.id, synced, by: "sources_key", files: [], citations: [] });
+      const now = sourcesKey(root, meta, working());
+      // git could not hash the page's files (an unreadable one, a submodule): that is not evidence
+      // the code moved, so it must not be reported as if it were.
+      if (now === null) skipped.push({ id: page.id, reason: `unknown sha: ${synced}, and its sources could not be hashed` });
+      else if (now !== stored) stale.push({ id: page.id, synced, by: "sources_key", files: [], citations: [] });
       else fresh.push(page.id);
       continue;
     }

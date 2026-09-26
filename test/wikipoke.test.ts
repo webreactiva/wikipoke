@@ -880,6 +880,38 @@ test("a --json larger than a pipe's buffer reaches the reader whole", () => {
   const out = wikipoke(root, "check", "coverage", "--json").out;
   assert.ok(out.length > 65536, `${out.length} bytes`);
   assert.ok(json<CoverageJson>(root, "check", "coverage", "--json").unclaimed.length >= 400);
+
+  // `wikipoke key --json` is read by the ingest skill over a pipe too, a page at a line.
+  for (let i = 0; i < 400; i++) page(root, `components/${"x".repeat(150)}-${i}.md`, { sources: ["src/cli.js"] });
+  const keys = wikipoke(root, "key", "--json").out;
+  assert.ok(keys.length > 65536, `${keys.length} bytes`);
+  assert.equal((JSON.parse(keys) as unknown[]).length, 402);
+});
+
+test("a sources_key that cannot answer leaves the page unjudged rather than stale for ever", () => {
+  const { clone, gone } = squashMerged();
+  // A typo in the key would never match anything the sources hash to: trusting it would pin the
+  // page to "stale" however often it was re-read, which is the one thing this must not do.
+  const body = read(clone, "wiki/components/billing.md");
+  put(clone, "wiki/components/billing.md", body.replace(/sources_key: .*/, "sources_key: ffff"));
+  const typo = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(typo.stale, []);
+  assert.match(typo.skipped[0]?.reason ?? "", new RegExp(`unknown sha: ${gone}, and \`sources_key: ffff\` is not a content key`));
+
+  // Nor is a page git cannot hash — a submodule under its sources — evidence that the code moved.
+  put(clone, "wiki/components/billing.md", body);
+  const dep = mkdtempSync(join(tmpdir(), "wikipoke-dep-"));
+  git(dep, "init", "-q");
+  git(dep, "config", "user.email", "test@example.com");
+  git(dep, "config", "user.name", "test");
+  put(dep, "index.js", "export const dep = 1;\n");
+  git(dep, "add", "-A");
+  git(dep, "commit", "-qm", "dep");
+  git(clone, "-c", "protocol.file.allow=always", "submodule", "add", "-q", dep, "src/billing/dep");
+  const withSub = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(withSub.stale, [], "a submodule under the sources is not a change to them");
+  assert.ok(withSub.fresh.includes("components/billing") || withSub.skipped.length === 1);
+  assert.doesNotMatch(wikipoke(clone, "key", "components/billing").out, /could not be hashed/);
 });
 
 test("a citation is moved from the commit that wrote it, not from synced:", () => {
