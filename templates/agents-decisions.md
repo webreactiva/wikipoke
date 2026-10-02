@@ -9,5 +9,7 @@ and tell the person to add it from wikipoke's template `CONVENTIONS.md`.
 
 One note per decision, never several in one file: `{{WIKI}}/.inbox/YYYY-MM-DD-<slug>.md`, written
 in seconds when you make the choice, without reading the wiki. The inbox is never committed: if it has no `.gitignore`,
-create one holding `*`. When you finish the work, say how many notes you left.
+create one holding `*`. Before you finish, read your own diff once for a choice the bar covers
+that has no note yet — where something runs, what it depends on, what is hard to undo — and write
+it. Then say how many notes you left.
 <!-- wikipoke:decisions:end -->
