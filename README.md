@@ -124,6 +124,11 @@ What a repository gets once wikipoke is installed:
 - 🔔 **Optional hooks.** A notice after each commit or when an agent session starts, for
   git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
   them ever writes it.
+- 🧭 **Decisions caught while they are made** (optional). With the `decisions` hook, or by
+  launching `/wikipoke-implement`, the agent that writes the code jots down the choices worth
+  keeping — what it chose, what it discarded and why — in an uncommitted inbox, and the next
+  `wikipoke-ingest` turns them into decision pages. Only what clears a strict bar the project
+  sets in its `CONVENTIONS.md`: a new dependency, an architectural pattern, a choice hard to undo.
 - 💸 **Fewer tokens on the questions it covers.** 37% to 49% fewer on two small repositories; on a
   large one, 21% to 75% fewer on five of six questions once their answers were filed, and 7% more
   on the sixth. The first time a question finds a gap it costs more than asking without a wiki
@@ -133,7 +138,7 @@ What a repository gets once wikipoke is installed:
 
 ## Use cases
 
-Four ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
+Five ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
 a terminal.
 
 ### 1. The whole system, from scratch
@@ -189,6 +194,26 @@ The ingest writes the pages; the atlas puts them in a browser, or in a folder yo
    each page as the agent writes it.
 4. `wikipoke atlas --out site` exports it as a static site, with citations pointing at your GitHub
    or GitLab remote. Publish the folder wherever you host static pages.
+
+### 5. The decisions behind the code
+
+The code keeps every choice and none of the reasons. Here the agent writes the reason down while
+it still knows what it discarded, and the wiki keeps it.
+
+1. `wikipoke init` and `/wikipoke-ingest`, as above.
+2. Pick how to capture:
+   - `wikipoke hooks add decisions` asks every agent that reads `AGENTS.md` to take notes,
+     whenever it writes code here, or
+   - `/wikipoke-implement <plan>` takes notes only for that piece of work, when you ask for it.
+3. Read `## Decisions worth recording` in `wiki/CONVENTIONS.md`. That is the bar, and it starts
+   strict: a new runtime dependency, an architectural pattern, or a choice hard to reverse; no
+   routine fixes, linter preferences or anything the code already says. Widen or narrow it there;
+   a wider variant waits, commented, in the same section. Most tasks leave no note.
+4. The agent writes one note per decision in `wiki/.inbox/`, which is never committed.
+   `wikipoke check drift` counts them as `pending`, and the notifier says so.
+5. Before the branch or the worktree goes away, `/wikipoke-ingest` turns the notes into
+   `decisions/` pages, checked against the code and linked to the rest of the wiki, and deletes
+   them. It applies the bar again and drops what does not clear it.
 
 ## Install
 
@@ -272,7 +297,7 @@ the folder, edit `.wikipoke.json` and run `init` again to refresh the skills.
 ## Hooks (optional)
 
 A hook tells you or your agent, at the right moment, that the wiki has fallen behind. Every hook
-runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` finds, stays silent
+but `decisions` runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` finds, stays silent
 when the wiki is current, and never fails or calls a model. None of them writes the wiki. Coverage
 stays out of it on purpose: that backlog is meant to outlive every pass, and a notifier that
 repeats it at every commit and every session start is never silent, which is how a notifier gets
@@ -317,8 +342,11 @@ wikipoke hooks remove claude          # take one out
 | `opencode` | `.opencode/plugin/wikipoke.js` | when an OpenCode session starts, once per session |
 | `cursor` | `.cursor/rules/wikipoke.mdc` | a rule Cursor reads in every session |
 | `agents` | a delimited block in `AGENTS.md`, created if missing | Codex and any agent that reads `AGENTS.md` |
+| `decisions` | its own block in `AGENTS.md`, and `wiki/.inbox/.gitignore` | never: it asks agents to note decisions as they work ([use case 5](#5-the-decisions-behind-the-code)) |
 
-The notifier is written with the first hook and removed with the last.
+The notifier is written with the first hook that runs it and removed with the last. `decisions`
+does not run it, so on its own it tells nobody the wiki is behind: pair it with one that does.
+`hooks remove decisions` keeps the inbox's ignore file while notes are still in it.
 
 ## Files wikipoke manages
 
@@ -341,6 +369,7 @@ are until someone runs it.
 | `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path or a topic, documents a part no pass has covered (`all`: every part, one pass each) |
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims, gaps, and the flows and decisions coverage cannot ask for |
+| `wikipoke-implement` | implements a plan and notes the decisions worth keeping in `wiki/.inbox/` as it goes; runs only when you name it |
 | `wikipoke-agents` *(experimental)* | audits or writes `AGENTS.md`, and the nested ones a subdirectory needs, about the code and not the wiki; shows the change as a diff and writes only after a yes |
 
 `wikipoke-agents` is the one skill that does not touch the wiki, and it does not need one: it works
@@ -360,7 +389,8 @@ same command seeds a new repository and keeps an old one current:
 
 ```mermaid
 flowchart TD
-    run(["/wikipoke-ingest"]) --> arg{"a path or topic given?"}
+    run(["/wikipoke-ingest"]) --> inbox["<b>drain the inbox</b><br/>decision notes become pages<br/>(a seed does it after the avenues)"]
+    inbox --> arg{"a path or topic given?"}
     arg -- yes --> part["<b>ingest a part</b><br/>document that path or topic<br/>checkpoint untouched"]
     arg -- no --> state{"a checkpoint exists?"}
     state -- no --> seed["<b>seed</b><br/>the map, the main flows,<br/>one page per subsystem"]
@@ -441,13 +471,14 @@ The same runs showed more than tokens:
 
 ```sh
 wikipoke check              # all three
-wikipoke check drift        # commits not indexed, stale pages, and citations the code moved
+wikipoke check drift        # commits not indexed, stale pages, citations the code moved, pending decision notes
 wikipoke check coverage     # tracked files no page's `sources:` claims
 wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
 ```
 
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
-A plain run exits 1 only on lint errors.
+A plain run exits 1 only on lint errors. Pending decision notes never fail it, and CI never
+sees them: the inbox is not committed.
 
 ## `wikipoke atlas`
 
