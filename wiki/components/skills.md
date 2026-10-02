@@ -8,7 +8,7 @@ sources:
   - templates/skills/wikipoke-lint/SKILL.md
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
-synced: 6a9925f
+synced: dbfe0cf
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -62,7 +62,7 @@ decision.
 
 **`wikipoke-query`** answers a question from the wiki first, falls back to the code, and then
 offers to file the answer back. Notes waiting in `wiki/.inbox/` are leads, not answers: it never
-cites them. That offer is the point: it grows the wiki *where people actually
+cites them, and a `pending` notice does not make any page's citations suspect. That offer is the point: it grows the wiki *where people actually
 ask*, which is a better prior than where the index looks thin. It writes only on a yes, and never
 moves the checkpoint. Its sharpest line is the last one — for inventory questions ("every place we
 do X"), never accept an answer that rests on the wiki's silence.
@@ -110,8 +110,8 @@ templates by hand.
 
 **`wikipoke-implement`**, since `e52be54`, is the one skill that writes code. It implements what
 the person asked for, unchanged, and notes in `wiki/.inbox/` each decision that clears the
-project's bar, at the moment it is made, without reading the rest of the wiki. It never writes a
-page. It runs only when a person names it: its description says so and its frontmatter carries
+project's bar, at the moment it is made, without reading the rest of the wiki, and sweeps its
+diff before closing for one it moved past. It never writes a page. It runs only when a person names it: its description says so and its frontmatter carries
 `disable-model-invocation`, because a skill that fired on every "implement X" would compete with
 every other way of implementing. The `decisions` hook asks the same of every agent through
 `AGENTS.md`; both point at the same section of `CONVENTIONS.md`

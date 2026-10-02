@@ -9,7 +9,7 @@ sources:
   - templates/cursor-rule.mdc
   - templates/agents-block.md
   - templates/agents-decisions.md
-synced: 6a9925f
+synced: dbfe0cf
 related:
   - ./install.md
   - ../decisions/capture-decisions.md
@@ -59,7 +59,8 @@ the cheapest since it needs no tool-specific file.
 
 Since `35f9c8a` there is a hook that does not notify. `decisions` adds its own block to `AGENTS.md`
 (`templates/agents-decisions.md`) asking any agent that writes code here to note the decisions
-worth keeping in `wiki/.inbox/`, by the bar in `CONVENTIONS.md`, for the next `wikipoke-ingest` to
+worth keeping in `wiki/.inbox/`, by the bar in `CONVENTIONS.md`, and to sweep its own diff for one
+it missed before finishing, for the next `wikipoke-ingest` to
 turn into pages. It prints nothing and installs no notifier, so on its own nothing tells anyone the
 wiki is behind; it is meant to sit beside one of the five. Nothing in a repository implies it, so
 it is never pre-ticked. The notes it asks for are counted by `drift` as `pending`, which is how the

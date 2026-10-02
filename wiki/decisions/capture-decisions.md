@@ -9,7 +9,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: 6a9925f
+synced: dbfe0cf
 reversible: true
 related:
   - ./notify-never-write.md
@@ -52,7 +52,11 @@ Notes go to `wiki/.inbox/`, one decision per file, named by date so two branches
 The first run on another repository (a copy of atalaya-lab, through OpenCode) bundled three
 decisions in one note, and the ingest kept all three, one of them already recorded in that
 project's spec; since then the capture side says "never several in one file", and the drain judges
-a bundled note one decision at a time. The folder
+a bundled note one decision at a time. The runs also showed agents leave their notes for the end
+of the task rather than writing them as they choose, and one missed the choice that mattered most
+(running a daily backup inside the panel process instead of a system scheduler), which the ingest
+recovered only by reading the code. So both ways in now end with a sweep of the agent's own diff
+for a choice the bar covers that has no note yet. The folder
 holds a `.gitignore` of `*` that ignores itself too (`src/lib/install.ts:76`), so a project never
 touches its own ignore list, and in a fresh clone the agent that writes the first note recreates
 it; a bare `*` written that way counts as wikipoke's (`src/lib/install.ts:80`). Being a dot folder,

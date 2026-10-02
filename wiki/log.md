@@ -2,6 +2,11 @@
 
 ## 2026-10-03
 
+* **wikipoke-ingest**: reconciled 4 commits since `6a9925f`, from more OpenCode runs on copies of
+  atalaya-lab.
+  - decisions/capture-decisions.md, components/hooks.md, components/skills.md: the diff sweep
+    before closing, and a `pending` notice that leaves page citations alone.
+
 * **wikipoke-ingest**: reconciled 1 commit since `ee3921c`, wording from an OpenCode run on a
   copy of atalaya-lab.
   - decisions/capture-decisions.md, components/skills.md, flows/ingest-pass.md: one decision per
