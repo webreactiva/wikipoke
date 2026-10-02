@@ -168,7 +168,7 @@ function invitation(): string {
     `    wikipoke hooks add <name>`,
     ``,
     `${color.dim("git is per clone: .git/hooks is not versioned, so every checkout installs it again.")}`,
-    `${color.dim("The other four are ordinary repository files — commit one and everyone who clones has it.")}`,
+    `${color.dim("The others are ordinary repository files — commit one and everyone who clones has it.")}`,
   ].join("\n");
 }
 

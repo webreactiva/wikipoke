@@ -78,7 +78,9 @@ each note ──► clears the bar in CONVENTIONS.md "Decisions worth recording"
 
 1. **Apply the bar again.** The note was written in seconds by an agent in the middle of
    other work. Re-read the project's "Decisions worth recording" section and drop a note that
-   does not clear it. A dropped note is deleted, never kept "just in case".
+   does not clear it. A note that bundles several decisions is judged one decision at a time:
+   each clears the bar or is dropped on its own, and one already written in the spec, the plan
+   or the wiki is dropped however well it reads. A dropped note is deleted, never kept "just in case".
 2. **Check it against the code.** Open the files the note names. A note is a lead, not a fact
    to copy: when the code says otherwise, the code wins, and if the reason itself is in doubt,
    ask the person or write the page `confidence: inferred`. If a file the note names has

@@ -195,7 +195,7 @@ Record a decision when the change chooses between plausible alternatives and the
 architecture, contracts, invariants, dependencies, data, concurrency, security or performance,
 whether it is easy to reverse or not. -->
 
-**The note.** One file per decision in `{{WIKI}}/.inbox/`, named `YYYY-MM-DD-<slug>.md` so two
+**The note.** One file per decision in `{{WIKI}}/.inbox/`, never several in one, named `YYYY-MM-DD-<slug>.md` so two
 branches never collide, written in seconds when the choice is made, without reading the wiki:
 
 ```markdown

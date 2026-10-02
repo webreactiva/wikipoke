@@ -28,7 +28,7 @@ close: the work, plus how many notes wait for wikipoke-ingest
 2. **Implement.** Follow the plan, the project's agent instructions and its conventions as
    always. This skill changes nothing about how you write code.
 3. **Note a decision when you make it**, not at the end, when the discarded alternative is
-   already forgotten. One file per decision, `wiki/.inbox/YYYY-MM-DD-<slug>.md`, in the format
+   already forgotten. One file per decision, never several in one, `wiki/.inbox/YYYY-MM-DD-<slug>.md`, in the format
    the section gives: what you chose, what you discarded and why, whether it is reversible, the
    files it constrains. A few lines. If `wiki/.inbox/.gitignore` is missing, create it holding
    `*`: the notes are never committed.

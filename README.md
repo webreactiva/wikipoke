@@ -327,7 +327,7 @@ sequenceDiagram
 > quietly stops being true. `wikipoke hooks` says so whenever none is installed.
 
 Only `git` has to be installed again in every clone, because `.git/hooks` is not versioned; the
-other four are ordinary repository files, so committing one covers everyone who clones.
+others are ordinary repository files, so committing one covers everyone who clones.
 
 ```sh
 wikipoke hooks                        # the list: which are installed, which are outdated
