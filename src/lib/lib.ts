@@ -17,6 +17,8 @@ export const CONFIG_FILE = ".wikipoke.json";
 export const IGNORE_FILE = ".wikipokeignore";
 export const STATE_FILE = ".wikipoke-state.json";
 export const HOOK_FILE = ".wikipoke-hook.sh";
+/** Where agents leave decision notes for the next ingest. A dot folder, so it is never a page. */
+export const INBOX_DIR = ".inbox";
 
 /**
  * What `check` hands every check: the repository root, the wiki's absolute path, and the wiki's
@@ -388,6 +390,19 @@ export function neverSourceHit(source: string, matchers: ReturnType<typeof never
   if (existsSync(full) && statSync(full).isDirectory()) return undefined;
   const name = path.split("/").at(-1) ?? path;
   return matchers.find((m) => m.re.test(m.byName ? name : path))?.entry;
+}
+
+/**
+ * The decision notes waiting in the inbox, by file name. Counted, never read: what a note says is
+ * for wikipoke-ingest to judge.
+ */
+export function inboxNotes(wikiDir: string): string[] {
+  const dir = join(wikiDir, INBOX_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name)
+    .sort();
 }
 
 /** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */

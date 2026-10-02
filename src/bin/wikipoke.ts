@@ -3,7 +3,7 @@
 // it and shows it, and never writes a page.
 //
 //   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
-//   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
+//   wikipoke hooks [add|remove <name>...] optional hooks: git, claude, opencode, cursor, agents, decisions
 //   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
@@ -21,9 +21,9 @@ import * as coverage from "../lib/coverage.ts";
 import type { DriftResult } from "../lib/drift.ts";
 import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
-import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
+import { HOOKS, NOTIFIES, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import { IGNORE_FILE, INBOX_DIR, STATE_FILE, chooseWiki, color, inboxNotes, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 import { interactiveInit } from "../lib/setup.ts";
@@ -140,7 +140,8 @@ function printHooks(): { installed: number } {
 ${stale.join(", ")}: installed by an older wikipoke and left as they are. ` +
         `\`wikipoke hooks add ${stale.join(" ")}\` updates them.`,
     );
-  return { installed: hooks.filter((hook) => hook.installed).length };
+  // Only the hooks that run the notifier: `decisions` alone still leaves nothing to say the wiki is behind.
+  return { installed: hooks.filter((hook) => hook.installed && NOTIFIES(hook.name)).length };
 }
 
 /**
@@ -151,9 +152,13 @@ ${stale.join(", ")}: installed by an older wikipoke and left as they are. ` +
  * is the one who knows which row is theirs, and the exact command.
  */
 function invitation(): string {
+  // `decisions` alone feeds the wiki but tells nobody it is behind, so "no hook" would read as wrong.
+  const decisions = hookStatus(root, wiki).some((hook) => hook.installed && !NOTIFIES(hook.name));
   return [
     ``,
-    `No hook was installed. Hooks are the only thing that ever tells you the wiki has fallen`,
+    ...(decisions
+      ? [`No notifier hook was installed: decisions captures notes, but says nothing.`, `Notifiers are the only thing that ever tells you the wiki has fallen`]
+      : [`No hook was installed. Hooks are the only thing that ever tells you the wiki has fallen`]),
     `behind — \`wikipoke check\` speaks only when someone runs it — but each one changes what a`,
     `terminal or an agent session does, so wikipoke never adds one on its own.`,
     ``,
@@ -195,7 +200,7 @@ if (command === "init") {
   print(init(root, flags.dir === undefined ? {} : { dir: flags.dir }));
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);
-  console.log(`\nHooks are optional. Each one tells you or your agent when the wiki falls behind the code:\n`);
+  console.log(`\nHooks are optional. Most tell you or your agent when the wiki falls behind the code:\n`);
   // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
   // Which hook fits is something the agent knows about itself and this command cannot see, so
   // the invitation names the choice and the command instead of guessing at one. A re-run on a
@@ -280,8 +285,14 @@ const all = !rest.length;
 // Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
 // still runs: seeding reads coverage to decide what to ignore.
 if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
-  if (flags.json) console.log(JSON.stringify({ seeded: false }));
-  else console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
+  // Notes can come before the first page: an agent may implement with the decisions hook on and
+  // seed afterwards. The seed drains them, so they are named here rather than lost.
+  const pending = inboxNotes(wikiPath).length;
+  if (flags.json) console.log(JSON.stringify({ seeded: false, pending }));
+  else {
+    console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
+    if (pending) console.log(`${color.yellow("pending")}   ${pending} decision note(s) in ${wiki}/${INBOX_DIR}/ ${color.dim("-> wikipoke-ingest")}`);
+  }
   process.exit(flags.strict ? 1 : 0);
 }
 
@@ -297,7 +308,11 @@ const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
 
 const countFindings = (ran: Ran): number =>
   ran.name === "drift"
-    ? ran.result.stale.length + ran.result.moved.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
+    ? ran.result.stale.length +
+      ran.result.moved.length +
+      ran.result.skipped.length +
+      (ran.result.pending.length ? 1 : 0) +
+      (ran.result.repo.status === "current" ? 0 : 1)
     : ran.name === "coverage"
       ? ran.result.unclaimed.length
       : ran.result.errors.length + ran.result.warnings.length;

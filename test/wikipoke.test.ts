@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { get } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -88,6 +88,7 @@ function seed(root: string, wiki = "wiki"): void {
 
 /** The shapes `check --json` returns, as far as the assertions below read them. */
 interface DriftJson {
+  pending: string[];
   repo: { status: string; commits?: number; files?: number; last?: string };
   stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
@@ -111,7 +112,7 @@ test("init writes the schema, the ignore list and the skills in both homes, and 
   const { code, out } = wikipoke(root, "init");
   assert.equal(code, 0);
   for (const home of [".agents/skills", ".claude/skills"])
-    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents"])
+    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents", "wikipoke-implement"])
       assert.ok(existsSync(join(root, home, skill, "SKILL.md")), `${home}/${skill}`);
   for (const path of ["wiki/CONVENTIONS.md", "wiki/.wikipokeignore"]) assert.ok(existsSync(join(root, path)), path);
   // A skill is inert until someone names it; a hook fires on its own. Only the second needs a yes.
@@ -208,6 +209,114 @@ test("hooks remove takes out one hook at a time, and the notifier goes with the 
   assert.ok(existsSync(join(bare, "AGENTS.md")));
   wikipoke(bare, "hooks", "remove", "agents");
   assert.ok(!existsSync(join(bare, "AGENTS.md")));
+});
+
+test("the decisions hook asks agents for notes in its own block, and the inbox ignores itself", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n\nBe kind.\n" });
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "agents", "decisions");
+  const agents = read(root, "AGENTS.md");
+  assert.match(agents, /<!-- wikipoke:decisions:start[\s\S]*wiki\/CONVENTIONS\.md[\s\S]*<!-- wikipoke:decisions:end -->/);
+  assert.match(agents, /Decisions worth recording/, "it points at the bar, it does not restate it");
+  assert.match(read(root, "wiki/.inbox/.gitignore"), /^\*$/m);
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "---\ndecided_by: agent\n---\nChose a ring buffer.\n");
+  assert.equal(git(root, "status", "--porcelain", "--untracked-files=all", "wiki/.inbox"), "", "notes never reach git");
+  assert.doesNotMatch(wikipoke(root, "hooks", "add", "decisions").out, /created|updated/, "idempotent");
+
+  // A note is not a notifier: on its own it installs none, and `hooks` still says none is.
+  const bare = repo();
+  wikipoke(bare, "init");
+  wikipoke(bare, "hooks", "add", "decisions");
+  assert.ok(!existsSync(join(bare, "wiki/.wikipoke-hook.sh")));
+  assert.match(wikipoke(bare, "hooks").out, /decisions .* installed[\s\S]*No notifier hook was installed/);
+
+  // Removing it leaves the agents block, and keeps the ignore file while notes still wait.
+  const removed = wikipoke(root, "hooks", "remove", "decisions").out;
+  assert.doesNotMatch(read(root, "AGENTS.md"), /wikipoke:decisions/);
+  assert.match(read(root, "AGENTS.md"), /^# Rules\n\nBe kind\.\n\n<!-- wikipoke:start/);
+  assert.match(removed, /still holds 1 file/);
+  assert.ok(existsSync(join(root, "wiki/.inbox/.gitignore")));
+  assert.ok(existsSync(join(root, "wiki/.wikipoke-hook.sh")), "the agents hook still runs the notifier");
+  rmSync(join(root, "wiki/.inbox/2026-10-02-ring-buffer.md"));
+  wikipoke(root, "hooks", "remove", "decisions");
+  assert.ok(!existsSync(join(root, "wiki/.inbox")), "an empty inbox goes with the hook");
+});
+
+test("the decisions hook keeps an agent's own `*`, warns about a schema with no bar, and follows --dir", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  wikipoke(root, "init", "--dir", "docs/wiki");
+  // In a fresh clone the ignore file is gone (it ignores itself), and an agent writes a bare `*`.
+  put(root, "docs/wiki/.inbox/.gitignore", "*\n");
+  const added = wikipoke(root, "hooks", "add", "decisions").out;
+  assert.doesNotMatch(added, /not managed by wikipoke|CONVENTIONS\.md has no/);
+  assert.equal(read(root, "docs/wiki/.inbox/.gitignore"), "*\n", "left as the agent wrote it");
+  assert.match(read(root, "AGENTS.md"), /docs\/wiki\/CONVENTIONS\.md[\s\S]*docs\/wiki\/\.inbox\//);
+  put(root, "docs/wiki/.inbox/2026-10-02-ring-buffer.md", "note\n");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, ["docs/wiki/.inbox/2026-10-02-ring-buffer.md"]);
+  rmSync(join(root, "docs/wiki/.inbox/2026-10-02-ring-buffer.md"));
+  assert.match(wikipoke(root, "hooks", "remove", "decisions").out, /removed\s+docs\/wiki\/\.inbox\/\.gitignore/);
+
+  // A schema older than the hook has no bar, and says so rather than letting agents invent one.
+  writeFileSync(join(root, "docs/wiki/CONVENTIONS.md"), "---\ntype: schema\n---\n# our own\n");
+  assert.match(wikipoke(root, "hooks", "add", "decisions").out, /has no "## Decisions worth recording" section/);
+});
+
+test("a managed block is updated where it sits, and AGENTS.md goes only with the last block", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "agents", "decisions");
+  const tail = "\n## Later\n\nWritten after the blocks.\n";
+  const edited = `${read(root, "AGENTS.md").replace("## Decisions while implementing", "## An older wording")}${tail}`;
+  writeFileSync(join(root, "AGENTS.md"), edited);
+  assert.match(wikipoke(root, "hooks").out, /decisions .* installed, outdated/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /^ {2}agents .* outdated/m);
+  wikipoke(root, "hooks", "add", "decisions");
+  const now = read(root, "AGENTS.md");
+  assert.ok(now.endsWith(tail), "the project's text after the block stays after it");
+  assert.match(now, /## Decisions while implementing/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /outdated/);
+
+  // Removing agents keeps decisions and drops the notifier; removing both leaves only the project's text.
+  wikipoke(root, "hooks", "remove", "agents");
+  assert.match(read(root, "AGENTS.md"), /wikipoke:decisions:start/);
+  assert.ok(!existsSync(join(root, "wiki/.wikipoke-hook.sh")), "no notifier hook is left to run it");
+  wikipoke(root, "hooks", "remove", "decisions");
+  assert.equal(read(root, "AGENTS.md"), `# Rules\n${tail}`);
+
+  const bare = repo();
+  wikipoke(bare, "hooks", "add", "agents", "decisions");
+  wikipoke(bare, "hooks", "remove", "decisions", "agents");
+  assert.ok(!existsSync(join(bare, "AGENTS.md")));
+});
+
+test("before seeding, check still names the decision notes waiting for the seed", () => {
+  const root = repo();
+  wikipoke(root, "init");
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "note\n");
+  const { code, out } = wikipoke(root, "check");
+  assert.equal(code, 0);
+  assert.match(out, /unseeded[\s\S]*pending\s+1 decision note\(s\) in wiki\/\.inbox\//);
+  assert.deepEqual(json(root, "check", "--json"), { seeded: false, pending: 1 });
+});
+
+test("drift counts the decision notes waiting in the inbox, and they never fail check or become pages", () => {
+  const root = repo();
+  seed(root);
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, []);
+  put(root, "wiki/.inbox/.gitignore", "*\n");
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "---\ndecided_by: agent\n---\nChose a ring buffer.\n");
+  put(root, "wiki/.inbox/2026-10-02-overflow.md", "---\ndecided_by: agent\n---\nDrop the oldest.\n");
+  const { code, out } = wikipoke(root, "check");
+  assert.equal(code, 0, "pending notes are debt, not breakage");
+  assert.match(out, /pending\s+2 decision note\(s\) in wiki\/\.inbox\//);
+  assert.equal(wikipoke(root, "check", "--strict").code, 1);
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, [
+    "wiki/.inbox/2026-10-02-overflow.md",
+    "wiki/.inbox/2026-10-02-ring-buffer.md",
+  ]);
+  const lint = json<LintJson & { pages: number }>(root, "check", "lint", "--json");
+  assert.equal(lint.pages, 2, "the inbox is never walked as pages");
+  assert.deepEqual(lint.errors, []);
 });
 
 test("--dir moves the wiki, and everything written names the new place", () => {

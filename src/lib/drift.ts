@@ -6,10 +6,13 @@
 // The two answer different questions and neither replaces the other: the repo axis catches code
 // nobody has looked at yet, the page axis catches pages that lie. It counts; it does not judge.
 //
+// It also counts the decision notes waiting in the wiki's inbox: work owed to the wiki like a
+// stale page, and like one, something the notifier should mention and never a reason to fail.
+//
 // Citations get a third look, finer than either: each one is carried through the diff from the
 // commit that wrote it, so a page that was re-stamped without its pointers being moved still says
 // where they went.
-import { relative } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 
 import type { CheckContext, LoadedPage, ReportOptions } from "./lib.ts";
 import {
@@ -19,6 +22,8 @@ import {
   commitExists,
   commitsSince,
   gitOrNull,
+  inboxNotes,
+  INBOX_DIR,
   indexableChanges,
   listPages,
   matchesAny,
@@ -72,6 +77,8 @@ export interface SkippedPage {
 
 export interface DriftResult {
   repo: RepoAxis;
+  /** Decision notes in the inbox, as paths from the repository root. */
+  pending: string[];
   stale: StalePage[];
   moved: MovedPage[];
   skipped: SkippedPage[];
@@ -81,6 +88,8 @@ export interface DriftResult {
 
 export function run({ root, wikiDir }: CheckContext): DriftResult {
   const repo = repoAxis(root, wikiDir);
+  const inbox = relative(root, join(wikiDir, INBOX_DIR)).split(sep).join(posix.sep);
+  const pending = inboxNotes(wikiDir).map((note) => `${inbox}/${note}`);
   const pages = listPages(wikiDir).map(readPage);
 
   // One `git diff` per distinct sha, not one per page; one per sha and cited file for the lines.
@@ -124,7 +133,7 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     }
   }
 
-  return { repo, stale, moved, skipped, fresh, pages: pages.length };
+  return { repo, pending, stale, moved, skipped, fresh, pages: pages.length };
 }
 
 /**
@@ -226,6 +235,12 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
   } else if (res.repo.status === "no-checkpoint") {
     found++;
     console.log(`${color.red("broken")}    repo — no checkpoint yet ${color.dim("-> wikipoke-ingest")}`);
+  }
+
+  if (res.pending.length) {
+    found++;
+    const dir = res.pending[0]?.replace(/[^/]+$/, "");
+    console.log(`${color.yellow("pending")}   ${res.pending.length} decision note(s) in ${dir} ${color.dim("-> wikipoke-ingest")}`);
   }
 
   for (const item of res.stale) {
