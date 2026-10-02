@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: ee3921c
+synced: 6a9925f
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -50,7 +50,7 @@ checkpoint: Mode A and B write last_indexed_commit = HEAD, by printf, never by h
 Since `e52be54` a pass starts with the decision notes an agent left in `wiki/.inbox/` while
 implementing, because they are the only place the discarded alternative survives and they live in
 one working copy. Each is judged against the project's "Decisions worth recording" bar a second
-time, read against the files it names, and turned into a new decision page, an extension or a
+time, one decision at a time when a note bundles several, read against the files it names, and turned into a new decision page, an extension or a
 supersede; then it is deleted, right after its page, so a pass cut short never integrates one twice.
 A note about uncommitted code waits for a commit, because `synced:` has to name one. A seed drains
 after its avenues, so the decision pages have something to link to. What was dropped is said in the

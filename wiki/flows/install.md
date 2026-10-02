@@ -6,7 +6,7 @@ sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
   - src/lib/setup.ts
-synced: ee3921c
+synced: 6a9925f
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md

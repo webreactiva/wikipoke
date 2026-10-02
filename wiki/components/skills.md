@@ -8,7 +8,7 @@ sources:
   - templates/skills/wikipoke-lint/SKILL.md
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
-synced: ee3921c
+synced: 6a9925f
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -35,7 +35,8 @@ claimed — after a seed listed two files it never opened and hid them from the 
 [The full pass is a flow](../flows/ingest-pass.md).
 
 Since `e52be54` every mode but a seed starts by draining `wiki/.inbox/`: each decision note is
-checked against the project's "Decisions worth recording" bar a second time, against the code it
+checked against the project's "Decisions worth recording" bar a second time — a note that bundles
+several, one decision at a time — against the code it
 names, and against the decision pages already there, then becomes a new page, extends one or
 supersedes one, and is deleted right after, so a pass cut short never integrates a note twice. A
 seed drains after its avenues, so the pages have something to link to. A note about code not yet

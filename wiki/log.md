@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-03
+
+* **wikipoke-ingest**: reconciled 1 commit since `ee3921c`, wording from an OpenCode run on a
+  copy of atalaya-lab.
+  - decisions/capture-decisions.md, components/skills.md, flows/ingest-pass.md: one decision per
+    note, and a bundled note judged one decision at a time.
+  - The other ten stale pages re-read against the diff (the invitation's hook count, the same
+    wording in the templates) and re-stamped; nothing they claim changed.
+
 ## 2026-10-02
 
 * **wikipoke-ingest**: reconciled 24 commits since `542edcd`: YAML-safe frontmatter (#4), the

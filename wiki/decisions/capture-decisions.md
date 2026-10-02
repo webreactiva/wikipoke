@@ -9,7 +9,7 @@ sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: ee3921c
+synced: 6a9925f
 reversible: true
 related:
   - ./notify-never-write.md
@@ -48,7 +48,11 @@ until it is added rather than invent one.
 
 ## An uncommitted inbox, counted as debt
 
-Notes go to `wiki/.inbox/`, one file each, named by date so two branches never collide. The folder
+Notes go to `wiki/.inbox/`, one decision per file, named by date so two branches never collide.
+The first run on another repository (a copy of atalaya-lab, through OpenCode) bundled three
+decisions in one note, and the ingest kept all three, one of them already recorded in that
+project's spec; since then the capture side says "never several in one file", and the drain judges
+a bundled note one decision at a time. The folder
 holds a `.gitignore` of `*` that ignores itself too (`src/lib/install.ts:76`), so a project never
 touches its own ignore list, and in a fresh clone the agent that writes the first note recreates
 it; a bare `*` written that way counts as wikipoke's (`src/lib/install.ts:80`). Being a dot folder,

@@ -4,7 +4,7 @@ type: entity
 responsibility: How `src/bin/wikipoke.ts` dispatches the five commands and what each exit code means.
 sources:
   - src/bin/wikipoke.ts
-synced: ee3921c
+synced: 6a9925f
 related:
   - ../architecture.md
   - ../flows/check.md

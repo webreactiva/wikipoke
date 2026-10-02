@@ -9,7 +9,7 @@ sources:
   - templates/cursor-rule.mdc
   - templates/agents-block.md
   - templates/agents-decisions.md
-synced: ee3921c
+synced: 6a9925f
 related:
   - ./install.md
   - ../decisions/capture-decisions.md
