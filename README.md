@@ -546,6 +546,20 @@ npm run link     # build, then `npm link`: the working copy becomes your global 
 npm run unlink   # take it off the PATH again
 ```
 
+**Releasing.** A version tag is the whole release. `npm version` bumps `package.json`, commits it
+and tags the commit; pushing the tag runs `.github/workflows/release.yml`, which runs the same
+checks as a pull request, publishes that commit to npm with provenance, and creates the GitHub
+release with notes generated from the merged pull requests:
+
+```sh
+npm version patch        # or minor: bumps, commits "0.3.2", tags v0.3.2
+git push --follow-tags
+```
+
+A tag that does not match `package.json` publishes nothing. There is no npm token: npm trusts the
+workflow itself (trusted publishing), configured once on npmjs.com for this repository and
+`release.yml`.
+
 Node runs a `.ts` file by stripping the types out of it, so during development there is nothing
 to build and the tests exercise the same file you just edited. It refuses to do that for anything
 under `node_modules/`, though, which is exactly where an installed wikipoke lives — so what ships
