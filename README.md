@@ -124,8 +124,9 @@ What a repository gets once wikipoke is installed:
 - 🔔 **Optional hooks.** A notice after each commit or when an agent session starts, for
   git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
   them ever writes it.
-- 🧭 **Decisions caught while they are made** (optional). With the `decisions` hook, or by
-  launching `/wikipoke-implement`, the agent that writes the code jots down the choices worth
+- 🧭 **Decisions caught while they are made** (optional, and the one feature that changes how
+  agents work in your project: [read this first](#5-the-decisions-behind-the-code)). With the
+  `decisions` hook, or by launching `/wikipoke-implement`, the agent that writes the code jots down the choices worth
   keeping — what it chose, what it discarded and why — in an uncommitted inbox, and the next
   `wikipoke-ingest` turns them into decision pages. Only what clears a strict bar the project
   sets in its `CONVENTIONS.md`: a new dependency, an architectural pattern, a choice hard to undo.
@@ -200,11 +201,30 @@ The ingest writes the pages; the atlas puts them in a browser, or in a folder yo
 The code keeps every choice and none of the reasons. Here the agent writes the reason down while
 it still knows what it discarded, and the wiki keeps it.
 
+> [!WARNING]
+> **This is the one part of wikipoke that changes how agents work in your project, not only what
+> they read.** Everything else waits for a person to launch a skill. With the `decisions` hook on,
+> every agent that reads `AGENTS.md` and writes code here is told to stop at each choice that
+> clears the bar, write a note, and sweep its diff before finishing — in every task, whoever
+> asked for it. Concretely, it:
+>
+> - adds a block to `AGENTS.md`, which you commit, so every clone and every teammate's agent
+>   gets it;
+> - creates `wiki/.inbox/`, a folder agents write into and git never sees;
+> - puts the notes in front of the next `/wikipoke-ingest`, which writes `decisions/` pages from
+>   them — pages that become part of your wiki and of every answer drawn from it;
+> - costs some tokens and reading on every implementation, even when no note comes out of it.
+>
+> Turn it on when the team wants decisions kept, with the bar it agrees on, and say so to whoever
+> works in the repository. `wikipoke hooks remove decisions` takes the block out. If you would
+> rather choose case by case, skip the hook and name `/wikipoke-implement` when you want notes.
+
 1. `wikipoke init` and `/wikipoke-ingest`, as above.
-2. Pick how to capture:
-   - `wikipoke hooks add decisions` asks every agent that reads `AGENTS.md` to take notes,
-     whenever it writes code here, or
-   - `/wikipoke-implement <plan>` takes notes only for that piece of work, when you ask for it.
+2. Pick one of the two ways in, they are alternatives:
+   - **Always**: `wikipoke hooks add decisions` asks every agent that reads `AGENTS.md` to take
+     notes whenever it writes code here.
+   - **When you ask**: `/wikipoke-implement <plan>` takes notes only for that piece of work. It
+     runs only when named, never on a plain "implement X".
 3. Read `## Decisions worth recording` in `wiki/CONVENTIONS.md`. That is the bar, and it starts
    strict: a new runtime dependency, an architectural pattern, or a choice hard to reverse; no
    routine fixes, linter preferences or anything the code already says. Widen or narrow it there;
