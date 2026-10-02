@@ -58,19 +58,28 @@ interface PageOptions {
   type?: string;
   sources?: string[];
   synced?: string;
+  key?: string;
   body?: string;
   wiki?: string;
 }
 
 function page(root: string, path: string, options: PageOptions = {}): void {
-  const { type = "entity", sources = ["src/billing"], synced, body = "", wiki = "wiki" } = options;
+  const { type = "entity", sources = ["src/billing"], synced, key, body = "", wiki = "wiki" } = options;
   put(
     root,
     `${wiki}/${path}`,
     `---\ntitle: ${path}\ntype: ${type}\nresponsibility: documents ${path}\nsources:\n` +
       sources.map((s) => `  - ${s}\n`).join("") +
-      `synced: ${synced ?? git(root, "rev-parse", "--short", "HEAD")}\n---\n${body}\n`,
+      `synced: ${synced ?? git(root, "rev-parse", "--short", "HEAD")}\n` +
+      (key === undefined ? "" : `sources_key: ${key}\n`) +
+      `---\n${body}\n`,
   );
+}
+
+/** The content key the CLI prints for a page, as the ingest skill would copy it. */
+function keyOf(root: string, id: string): string {
+  const printed = json<{ page: string; sources_key: string | null }[]>(root, "key", id, "--json");
+  return printed[0]?.sources_key ?? "";
 }
 
 /** Seeds the wiki the way the ingest skill would: pages, index, log, checkpoint. */
@@ -89,8 +98,9 @@ function seed(root: string, wiki = "wiki"): void {
 /** The shapes `check --json` returns, as far as the assertions below read them. */
 interface DriftJson {
   repo: { status: string; commits?: number; files?: number; last?: string };
-  stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
+  stale: { id: string; by: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
+  skipped: { id: string; reason: string }[];
   fresh: string[];
 }
 interface CoverageJson {
@@ -100,6 +110,48 @@ interface CoverageJson {
 interface LintJson {
   errors: { page?: string; message: string }[];
   warnings: { page?: string; message: string }[];
+}
+
+/**
+ * A wiki pass on a branch, squash-merged into the trunk, then cloned afresh: exactly how a page's
+ * `synced:` commit stops existing for everybody (#3). The clone is the point — the commit object
+ * survives in the repository that wrote it, so only a fresh clone shows what the rest of the team
+ * sees. Returns the clone and the sha the page still names.
+ */
+function squashMerged(options: { key?: boolean; thenEdit?: string } = {}): { clone: string; gone: string } {
+  const root = repo();
+  seed(root);
+  const trunk = git(root, "rev-parse", "--abbrev-ref", "HEAD");
+
+  git(root, "checkout", "-qb", "feature");
+  put(root, "src/billing/invoice.js", "export const total = 2;\n");
+  git(root, "commit", "-qam", "invoices round per line");
+  const gone = git(root, "rev-parse", "--short", "HEAD");
+  // The pass re-reads the page against that commit and re-stamps it, with the key wikipoke prints.
+  page(root, "components/billing.md", {
+    synced: gone,
+    ...(options.key === false ? {} : { key: keyOf(root, "components/billing") }),
+    body: "Back to [the map](../architecture.md).",
+  });
+  git(root, "commit", "-qam", "wiki: reconcile billing");
+
+  git(root, "checkout", "-q", trunk);
+  git(root, "merge", "--squash", "feature");
+  git(root, "commit", "-qm", "invoices round per line (#1)");
+  git(root, "branch", "-qD", "feature");
+
+  // Through file://, not the path: a plain local clone hardlinks the whole object database across,
+  // unreachable commits and all, and the squashed sha would still resolve. Over a transport only
+  // what the branch reaches is packed, which is what everyone but the author of the branch gets.
+  const clone = mkdtempSync(join(tmpdir(), "wikipoke-clone-"));
+  execFileSync("git", ["clone", "-q", `file://${root}`, clone], { stdio: "pipe" });
+  git(clone, "config", "user.email", "test@example.com");
+  git(clone, "config", "user.name", "test");
+  if (options.thenEdit !== undefined) {
+    put(clone, "src/billing/invoice.js", options.thenEdit);
+    git(clone, "commit", "-qam", "invoices round per total again");
+  }
+  return { clone, gone };
 }
 
 const json = <T>(root: string, ...args: string[]): T => JSON.parse(wikipoke(root, ...args).out) as T;
@@ -680,6 +732,85 @@ test("a checkpoint that is not a commit is shown in full, since its first charac
   assert.match(wikipoke(root, "check", "drift").out, new RegExp(`checkpoint points at ${invented}, which is not a commit here`));
 });
 
+test("a squash merge blinds drift and fails lint on a page that carries no content key", () => {
+  // The bug #3 reports, reproduced: nothing about the page is wrong, and the wiki reads as broken.
+  const { clone, gone } = squashMerged({ key: false });
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(
+    drift.skipped.map((s) => s.reason),
+    [`unknown sha: ${gone}`],
+    "drift cannot judge the page at all",
+  );
+  const check = wikipoke(clone, "check");
+  assert.equal(check.code, 1, "and a plain check fails, as if the wiki were broken");
+  assert.match(check.out, new RegExp(`error.*\`synced: ${gone}\` is not a commit`));
+});
+
+test("with a content key, a squashed page is judged by its sources and lint only warns", () => {
+  const { clone, gone } = squashMerged();
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(drift.skipped, [], "nothing is skipped any more");
+  assert.ok(drift.fresh.includes("components/billing"), "the sources did not move: the page is fresh");
+
+  const lint = json<LintJson>(clone, "check", "lint", "--json");
+  assert.deepEqual(lint.errors, [], "a lost commit is debt, not a broken wiki");
+  assert.match(
+    lint.warnings.find((w) => w.page === "components/billing")?.message ?? "",
+    new RegExp(`\`synced: ${gone}\`.*squash or rebase merge`),
+    "and the warning names the cause, so nobody goes looking for a typo",
+  );
+  assert.equal(wikipoke(clone, "check").code, 0);
+});
+
+test("a content key still reports the page stale once its sources really move", () => {
+  const { clone } = squashMerged({ thenEdit: "export const total = 3;\n" });
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  const stale = drift.stale.find((s) => s.id === "components/billing");
+  assert.equal(stale?.by, "sources_key", "judged by content, so it names no diff it cannot read");
+  assert.deepEqual(stale?.files, []);
+  assert.match(wikipoke(clone, "check", "drift").out, /stale.*components\/billing.*its sources changed/s);
+
+  // A change reverted hashes back to what it was: something a commit distance can never see.
+  put(clone, "src/billing/invoice.js", "export const total = 2;\n");
+  git(clone, "commit", "-qam", "revert");
+  assert.ok(json<DriftJson>(clone, "check", "drift", "--json").fresh.includes("components/billing"));
+});
+
+test("wikipoke key prints what a page's sources hash to, and only for pages that exist", () => {
+  const root = repo();
+  seed(root);
+  const printed = wikipoke(root, "key");
+  assert.equal(printed.code, 0);
+  assert.match(printed.out, /^[0-9a-f]{12} {2}architecture$/m);
+  assert.match(printed.out, /^[0-9a-f]{12} {2}components\/billing$/m);
+
+  // The key follows the contents, not the commits: an uncommitted edit moves it, as drift's page
+  // axis does, and naming the page with or without .md is the same page.
+  const before = keyOf(root, "components/billing");
+  assert.equal(keyOf(root, "components/billing.md"), before);
+  put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
+  assert.notEqual(keyOf(root, "components/billing"), before);
+  assert.equal(keyOf(root, "architecture"), keyOf(root, "architecture"), "and a page it does not touch is unchanged");
+
+  const missing = wikipoke(root, "key", "components/nope");
+  assert.equal(missing.code, 2);
+  assert.match(missing.out, /no such page: components\/nope/);
+});
+
+test("a sources_key that is not a key is warned about, and never softens the broken-commit error", () => {
+  const root = repo();
+  seed(root);
+  const head = git(root, "rev-parse", "HEAD");
+  page(root, "components/billing.md", {
+    synced: head.slice(0, 7) + "0".repeat(33),
+    key: "not-a-key",
+    body: "Back to [the map](../architecture.md).",
+  });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  assert.match(lint.warnings.find((w) => w.message.includes("sources_key"))?.message ?? "", /is not a content key/);
+  assert.ok(lint.errors.some((e) => e.message.includes("is not a commit in this repository")), "the error stands");
+});
+
 test("a link with a line anchor is a citation too, for lint and for drift", () => {
   const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
   const root = repo({ "src/billing/invoice.js": lines(10) });
@@ -749,6 +880,38 @@ test("a --json larger than a pipe's buffer reaches the reader whole", () => {
   const out = wikipoke(root, "check", "coverage", "--json").out;
   assert.ok(out.length > 65536, `${out.length} bytes`);
   assert.ok(json<CoverageJson>(root, "check", "coverage", "--json").unclaimed.length >= 400);
+
+  // `wikipoke key --json` is read by the ingest skill over a pipe too, a page at a line.
+  for (let i = 0; i < 400; i++) page(root, `components/${"x".repeat(150)}-${i}.md`, { sources: ["src/cli.js"] });
+  const keys = wikipoke(root, "key", "--json").out;
+  assert.ok(keys.length > 65536, `${keys.length} bytes`);
+  assert.equal((JSON.parse(keys) as unknown[]).length, 402);
+});
+
+test("a sources_key that cannot answer leaves the page unjudged rather than stale for ever", () => {
+  const { clone, gone } = squashMerged();
+  // A typo in the key would never match anything the sources hash to: trusting it would pin the
+  // page to "stale" however often it was re-read, which is the one thing this must not do.
+  const body = read(clone, "wiki/components/billing.md");
+  put(clone, "wiki/components/billing.md", body.replace(/sources_key: .*/, "sources_key: ffff"));
+  const typo = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(typo.stale, []);
+  assert.match(typo.skipped[0]?.reason ?? "", new RegExp(`unknown sha: ${gone}, and \`sources_key: ffff\` is not a content key`));
+
+  // Nor is a page git cannot hash — a submodule under its sources — evidence that the code moved.
+  put(clone, "wiki/components/billing.md", body);
+  const dep = mkdtempSync(join(tmpdir(), "wikipoke-dep-"));
+  git(dep, "init", "-q");
+  git(dep, "config", "user.email", "test@example.com");
+  git(dep, "config", "user.name", "test");
+  put(dep, "index.js", "export const dep = 1;\n");
+  git(dep, "add", "-A");
+  git(dep, "commit", "-qm", "dep");
+  git(clone, "-c", "protocol.file.allow=always", "submodule", "add", "-q", dep, "src/billing/dep");
+  const withSub = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(withSub.stale, [], "a submodule under the sources is not a change to them");
+  assert.ok(withSub.fresh.includes("components/billing") || withSub.skipped.length === 1);
+  assert.doesNotMatch(wikipoke(clone, "key", "components/billing").out, /could not be hashed/);
 });
 
 test("a citation is moved from the commit that wrote it, not from synced:", () => {

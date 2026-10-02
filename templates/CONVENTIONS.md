@@ -115,6 +115,7 @@ responsibility:   # ONE sentence: what this page is responsible for (feeds index
 sources:          # the code this page documents: the link to git
   - src/billing/invoice.ts
 synced:           # short SHA this page was last reconciled against
+sources_key:      # what those sources hashed to then: `wikipoke key <page>` prints it
 confidence:       # high | inferred (optional, absent means high)
 related:          # links to sibling pages (optional)
   - ./payments.md
@@ -123,7 +124,7 @@ related:          # links to sibling pages (optional)
 <!-- body: stay high-altitude, do not transcribe the code -->
 ```
 
-Five required keys, two optional. That is the whole schema. A page may carry any other key it
+Five required keys, three optional. That is the whole schema. A page may carry any other key it
 finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. There is
 deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
 page was verified against, which is the date that matters.
@@ -143,6 +144,15 @@ tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns ab
   (`src/jobs/*.ts`); a wildcard-free directory means everything under it.
 - **`synced:`** is per-page staleness: if any of a page's sources changed after its `synced` SHA,
   the page is stale.
+- **`sources_key:`** is the same question asked without git history. A wiki pass usually runs on a
+  branch, so `synced:` names a commit on that branch — and a **squash or rebase merge throws those
+  commits away**. Anyone who clones the project afterwards has a page pointing at a commit that
+  does not exist: drift cannot tell whether it is stale, and lint reads the page as broken. The key
+  is what those same sources hashed to at the moment of the pass, so the comparison survives the
+  merge. Take it from `wikipoke key <page>` after writing the page, never by hand; it is a hash,
+  not something to guess. Keep it in step with `synced:`: both are re-stamped together, and only
+  after re-reading the page against the code. A page without one is checked exactly as before,
+  which is why wikis written before this key keep working.
 - **`confidence:`** separates *read* from *deduced*. `high` (the default) means "I read this in
   the code". `inferred` means "this is my reading and it may be wrong": use it for intent,
   rationale and history you reconstructed rather than found. Prefer asking the person over
@@ -233,13 +243,18 @@ wikipoke check              # all three, silent parts stay silent
 wikipoke check drift        # is the wiki behind the code?
 wikipoke check coverage     # is all the code in the wiki?
 wikipoke check lint         # is the wiki internally sound?
+wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
 Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
 
 - **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
-  against the working tree, so uncommitted edits count. It also lists every citation the code moved
+  against the working tree, so uncommitted edits count. When `synced` names a commit this
+  repository no longer has — what a squash or rebase merge leaves behind — it compares
+  `sources_key:` against what those sources hash to now instead: it still says stale or fresh, but
+  it cannot name which files moved, so the pass re-reads the page's sources. A page with neither a
+  live commit nor a key is reported as unjudgeable rather than guessed at. It also lists every citation the code moved
   since the commit that wrote it, with the line it points at now or a note that the cited line
   itself changed: on a stale page, and on a fresh one (`moved`) that was re-stamped without being
   re-pointed. A citation not committed yet counts as current.
@@ -248,7 +263,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   with how many files the ignore list took out, so a rule that hides too much is visible rather
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
-- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit, sources still
+- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit — a warning rather than an error when `sources_key:` still answers — a well-formed `sources_key`, sources still
   match a tracked file, a source listed under "Never a source", over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
   or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading

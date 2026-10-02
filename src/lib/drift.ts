@@ -17,6 +17,7 @@ import {
   changedSince,
   color,
   commitExists,
+  KEY_SHAPE,
   commitsSince,
   gitOrNull,
   indexableChanges,
@@ -27,6 +28,8 @@ import {
   readState,
   shortSha,
   sourcePatterns,
+  sourcesKey,
+  workingFiles,
 } from "./lib.ts";
 
 /**
@@ -47,10 +50,18 @@ export interface MovedCitation {
   now: number | null;
 }
 
+/**
+ * How a page was judged. `synced` is the commit comparison; `sources_key` is the content
+ * comparison that takes over when that commit is gone, and it knows *that* the sources moved, never
+ * which of them did.
+ */
+export type JudgedBy = "synced" | "sources_key";
+
 /** A page whose own `sources:` moved past its own `synced:`. */
 export interface StalePage {
   id: string;
   synced: string;
+  by: JudgedBy;
   files: string[];
   citations: MovedCitation[];
 }
@@ -96,6 +107,9 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     if (!hunks) hunkCache.set(`${sha}:${path}`, (hunks = diffHunks(root, sha, path)));
     return hunks;
   };
+  // Two `git ls-files` for the whole run, and only in a wiki that has a page to judge by content.
+  let files: string[] | undefined;
+  const working = (): string[] => (files ??= workingFiles(root));
 
   const stale: StalePage[] = [];
   const moved: MovedPage[] = [];
@@ -110,14 +124,31 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
       skipped.push({ id: page.id, reason: "no contract (missing sources or synced)" });
       continue;
     }
+    // A squash or rebase merge rewrites the commits a wiki pass stamped, so `synced` can name a
+    // commit nobody has any more. The page is not broken and drift is not blind: its content key
+    // answers the same question without git history. Citations cannot be carried without a diff,
+    // so they are left to lint, which re-reads every one of them against the file as it is.
     if (!commitExists(root, synced)) {
-      skipped.push({ id: page.id, reason: `unknown sha: ${synced}` });
+      const stored = meta.sources_key;
+      // Only a key of the right shape answers. A typo would never match anything, so trusting it
+      // would pin the page to "stale" for good, however often someone re-read it — the one failure
+      // this whole mechanism exists to avoid. Lint names the typo; here it is simply no answer.
+      if (typeof stored !== "string" || !KEY_SHAPE.test(stored)) {
+        skipped.push({ id: page.id, reason: `unknown sha: ${synced}${stored ? `, and \`sources_key: ${stored}\` is not a content key` : ""}` });
+        continue;
+      }
+      const now = sourcesKey(root, meta, working());
+      // git could not hash the page's files (an unreadable one, a submodule): that is not evidence
+      // the code moved, so it must not be reported as if it were.
+      if (now === null) skipped.push({ id: page.id, reason: `unknown sha: ${synced}, and its sources could not be hashed` });
+      else if (now !== stored) stale.push({ id: page.id, synced, by: "sources_key", files: [], citations: [] });
+      else fresh.push(page.id);
       continue;
     }
     const patterns = sourcePatterns(meta, root);
     const files = changesFor(synced).filter((f) => matchesAny(f, patterns));
     const citations = movedCitations(root, wikiDir, page, changesFor, hunksFor);
-    if (files.length) stale.push({ id: page.id, synced, files, citations });
+    if (files.length) stale.push({ id: page.id, synced, by: "synced", files, citations });
     else {
       fresh.push(page.id);
       if (citations.length) moved.push({ id: page.id, citations });
@@ -230,7 +261,13 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
 
   for (const item of res.stale) {
     found++;
-    console.log(`${color.yellow("stale")}     ${color.bold(item.id)} ${color.dim(`(since ${item.synced})`)}`);
+    // Judged by content, there is no diff to name files from: say which sources to re-read, and why
+    // the sha in the frontmatter is not the one to reach for.
+    const how =
+      item.by === "sources_key"
+        ? `(its sources changed; ${item.synced} is not a commit here any more — re-read its sources:)`
+        : `(since ${item.synced})`;
+    console.log(`${color.yellow("stale")}     ${color.bold(item.id)} ${color.dim(how)}`);
     const shown = verbose ? item.files : item.files.slice(0, 8);
     for (const f of shown) console.log(`    ${color.dim(f)}`);
     if (!verbose && item.files.length > shown.length) console.log(color.dim(`    …and ${item.files.length - shown.length} more`));
