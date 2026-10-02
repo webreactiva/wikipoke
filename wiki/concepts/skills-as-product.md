@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: e3139d1
+synced: 6a9925f
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -21,7 +21,7 @@ That has a concrete consequence the project states as a rule in
 and read-only. A feature that needs judgement is a paragraph, not a function.
 
 It also explains a smaller rule that looks like style and is not: templates are plain files copied
-as they are, never strings built in code (`src/lib/install.ts:85` is the entire rendering engine — one
+as they are, never strings built in code (`src/lib/install.ts:104` is the entire rendering engine — one
 `replaceAll` of `{{WIKI}}`). A skill kept as a string is a skill nobody diffs, nobody reviews as
 prose, and nobody can open in the repository to see what their agent was told.
 
@@ -39,3 +39,10 @@ sees when it decides whether to reach for one. The query skill's first descripti
 does X work" and "where does Y live", and an agent with the wiki installed opened it in 3 of 9
 runs on one repository. Widened to any question about how the code behaves (`34f14a3`), it was
 opened in 9 of 9.
+
+The decision capture of `e52be54` is the rule applied end to end. Which decisions are worth a page
+is a judgement, so it is a section of `CONVENTIONS.md` that three pieces of prose point at — the
+`decisions` block in `AGENTS.md`, `wikipoke-implement` and the ingest's drain — and the only code
+it got is what a machine can decide: drift counts the notes, and `hooks add decisions` checks that
+the section's heading exists. The bar starts strict, and a project moves it by editing a sentence
+([the decision](../decisions/capture-decisions.md)).

@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 78adf3b
+synced: 6a9925f
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -19,6 +19,9 @@ program involved is `wikipoke check`, which measures and then gets out of the wa
 ```
 person: /wikipoke-ingest [<path> | <topic> | all]
    │
+   ├─ wiki/.inbox/ holds notes? ─► DRAIN: bar again → check against the code → decision page
+   │                                       → delete the note       (a seed: after its avenues)
+   │
    ├─ argument?  ── yes ─────────────────────────────► C · INGEST A PART
    │                                                    a path: coverage -v → pick ONE cluster
    │                                                    a topic: its entry point or its history
@@ -29,7 +32,7 @@ person: /wikipoke-ingest [<path> | <topic> | all]
                                          → re-point its citations[] and re-stamp, in one edit
    │
    ▼
-write pages under wiki/  ·  index.md  ·  log.md entry
+write pages under wiki/  ·  index.md  ·  log.md entry (newest first, one ## YYYY-MM-DD per day)
    │
    ▼
 wikipoke check  ── errors? ─► fix, re-run
@@ -41,6 +44,17 @@ close: coverage in numbers · pages by type · flows and decisions left · the n
 checkpoint: Mode A and B write last_indexed_commit = HEAD, by printf, never by hand.
             Mode C never touches it.
 ```
+
+## The inbox goes first
+
+Since `e52be54` a pass starts with the decision notes an agent left in `wiki/.inbox/` while
+implementing, because they are the only place the discarded alternative survives and they live in
+one working copy. Each is judged against the project's "Decisions worth recording" bar a second
+time, one decision at a time when a note bundles several, read against the files it names, and turned into a new decision page, an extension or a
+supersede; then it is deleted, right after its page, so a pass cut short never integrates one twice.
+A note about uncommitted code waits for a commit, because `synced:` has to name one. A seed drains
+after its avenues, so the decision pages have something to link to. What was dropped is said in the
+log and in the close ([the decision](../decisions/capture-decisions.md)).
 
 ## Seeding stops at the avenues, and says so
 
@@ -61,6 +75,10 @@ half-way. The starting list ignores `*.md`, and in a repository whose product is
 skills, agent instructions, a spec — that hides exactly what should be documented; a `!` line
 brings it back. This wiki is the case in point: the three `SKILL.md` files and `CONVENTIONS.md`
 under `templates/` are most of what wikipoke is, and the generic rule had hidden all four.
+
+Choosing `sources:` follows one more list since `072403d`: the "Never a source" files in
+`CONVENTIONS.md`, lock files by default, which change with most commits and would mark a page stale
+for work that has nothing to do with it. A page cites the files its claim rests on instead.
 
 The rule that makes a seed finish at all is **write as you go**: read what one page needs, write
 that page, move on. Reading the whole repository first is paid for twice, once now and again after
@@ -83,6 +101,11 @@ keeps them honest: each citation is dated by the commit that wrote it, so a re-s
 skipped one and a re-pointed one is never moved twice.
 
 Nothing stale and the repository current is a complete outcome: say so and stop.
+
+Every pass writes its entry the Open Knowledge Format way since `52980e2`: `log.md` newest first,
+one `## YYYY-MM-DD` heading per day, each pass a `* **<skill>**: …` entry at the top of its day. A
+log still in the older one-heading-per-pass shape is rewritten first, never changing what an old
+entry says (`62cc97d`).
 
 ## A pass ends by saying what it left
 

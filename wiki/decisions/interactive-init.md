@@ -6,7 +6,7 @@ sources:
   - src/lib/setup.ts
   - src/lib/prompts.ts
   - scripts/build.ts
-synced: 542edcd
+synced: ee3921c
 related:
   - ../flows/install.md
   - ./typescript-two-ways.md
@@ -46,7 +46,7 @@ These become part of what users and scripts depend on once released:
 
 - **`--yes` / `-y`.** Removing it breaks every script that passes it.
 - **The exit codes.** A cancel or a no before anything is written exits 1
-  (`src/lib/setup.ts:77`), so `wikipoke init && …` stops there. A cancel at the hook checklist
+  (`src/lib/setup.ts:79`), so `wikipoke init && …` stops there. A cancel at the hook checklist
   exits 0, because the files are written by then. A write that fails exits 1 with its message.
 - **The rule for asking.** Changing the TTY-and-no-`--yes` test changes what agents running in a
   terminal get.
@@ -65,11 +65,15 @@ These become part of what users and scripts depend on once released:
   counted. That leaves about 67 of 80 columns, too few for the full explanation of a hook on its
   row. So the explanation, the file each hook touches, whether it is committed and whether it is
   installed or outdated, goes in a note above the checklist. The rows keep a short hint that is
-  dropped rather than wrapped when it does not fit (`src/lib/setup.ts:57`). A note that would not
-  fit is printed without its box, because clack breaks the box itself (`src/lib/setup.ts:86`). The
+  dropped rather than wrapped when it does not fit (`src/lib/setup.ts:59`). A note that would not
+  fit is printed without its box, because clack breaks the box itself (`src/lib/setup.ts:88`). The
   margins, 14 and 9 columns, are tuned to clack 1.8.1 and need checking again when it is upgraded.
 - **Unticking never removes.** Removal stays with `wikipoke hooks remove`, so a re-run cannot undo
   a hook by accident.
+- **Not every row notifies.** Since `35f9c8a` the checklist has a sixth row, `decisions`, which
+  asks agents to note decisions in the wiki's inbox rather than telling anyone the wiki is behind,
+  so the note's title says "or capture decisions for it". Nothing in a repository implies it, so it
+  is never ticked in advance.
 - **A new folder does not move the wiki.** `init` warns that the new folder starts empty and the old
   one stays. Moving pages is left to the person, as it already was with `--dir`.
 

@@ -1,19 +1,21 @@
 ---
 title: The hooks and the notifier
 type: entity
-responsibility: The five optional hooks, the one notifier they all run, and why none of them can write the wiki.
+responsibility: The six optional hooks, the one notifier five of them run, and why none of them can write the wiki.
 sources:
   - templates/wikipoke-hook.sh
   - templates/post-commit
   - templates/opencode-plugin.js
   - templates/cursor-rule.mdc
   - templates/agents-block.md
-synced: b305be6
+  - templates/agents-decisions.md
+synced: dbfe0cf
 related:
   - ./install.md
+  - ../decisions/capture-decisions.md
 ---
 
-Five hooks, one notifier. `wiki/.wikipoke-hook.sh` is the only thing that actually runs: it finds
+Five hooks, one notifier, and a sixth that runs none. `wiki/.wikipoke-hook.sh` is the only thing that actually runs: it finds
 the repository root, exits silently when there is no `.wikipoke-state.json` (an unseeded wiki owes
 nothing), and otherwise runs `wikipoke check drift` from `node_modules/.bin` or from the global
 install. It never fails: every path ends in `exit 0`, including the one where wikipoke is
@@ -52,6 +54,17 @@ That matters because hooks are never installed by default and `init` only offers
 goes unreported until a person happens to run `wikipoke check` by hand. A repository that wants the
 notice to survive its own setup should install and commit at least one of the four, `agents` being
 the cheapest since it needs no tool-specific file.
+
+## The sixth: `decisions`
+
+Since `35f9c8a` there is a hook that does not notify. `decisions` adds its own block to `AGENTS.md`
+(`templates/agents-decisions.md`) asking any agent that writes code here to note the decisions
+worth keeping in `wiki/.inbox/`, by the bar in `CONVENTIONS.md`, and to sweep its own diff for one
+it missed before finishing, for the next `wikipoke-ingest` to
+turn into pages. It prints nothing and installs no notifier, so on its own nothing tells anyone the
+wiki is behind; it is meant to sit beside one of the five. Nothing in a repository implies it, so
+it is never pre-ticked. The notes it asks for are counted by `drift` as `pending`, which is how the
+notifier ends up mentioning them. See [the decision](../decisions/capture-decisions.md).
 
 Silence is the design. The notifier prints nothing when the wiki is current, so a current wiki adds
 nothing to any prompt and costs nobody attention. Until `aafa306` that was only half true: it ran
