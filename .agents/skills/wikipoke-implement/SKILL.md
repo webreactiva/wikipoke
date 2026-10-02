@@ -17,6 +17,8 @@ the reason.
 read the bar ──► implement ──► a choice clears the bar? ──► note in wiki/.inbox/ ──► keep going
                                       └── no (most choices) ──► nothing
    ▼
+sweep your diff for a choice the bar covers and nobody noted
+   ▼
 close: the work, plus how many notes wait for wikipoke-ingest
 ```
 
@@ -33,7 +35,10 @@ close: the work, plus how many notes wait for wikipoke-ingest
    files it constrains. A few lines. If `wiki/.inbox/.gitignore` is missing, create it holding
    `*`: the notes are never committed.
 4. **Hold the bar.** Most tasks leave no note. When you hesitate, the choice does not clear it.
-5. **Never write a wiki page here.** The inbox is all this skill touches in `wiki/`. Pages,
+5. **Sweep your diff before you close.** Read what you changed once, looking only for a choice
+   the bar covers that has no note: where something runs, what it now depends on, what will be
+   hard to undo. The one you made early and moved past is the one this catches. Note it now.
+6. **Never write a wiki page here.** The inbox is all this skill touches in `wiki/`. Pages,
    links, `index.md` and `log.md` are `wikipoke-ingest`'s, with the person there.
 
 **Close** with what you built, then the notes: how many, one line each (the slug and the choice),
