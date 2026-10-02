@@ -56,7 +56,8 @@ question ──► search {{WIKI}}/  (the candidates' responsibility lines, or i
    the page keeps apart: two cases in neighbouring sentences are still two cases.
 4. **Fall back to the code** for what the wiki does not have. Research the source,
    answer from it, and cite what you read as `path:line`. If a page you read is stale
-   against the code, say so.
+   against the code, say so. Notes in `{{WIKI}}/.inbox/` are leads waiting for an ingest,
+   not answers: never cite them.
 5. **Name the gap.** When the answer came from the code, say the wiki did not have
    it: the gap is a finding. So is a detail you had to open code for that the page
    should carry (what a command covers, a limit, which way a value or a flag works):

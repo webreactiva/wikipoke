@@ -6,7 +6,7 @@ title: Wiki conventions
 # Wiki conventions
 
 This file is the schema of the code wiki: how it is structured and how it is maintained. The
-three skills read it before they write anything, and `wikipoke check` enforces the parts a machine
+skills read it before they write anything, and `wikipoke check` enforces the parts a machine
 can decide. It belongs to this project: edit it to fit, and when the skills or the checks
 disagree with it, this file wins.
 
@@ -75,6 +75,7 @@ file, onto a blank line or onto a lone closing bracket.
   .wikipoke-state.json  # repository checkpoint: {"version":1,"last_indexed_commit":"<sha>"}
   .wikipokeignore       # git pathspecs of files that never count for coverage
   .wikipoke-hook.sh     # the notifier the optional hooks run (managed by wikipoke)
+  .inbox/               # decision notes waiting for the next ingest; never committed
   index.md              # the map: one line per page, from each page's `responsibility`
   log.md                # the history of every pass, newest first
   architecture.md       # the map and the layers
@@ -84,8 +85,8 @@ file, onto a blank line or onto a lone closing bracket.
   decisions/            # "which X when" comparisons and the choices behind them
 ```
 
-`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `{{WIKI}}/` is a
-page and carries the template below. The wiki is also an
+`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `{{WIKI}}/`,
+outside dot-folders such as `.inbox/`, is a page and carries the template below. The wiki is also an
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle,
 which other tools can read without knowing wikipoke. That is why this file opens with a two-line
 frontmatter (`type: schema`), why `index.md` may open with `okf_version: "0.2"` and nothing else,
@@ -124,8 +125,8 @@ related:          # links to sibling pages (optional)
 ```
 
 Five required keys, two optional. That is the whole schema. A page may carry any other key it
-finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. There is
-deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
+finds useful (`trigger:` on a flow, `options:` on a decision, `reversible: true` or `false` on
+a decision that came from a note); the checks ignore them. There is deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
 page was verified against, which is the date that matters.
 
 The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
@@ -168,6 +169,54 @@ this project's own; an entry with no `/` is a file name, found in any folder.
 - `uv.lock`
 - `Cargo.lock`
 - `go.sum`
+
+## Decisions worth recording
+
+A decision page is worth its place only when it tells what the code cannot: why this and not the
+alternative. This section is the bar a decision has to clear before anyone writes it down: the
+`decisions` hook and the `wikipoke-implement` skill capture by it while code is being written,
+and `wikipoke-ingest` applies it again before a note becomes a page. Widen or narrow it here; the
+hook and both skills follow. A wider variant waits, commented, below.
+
+Record a decision only when the change
+
+- introduces a runtime dependency, or a tool the build depends on (not a version bump),
+- introduces or changes an architectural pattern, or
+- makes a choice that is hard to reverse: a data format, a public contract, a stored schema, a
+  security primitive.
+
+Say whether it is reversible. Do not record routine fixes, naming, mechanical refactors,
+preferences a linter or formatter already enforces, choices with no real alternative, anything the
+code already makes evident, or anything already written down in the spec, the plan or a wiki page
+(ingest checks the wiki; capture need not).
+
+<!-- Not in force. A wider bar, for a project that wants more decisions kept: replace the list above with:
+Record a decision when the change chooses between plausible alternatives and the choice affects
+architecture, contracts, invariants, dependencies, data, concurrency, security or performance,
+whether it is easy to reverse or not. -->
+
+**The note.** One file per decision in `{{WIKI}}/.inbox/`, named `YYYY-MM-DD-<slug>.md` so two
+branches never collide, written in seconds when the choice is made, without reading the wiki:
+
+```markdown
+---
+decided_by: agent
+reversible: false
+files: [src/audio/capture.ts, src/audio/ring-buffer.ts]
+---
+Chose a preallocated ring buffer between capture and the file writer.
+Discarded a mutex-protected queue: the realtime callback could block.
+```
+
+What was chosen, what was discarded and why, and the files it constrains; `decided_by` is `agent`
+or `person`. Nothing else: the links
+and the context are added by `wikipoke-ingest`, which reads the note against the code, writes or
+extends the decision page, and deletes the note. A note is a lead, not a fact to copy.
+
+The inbox is scratch work and never committed: it holds a `.gitignore` with `*`, which the
+`decisions` hook places and whoever writes the first note creates when it is missing. Notes live
+only in the working copy that wrote them, so integrate them before the branch or the worktree goes
+away; `wikipoke check drift` counts them until then.
 
 ## Links and language
 
@@ -237,7 +286,8 @@ wikipoke check lint         # is the wiki internally sound?
 
 Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
 
-- **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
+- **drift**: staleness on both axes, plus the decision notes waiting in `.inbox/` (`pending`),
+  which never fail a plain run and are never seen by CI, since the inbox is not committed. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
   against the working tree, so uncommitted edits count. It also lists every citation the code moved
   since the commit that wrote it, with the line it points at now or a note that the cited line
@@ -271,6 +321,7 @@ request with `wikipoke hooks add <name>` (`wikipoke hooks` lists them):
 | `opencode` | `.opencode/plugin/wikipoke.js` | when an OpenCode session starts |
 | `cursor` | `.cursor/rules/wikipoke.mdc` | a rule Cursor reads in every session |
 | `agents` | a block in `AGENTS.md` | Codex and any agent that reads `AGENTS.md` |
+| `decisions` | its own block in `AGENTS.md` | not a notifier: asks agents to note decisions in `.inbox/` as they work |
 
 Nothing writes the wiki automatically. What a machine cannot check (contradictions between pages,
 expired claims, concepts with no page) is the deep pass of `wikipoke-lint`, which proposes rather
