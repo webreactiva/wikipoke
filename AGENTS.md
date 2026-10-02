@@ -16,7 +16,9 @@
 - The CLI is TypeScript in `src/`: run straight from source in development (Node strips the types)
   and shipped compiled from `dist/`. Imports name the `.ts` file, and only erasable syntax is
   allowed — no `enum`, no `namespace`, no parameter properties. Run `npm run typecheck` and
-  `npm test` before committing.
+  `npm test` before committing. CI runs the same commands on every pull request, on Node 22.18
+  and 24, plus `node src/bin/wikipoke.ts check` and `npm pack --dry-run`: run them before pushing,
+  not after.
 - A pull request body follows `.github/pull_request_template.md`, including when it is opened
   with `gh pr create --body-file`, which skips the template.
 
