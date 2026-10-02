@@ -5,7 +5,7 @@ responsibility: Why the wiki tracks both a repository checkpoint and a per-page 
 sources:
   - src/lib/drift.ts
   - templates/CONVENTIONS.md
-synced: 78adf3b
+synced: ee3921c
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
@@ -39,12 +39,17 @@ of the commit the page was verified against, which is the date that actually mat
 drift from the sha the way a hand-written date can.
 
 There is a third clock, finer than either: each citation's own. Drift dates it by the commit that
-last wrote its page line and reports where the cited line went since (`src/lib/drift.ts:137`). It
+last wrote its page line and reports where the cited line went since (`src/lib/drift.ts:146`). It
 cannot hang off `synced:`, and that is the lesson of its first version: `synced:` says when someone
 checked the page's *sources*, not when each number was written, and re-stamping it over pointers
 nobody moved made them read as current. With its own clock a skipped pointer stays visible after
 the re-stamp, as a fresh page listed under `moved`.
 
-Both axes measure against the **working tree**, not the last commit (`src/lib/lib.ts:175`): a page is
+Both axes measure against the **working tree**, not the last commit (`src/lib/lib.ts:208`): a page is
 stale the moment its source is edited. A page with no `sources:` or no `synced:` is on neither
 axis — `drift` puts it in `skipped[]`, because a page with no contract cannot be called fresh.
+
+Drift also reports `pending` decision notes since `35f9c8a`, but that is not a third axis: no
+clock is compared, it counts what an agent left in the inbox for the next ingest. It sits in drift
+because it answers the same question, what the wiki owes
+([the decision](../decisions/capture-decisions.md)).

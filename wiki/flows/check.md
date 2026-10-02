@@ -7,7 +7,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 542edcd
+synced: ee3921c
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -20,10 +20,11 @@ wikipoke check [names…] [--json] [--strict] [-v]
      ├─ repoRoot()      git rev-parse --show-toplevel   → exit 2 if not a repository
      ├─ wikiDir(root)   .wikipoke.json, else "wiki"
      ├─ no CONVENTIONS.md?        → "run wikipoke init first", exit 1
-     ├─ no state and no pages?    → "unseeded", exit 0          (only on a plain run)
+     ├─ no state and no pages?    → "unseeded" (+ pending notes), exit 0   (only on a plain run)
      │
      ├─ for each named check: runCheck(name, { root, wikiDir, wiki })  → { name, result }
-     │       drift    ── git rev-list / git diff       → { repo, stale[], skipped[], fresh[] }
+     │       drift    ── git rev-list / git diff       → { repo, pending[], stale[], skipped[], fresh[] }
+     │                   └ wiki/.inbox/*.md, counted, never read → pending[]
      │                   └ per page: git blame + git diff -U0 → citations[] (stale) · moved[] (fresh)
      │       coverage ── git ls-files + sources globs  → { unclaimed[], clusters[] }
      │       lint     ── read every page               → { errors[], warnings[] }
@@ -57,7 +58,8 @@ The green one-liner only appears for a plain `wikipoke check` with no findings a
 Two guards run before any check does. A missing `CONVENTIONS.md` means the wiki was never set up,
 which is an installation problem, not a wiki problem: exit 1 with the fix. A wiki with no
 checkpoint and no pages means the first ingest has not happened, which is not a failure at all: say
-`unseeded` and exit 0. Without that second guard, a fresh `init` would report a missing `index.md`,
+`unseeded` and exit 0 — naming, since `35f9c8a`, any decision notes already in the inbox, since
+the seed is what will drain them. Without that second guard, a fresh `init` would report a missing `index.md`,
 a missing `log.md` and a missing checkpoint as three errors, and the first thing a new user would
 see is a red wiki they did nothing wrong to get.
 
@@ -71,9 +73,12 @@ empty wiki.
 skills: `wikipoke-ingest` reads `check drift --json` to get `repo` and `stale[]`, reads only those
 pages' diffs, and re-points the citations in each stale page's `citations[]` and in `moved[]`
 before it re-stamps `synced:`. That is the whole integration surface between the CLI and the skills —
-the CLI hands over measurements, and the agent decides what to write.
+the CLI hands over measurements, and the agent decides what to write. Since `35f9c8a` it also
+reads `pending[]`, the decision notes waiting in `wiki/.inbox/`, and drains them into decision pages
+before anything else; they count as one finding for `--strict` and never fail a plain run
+([why](../decisions/capture-decisions.md)).
 
 Because the skills read it through a pipe, the run ends by setting the exit code and letting stdout
-drain (`src/bin/wikipoke.ts:330`). It used to call `process.exit`, which drops what a pipe has not
+drain (`src/bin/wikipoke.ts:345`). It used to call `process.exit`, which drops what a pipe has not
 taken yet: on a 1,480-file repository `check coverage --json` is about 75 KB, and every agent that
 piped it into `jq` or `python3` got the first 64 KB and a parse error (`c82a188`).

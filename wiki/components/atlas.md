@@ -11,7 +11,7 @@ sources:
   - src/atlas/web/index.html
   - src/atlas/web/tsconfig.json
   - scripts/build.ts
-synced: 542edcd
+synced: ee3921c
 related:
   - ../architecture.md
   - ./cli.md
@@ -44,15 +44,21 @@ check" to "that, or atlas" — on the condition that it reads the wiki and write
 
 Everything the page shows is gathered by `snapshot()` into a single object: every page with its
 frontmatter and body, its citations, its backlinks, and whether `drift` finds it stale
-(`src/atlas/snapshot.ts:72`). The browser side does all the rendering, so the live server and the
+(`src/atlas/snapshot.ts:84`). The browser side does all the rendering, so the live server and the
 export hand it exactly the same thing and differ only in the `live` flag.
 
 The snapshot borrows its judgements rather than making its own. Staleness is `drift.run()`
-(`src/atlas/snapshot.ts:75`), and backlinks come from the same `markdownLinks` / `relatedLinks`
+(`src/atlas/snapshot.ts:87`), and backlinks come from the same `markdownLinks` / `relatedLinks`
 reading that lint checks, so atlas and `check` never disagree about which page points where
-(`src/atlas/snapshot.ts:84`). The browser does the same with citations: inline code becomes a link
+(`src/atlas/snapshot.ts:96`). The browser does the same with citations: inline code becomes a link
 only when it is in the snapshot's citation list, never by a regex of its own
 (`src/atlas/web/atlas.js:172`).
+
+`CONVENTIONS.md` and `index.md` are shown as documents, not pages, and since `52980e2` both may
+open with a frontmatter for tools that read the wiki as an Open Knowledge Format bundle. Atlas
+strips it before rendering (`src/atlas/snapshot.ts:79`), but only a block that is all `key: value`
+and `- item` lines, judged by lint's own `yamlProblems`: a block that never closes would run to the
+next `---` in the prose and take the text with it, so it is left in place, where lint names it.
 
 It is delivered as a script, `window.ATLAS = …`, not as JSON (`src/atlas/export.ts:47`): a page
 opened from disk may load scripts but may not fetch. For the same reason `atlas.js` is a classic
@@ -87,7 +93,7 @@ page's own `synced:` commit — the code the page was last checked against, not 
 (`src/atlas/web/atlas.js:97`). A page with no `synced:` falls back to the commit exported.
 
 The remote URL is rebuilt from its host and path alone, so a token embedded in an `https` remote
-never reaches a page that may be published (`src/atlas/snapshot.ts:153`). GitHub and GitLab get
+never reaches a page that may be published (`src/atlas/snapshot.ts:165`). GitHub and GitLab get
 links. Any other host gets no links rather than wrong ones.
 
 The export refuses two targets. A directory inside the wiki is refused, because atlas never writes

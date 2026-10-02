@@ -5,7 +5,7 @@ responsibility: "The map of wikipoke: who writes the wiki, who only measures it,
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: 542edcd
+synced: ee3921c
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -16,10 +16,10 @@ split.
 
 ```
          a person
-            │  /wikipoke-ingest · /wikipoke-query · /wikipoke-lint
+            │  /wikipoke-ingest · /wikipoke-query · /wikipoke-lint · /wikipoke-implement
             ▼
    the agent, following templates/skills/*/SKILL.md
-            │  writes Markdown
+            │  writes Markdown            (while implementing: notes in wiki/.inbox/)
             ▼
       wiki/**  ── pages, index.md, log.md, .wikipoke-state.json
             ▲
@@ -55,7 +55,7 @@ Until `df4db0e` the CLI kept the three in one object and indexed it by name, whi
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
 name (`src/bin/wikipoke.ts:39`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:291`). The uniform `run`/`report` contract is unchanged; what changed is that
+(`src/bin/wikipoke.ts:302`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
 
 **The atlas shows the wiki and writes only outside it.** `src/atlas/` gathers the pages, their
@@ -74,7 +74,15 @@ fail, for CI. See [flows/check.md](flows/check.md).
 
 There is almost none. `.wikipoke.json` at the repository root exists only when the wiki was moved
 off `wiki/`, and holds one key. Inside the wiki, `.wikipoke-state.json` holds the repository
-checkpoint and `.wikipokeignore` the coverage exclusions; both belong to the project. Everything
+checkpoint and `.wikipokeignore` the coverage exclusions; both belong to the project. Since
+`35f9c8a` there may also be `wiki/.inbox/`, decision notes an agent wrote while implementing and
+the next ingest turns into pages; it is never committed, so it is state of one working copy, and
+drift counts it as `pending` ([why](decisions/capture-decisions.md)).
+
+Since `52980e2` the wiki is also an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
+v0.2 bundle: `CONVENTIONS.md` carries a `type: schema` frontmatter, `index.md` may declare
+`okf_version`, and `log.md` is newest first with one heading per day. Nothing here reads the
+bundle as OKF; lint warns about what would stop another tool from doing so. Everything
 else a check needs it derives from git at the moment it runs, so there is no cache to invalidate
 and no lock to hold. [concepts/two-axes-of-staleness.md](concepts/two-axes-of-staleness.md)
 explains the one piece of state that does matter: the checkpoint and each page's `synced:`.
@@ -88,7 +96,7 @@ explains the one piece of state that does matter: the checkpoint and each page's
 | `src/lib/setup.ts` | `init` when a person is at the terminal: the questions, then `install.ts` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |
 | `src/atlas/` | the atlas: the snapshot, the local server, the export, and the page in `web/` |
-| `templates/skills/*/SKILL.md` | the skills: where the actual behaviour is |
+| `templates/skills/*/SKILL.md` | the skills: where the actual behaviour is; `wikipoke-implement` is the one that writes code, and only notes in the wiki's inbox |
 | `templates/CONVENTIONS.md` | the page schema, copied into every wiki and then owned by it |
 
 Node 22.18 or later, and no runtime dependencies: everything the CLI uses is in Node's standard

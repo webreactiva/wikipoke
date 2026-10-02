@@ -4,7 +4,7 @@ type: concept
 responsibility: The `managed by wikipoke` marker, and the three ownership rules every write goes through.
 sources:
   - src/lib/install.ts
-synced: e3139d1
+synced: ee3921c
 related:
   - ../components/install.md
   - ../flows/install.md
@@ -17,23 +17,31 @@ buckets, and the rule for each is decided before anything is written.
 Each carries the line `managed by wikipoke` and is rewritten by `init` (the skills) or `hooks add`
 (a hook and the notifier). Find that
 marker, rewrite freely; do not find it, leave the file alone and print a `by hand` line saying what
-to add (`src/lib/install.ts:109`). There is no `--force`. That line never carries the marker, since
+to add (`src/lib/install.ts:128`). There is no `--force`. That line never carries the marker, since
 the marker would make the person's whole file wikipoke's to rewrite or delete; a hook added by hand
 is recognised by what it runs instead ([the install flow](../flows/install.md)).
 
+One file is recognised by its content rather than its marker: the decision inbox's `.gitignore`,
+which holds only `*`. It ignores itself, so it is never committed, and in a fresh clone the agent
+that writes the first note recreates it, usually without the marker. A file whose only rule is `*`
+counts as wikipoke's for adding and removing it, and removing the `decisions` hook keeps it while
+anything else is in the folder, so a waiting note never reaches git
+([the decision](../decisions/capture-decisions.md)).
+
 **The project's from birth.** `wiki/CONVENTIONS.md` and `wiki/.wikipokeignore` are written once and
-then `kept` forever, even by a later `init` (`src/lib/install.ts:191`). They are the schema and the
+then `kept` forever, even by a later `init` (`src/lib/install.ts:210`). They are the schema and the
 ignore list: the project is expected to edit them, and
 [when they disagree with the code, they win](./schema-lives-in-the-wiki.md). An upgrade that
 silently reset a project's conventions would be the worst bug wikipoke could ship. The opposite
 silence has a cost too — a schema the new skills no longer match — so since `87d9fd0` `init` says
 when `CONVENTIONS.md` differs from the template it ships and names that template
-(`src/lib/install.ts:201`), and changes nothing.
+(`src/lib/install.ts:220`), and changes nothing.
 
 **Shared, and edited surgically.** `.claude/settings.json` and `AGENTS.md` belong to the project but
 must hold one wikipoke entry. The JSON is parsed, one `SessionStart` entry is appended, and removal
-walks back up deleting only what became empty; `AGENTS.md` gets a block delimited by HTML comments,
-and removing it restores the surrounding blank lines. Unparseable JSON is never rewritten — the
+walks back up deleting only what became empty; `AGENTS.md` gets a block delimited by HTML comments
+— two since `35f9c8a`, one per hook, each removed without touching the other — updated where it
+sits, and removing one restores the surrounding blank lines. Unparseable JSON is never rewritten — the
 person is told what to add by hand.
 
 ## Owning a file is not the same as being allowed to add one
@@ -42,7 +50,7 @@ Ownership decides whether wikipoke may *rewrite* something. A second rule decide
 put something there in the first place, and it turns on one question: does the file do anything on
 its own?
 
-A skill does not. It is Markdown that sits there until a person names it, so `init` writes all six
+A skill does not. It is Markdown that sits there until a person names it, so `init` writes every one
 — `.agents/skills/` and `.claude/skills/` both — without asking anyone. Detection was tried and
 does not work: Claude Code reads only `.claude/skills` and runs perfectly well against a checkout
 with no `.claude/` and no `CLAUDE.md`, so a repository offers nothing to detect it by. This one did
@@ -58,7 +66,7 @@ the agent, which knows which hook it is and can ask. See [the entry point](../co
 The same rule covers updating one. An upgrade rewrites the skills on the next `init`, because a
 skill does nothing until someone names it; a hook it only reports. `hookStatus()` compares every
 installed hook, and the notifier they share, with what `hooks add` would write now
-(`src/lib/install.ts:224`), and `init` and `wikipoke hooks` list the ones that differ as
+(`src/lib/install.ts:248`), and `init` and `wikipoke hooks` list the ones that differ as
 `installed, outdated` with the command that updates them. Someone asked for the change, so they
 know it is coming. Before `87d9fd0` there was nothing to say it at all, and an agent upgrading a
 repository copied the templates over by hand with `sed`.

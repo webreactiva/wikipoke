@@ -6,14 +6,14 @@ sources:
   - src/lib/coverage.ts
   - templates/wikipokeignore
   - src/bin/wikipoke.ts
-synced: 542edcd
+synced: ee3921c
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md
 ---
 
 `wikipoke check coverage` lists tracked files no page's `sources:` claims, and a plain run exits 0
-no matter how long that list is (`src/bin/wikipoke.ts:330`). Only lint errors — a malformed page, a
+no matter how long that list is (`src/bin/wikipoke.ts:345`). Only lint errors — a malformed page, a
 dead source, a broken link — fail. The list is a backlog, and a long backlog on a large repository
 is the normal state of a wiki that was seeded honestly.
 
@@ -47,3 +47,7 @@ Coverage earns its place by being *mechanical and finite*: it turns "is the wiki
 no answer, into a list of file clusters, which has a next step. Resolve a cluster by writing the
 page it earns, or by ignoring it in `.wikipokeignore` — which is a conscious call, recorded in a
 file, not silence.
+
+Decision notes waiting in the inbox (`pending`, since `35f9c8a`) are treated the same way: debt a
+plain run reports and never fails on. They differ in one respect: they cannot be ignored, only
+integrated, because they live in one working copy and are gone with it.
