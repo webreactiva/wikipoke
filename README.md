@@ -130,6 +130,12 @@ What a repository gets once wikipoke is installed:
   keeping — what it chose, what it discarded and why — in an uncommitted inbox, and the next
   `wikipoke-ingest` turns them into decision pages. Only what clears a strict bar the project
   sets in its `CONVENTIONS.md`: a new dependency, an architectural pattern, a choice hard to undo.
+- 🗣️ **Decisions people took, written down.** Tell the agent what you decided and why, in your own
+  words (`/wikipoke-decision <the decision>`), and it writes the decision page: it asks for the
+  alternative you set aside if you did not say it, finds the code it constrains and the pages it
+  relates to, warns when the code says otherwise, and shows the draft before writing anything. A
+  decision not carried out yet is kept as planned until the code catches up
+  ([use case 6](#6-a-decision-a-person-took)).
 - 💸 **Fewer tokens on the questions it covers.** 37% to 49% fewer on two small repositories; on a
   large one, 21% to 75% fewer on five of six questions once their answers were filed, and 7% more
   on the sixth. The first time a question finds a gap it costs more than asking without a wiki
@@ -139,7 +145,7 @@ What a repository gets once wikipoke is installed:
 
 ## Use cases
 
-Five ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
+Six ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
 a terminal.
 
 ### 1. The whole system, from scratch
@@ -235,6 +241,40 @@ it still knows what it discarded, and the wiki keeps it.
    `decisions/` pages, checked against the code and linked to the rest of the wiki, and deletes
    them. It applies the bar again and drops what does not clear it.
 
+### 6. A decision a person took
+
+Many decisions are taken by people, in a meeting, a review or a conversation, and the code keeps
+none of their reasons. Here you give the reason and the agent writes the page.
+
+1. `wikipoke init` and `/wikipoke-ingest`, as above: the page needs a wiki to link into.
+2. Tell the agent the decision, what you chose, what you set aside and why:
+   `/wikipoke-decision we keep the CLI read-only: a writing CLI would need a lock and a staging
+   area, and the skills already write`. A plain "record this decision: …" works too.
+3. If something is missing, usually the alternative you set aside, it asks, one question at a
+   time. With no alternative at all it says there is no decision to record, and points a rule to
+   `AGENTS.md` instead.
+4. It reads the wiki and the code. An existing decision page on the same subject is extended, or,
+   if the new decision reverses it, superseded. When the code does not do what you decided, it
+   says so with the file and line, and you choose: record it as planned, for code still to come,
+   or correct what you told it. A policy with no code behind it cites the file that states it,
+   such as `AGENTS.md` or a CI workflow.
+5. It shows the page and every other change, and writes only after your yes. Then it runs
+   `wikipoke check lint`.
+
+What it changes in your project:
+
+- `init` writes one more skill, `wikipoke-decision`, in both skill homes. An agent may load it on
+  its own when you ask it to record a decision, but it writes nothing until you approve the draft.
+- Each yes writes a page in `wiki/decisions/`, a link to it from the pages it relates to, a line in
+  `wiki/index.md` and an entry in `wiki/log.md`, all files you commit. It never touches your code,
+  `.wikipoke-state.json` or the inbox, and commits nothing on its own.
+- Decision pages may carry three keys besides the template's: `decided_by: person` (or `agent`,
+  for one that came from a note); `planned: true` while the code does not carry the decision out,
+  which the next `/wikipoke-ingest` after that code lands drops; and `status: deprecated` on a
+  decision another one reversed, which keeps the old page as history. `status` is the
+  [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)'s own key,
+  so the wiki stays a valid bundle. `wikipoke check` ignores all three.
+
 ## Install
 
 Node 22.18 or later and git. Wikipoke has no runtime dependencies: the CLI is TypeScript
@@ -301,7 +341,7 @@ so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on
 
 Both skill homes are always written. Claude Code reads only `.claude/skills` and runs perfectly
 well against a checkout with no `.claude/` and no `CLAUDE.md` in it, so there is nothing in a
-repository to detect it by; writing the skills for an agent that never comes costs four inert
+repository to detect it by; writing the skills for an agent that never comes costs a few inert
 Markdown files, and not writing them costs the agent every skill it has. A skill is inert either
 way — nothing runs one until a person names it — which is the whole reason hooks are treated
 differently below.
@@ -389,6 +429,7 @@ are until someone runs it.
 | `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path or a topic, documents a part no pass has covered (`all`: every part, one pass each) |
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims, gaps, and the flows and decisions coverage cannot ask for |
+| `wikipoke-decision` | writes a decision a person took, in their words, as a decision page: asks what is missing, checks it against the code, shows the draft and writes after a yes |
 | `wikipoke-implement` | implements a plan and notes the decisions worth keeping in `wiki/.inbox/` as it goes; runs only when you name it |
 | `wikipoke-agents` *(experimental)* | audits or writes `AGENTS.md`, and the nested ones a subdirectory needs, about the code and not the wiki; shows the change as a diff and writes only after a yes |
 
