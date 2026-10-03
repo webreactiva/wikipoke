@@ -72,7 +72,7 @@ each note ──► clears the bar in CONVENTIONS.md "Decisions worth recording"
                                 ├── code says otherwise      ──► write what the code says, or ask
                                 ├── no decision page on it   ──► new decisions/<slug>.md
                                 ├── one already, compatible  ──► extend it
-                                └── one already, contradicted ─► supersede it: say so on both
+                                └── one already, contradicted ─► supersede it: status: deprecated on the old
                              ──► delete the note
 ```
 
@@ -89,7 +89,8 @@ each note ──► clears the bar in CONVENTIONS.md "Decisions worth recording"
 3. **Write the page** with the template: `sources:` the files the decision constrains, so drift
    flags it when they change; `synced:` is `git rev-parse --short HEAD`; `related:` and inbound links
    to the components and flows it touches, found by reading the wiki; `reversible:` carried
-   over from the note as `true` or `false`. The discarded alternative and why is the body's centre.
+   over from the note as `true` or `false`, and `decided_by:` too. The discarded alternative and why
+   is the body's centre. Superseding a page follows "Decisions worth recording" in CONVENTIONS.md.
 4. **Delete each note right after its page is written**, so a pass cut short never integrates
    one twice. Leave the inbox's `.gitignore` in place.
 5. **Log it and say it**: in the log entry of this pass and in your close to the person, the
@@ -208,7 +209,10 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    a broken contract; fix that first.
 3. **Reconcile.** Rewrite only the stale sections, so hand-written notes survive.
    When the change **contradicts** what the page claimed, say what it used to be and
-   what changed it, with the SHA. Re-check `confidence:` while you are there.
+   what changed it, with the SHA. Re-check `confidence:` while you are there. A stale
+   decision page with `planned: true` is usually the code catching up: if the diff
+   carries the decision out, drop the key, add the new files to `sources:` and say
+   from which SHA; if it only goes part of the way, keep it and say what is left.
 4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]`, and
    each page in `moved[]`, lists the pointers the code moved since they were
    written, `path:line` and `#L42` links alike, with `raw` as the page writes it
