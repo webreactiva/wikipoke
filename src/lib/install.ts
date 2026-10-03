@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, INBOX_DIR, chooseWiki, gitOrNull, wikiDir } from "./lib.ts";
 
 export const MARKER = "managed by wikipoke";
-export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents", "wikipoke-implement"];
+export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents", "wikipoke-implement", "wikipoke-decision"];
 const NEUTRAL_SKILLS = ".agents/skills";
 const CLAUDE_SKILLS = ".claude/skills";
 const SETTINGS = ".claude/settings.json";
