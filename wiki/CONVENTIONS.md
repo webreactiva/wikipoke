@@ -202,8 +202,9 @@ whether it is easy to reverse or not. -->
 
 **On the page.** A decision page carries, besides the template:
 
-- `decided_by: agent` or `person`: who took it. A note says it; a person who tells a decision
-  through `wikipoke-decision` is `person`.
+- `decided_by: agent` or `person`: who took it, only when that is known first hand: a note
+  says it, and a person who tells a decision through `wikipoke-decision` is `person`. A page
+  reconstructed from the code, the specs or the history leaves it out rather than guess.
 - `reversible: true` or `false`, when it is known.
 - `planned: true` while the code does not carry the decision out yet. Its `sources:` are the
   files that exist and will change, never one still to be written, which the body names instead.
