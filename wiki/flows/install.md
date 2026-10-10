@@ -6,7 +6,7 @@ sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
   - src/lib/setup.ts
-synced: 6a9925f
+synced: 1097b15
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -28,7 +28,7 @@ wikipoke init [--dir docs/wiki] [--yes]
          ├─ write/remove .wikipoke.json                          (only when not "wiki")
          ├─ wiki/CONVENTIONS.md    exists? kept (and said if it differs from the template) : written
          ├─ wiki/.wikipokeignore   exists? kept : written from the template
-         ├─ .agents/skills/wikipoke-{ingest,query,lint,agents,implement}/SKILL.md  ← always
+         ├─ .agents/skills/wikipoke-{ingest,query,lint,agents,implement,decision}/SKILL.md  ← always
          ├─ .claude/skills/…                                             ← always: Claude Code reads no other
          │
          ├─ list the hooks: installed, installed but outdated, or used here   (outdated: not touched)

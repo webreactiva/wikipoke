@@ -5,7 +5,7 @@ responsibility: Why the wiki tracks both a repository checkpoint and a per-page 
 sources:
   - src/lib/drift.ts
   - templates/CONVENTIONS.md
-synced: 6a9925f
+synced: 1097b15
 related:
   - ../components/checks.md
   - ../flows/ingest-pass.md
@@ -53,3 +53,9 @@ Drift also reports `pending` decision notes since `35f9c8a`, but that is not a t
 clock is compared, it counts what an agent left in the inbox for the next ingest. It sits in drift
 because it answers the same question, what the wiki owes
 ([the decision](../decisions/capture-decisions.md)).
+
+One kind of staleness is not a defect at all. Since `3e94960` a decision page may carry
+`planned: true` while the code has yet to carry it out, and the commit that carries it out makes
+that page stale on purpose — that is how the ingest learns to drop the key and mark what was
+reversed `status: deprecated`. The page axis catches it like any other page; what differs is that
+the ending was written down in advance ([the decision](../decisions/capture-decisions.md)).

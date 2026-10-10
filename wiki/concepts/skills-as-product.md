@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: 6a9925f
+synced: 1097b15
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -41,8 +41,16 @@ runs on one repository. Widened to any question about how the code behaves (`34f
 opened in 9 of 9.
 
 The decision capture of `e52be54` is the rule applied end to end. Which decisions are worth a page
-is a judgement, so it is a section of `CONVENTIONS.md` that three pieces of prose point at — the
-`decisions` block in `AGENTS.md`, `wikipoke-implement` and the ingest's drain — and the only code
-it got is what a machine can decide: drift counts the notes, and `hooks add decisions` checks that
-the section's heading exists. The bar starts strict, and a project moves it by editing a sentence
+is a judgement, so it is a section of `CONVENTIONS.md` that four pieces of prose point at — the
+`decisions` block in `AGENTS.md`, `wikipoke-implement`, the ingest's drain and, since `3e94960`,
+`wikipoke-decision` — and the only code it got is what a machine can decide: drift counts the
+notes, and `hooks add decisions` checks that the section's heading exists. The bar starts strict,
+and a project moves it by editing a sentence
 ([the decision](../decisions/capture-decisions.md)).
+
+Issue #19 proved the rule again from the opposite side: where code had to change, it changed by one
+name in one array. `wikipoke-decision` is 133 lines of Markdown shipped in `3e94960`, and all it
+took in `src/` was joining the `SKILLS` list the installer copies (`src/lib/install.ts:25`).
+Everything else — the new skill, the decision-page keys added to the schema, the `planned:` lens in
+lint — is prose in files the project can diff;
+[the skills page](../components/skills.md) carries the detail.
