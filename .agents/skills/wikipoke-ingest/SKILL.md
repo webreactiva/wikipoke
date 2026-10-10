@@ -146,6 +146,8 @@ wikipoke check must pass without errors before you are done
      that hide a mechanism; the rest grow later.
    - `concepts/`: the cross-cutting patterns and conventions.
    - `decisions/`: the choices behind the code, with the discarded alternative.
+     A seeded decision page has no `decided_by:`: the code, the specs and the history
+     tell what was chosen, never who chose it. Only a note or a person says that.
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
    what you actually read; never claim a whole package or a folder like `src/`, and
    never list a file you only named — coverage is how the next pass finds it, and a
