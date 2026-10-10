@@ -72,7 +72,9 @@ compare what the code does with what the person said.
 - **The code does not do it yet** ("we will move to Postgres"): the decision is planned. Write it
   with `planned: true` in the frontmatter. Its `sources:` are the files that exist today and
   that the change will touch, never a file that does not exist yet (`wikipoke check` reports that
-  as a dead source); name the files still to be written in the body. When the code that carries
+  as a dead source); name the files still to be written in the body. Look for where the change
+  will land, not only where the feature shows: a comment that names this choice, or the way out
+  of it, marks the file to cite, and the choice the decision reverses. When the code that carries
   it out is committed, those sources change, the page goes stale, and the next
   `/wikipoke-ingest` reads the diff and drops `planned:`.
 - **The code says otherwise** (the decision says "no runtime dependencies", the manifest has

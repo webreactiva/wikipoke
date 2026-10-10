@@ -213,6 +213,10 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    decision page with `planned: true` is usually the code catching up: if the diff
    carries the decision out, drop the key, add the new files to `sources:` and say
    from which SHA; if it only goes part of the way, keep it and say what is left.
+   The code that carries one out can land in a file the page does not cite, so read
+   every `planned: true` page, stale or not, against the commits since the
+   checkpoint (`grep -rl '^planned: true' {{WIKI}}/decisions`): a handful of pages,
+   and the only way a plan the page could not foresee is ever marked done.
 4. **Re-point the citations, then re-stamp.** Each stale page's `citations[]`, and
    each page in `moved[]`, lists the pointers the code moved since they were
    written, `path:line` and `#L42` links alike, with `raw` as the page writes it
