@@ -1,5 +1,10 @@
 # Log
 
+## 2026-10-11
+
+* **wikipoke-decision**: new decisions/own-viewer.md — own HTML viewer over a third-party one
+  (Obsidian), to control how the wiki looks.
+
 ## 2026-10-03
 
 * **wikipoke-ingest**: reconciled 4 commits since `6a9925f`, from more OpenCode runs on copies of
