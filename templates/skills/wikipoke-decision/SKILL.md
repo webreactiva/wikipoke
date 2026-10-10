@@ -38,8 +38,8 @@ and offer `/wikipoke-ingest` first, so the page has something to link to.
 
 A decision page needs three things: **what was chosen**, **what was set aside**, and **why**.
 Take them from the person's words. When one is missing, ask for it, one short question at a time,
-in the person's language, and nothing else: no questions about format, slugs or links, which are
-yours to decide.
+in the person's language: no questions about format, slugs or links, which are yours to decide.
+The one other question worth asking comes from the code, in §4.
 
 - **No alternative after asking**: there is probably no decision, only a fact or a rule. Say so
   in one sentence and stop; a rule belongs in the project's agent instructions (`AGENTS.md`), and
@@ -58,9 +58,12 @@ same subject, and the `entity`, `flow` and `concept` pages the decision affects.
 - **One already, and the new words fit it** (a reason it lacked, an alternative it did not name):
   extend that page instead. Two pages on one decision soon disagree.
 - **One already, and the new decision reverses it**: a new page, and the old one is superseded.
-  The old page keeps its body, which is the history, gains `status: deprecated` in its
-  frontmatter, and opens with one line linking to the new page and saying when and by whom it
-  was reversed. The new page links back and says what it replaces.
+  The old page keeps its body, which is the history, and opens with one line linking to the new
+  page and saying when and by whom it was reversed. The new page links back and says what it
+  replaces. The old page gains `status: deprecated` only when the code stops doing what it says:
+  at once if the code already follows the new decision; if the new one is planned (§4), the old
+  page stays in force, its line says a planned decision will reverse it, and the ingest that
+  drops `planned:` from the new page marks the old one `status: deprecated`.
 
 ## 4. Read the code
 
@@ -83,6 +86,10 @@ compare what the code does with what the person said.
   current state of the code in the body; or the code is right and the decision is not what they
   remembered, and you write what they now confirm, or nothing. This skill never changes the
   code: if they want it fixed first, that is ordinary work, and the page can wait for it.
+- **The decision leaves a gap the code makes plain** (it changes a behaviour other parts rely
+  on, and the person's words do not say what happens to them): ask that one question, with the
+  options you see and the one you recommend, and write the answer into the page. A gap you fill
+  on your own is a decision nobody took.
 - **There is no code to cite** (a policy, a process, a rule about reviews): `sources:` names the
   file that states or enforces it, `AGENTS.md`, a CI workflow, `CONTRIBUTING.md`. If no file in
   the repository says it, the rule has no home yet: tell the person, offer `/wikipoke-agents` to

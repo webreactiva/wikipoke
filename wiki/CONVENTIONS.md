@@ -210,8 +210,11 @@ whether it is easy to reverse or not. -->
   files that exist and will change, never one still to be written, which the body names instead.
   The commit that carries it out makes the page stale, and the ingest that reads that diff drops
   the key.
-- `status: deprecated` once another decision reverses it. The page keeps its body, which is the
-  history, and opens with a link to the decision that replaced it; that one links back. `status`
+- `status: deprecated` once another decision reverses it and the code follows the new one. The
+  page keeps its body, which is the history, and opens with a link to the decision that replaced
+  it; that one links back. While the reversal is still `planned: true`, the old page stays in
+  force and its opening line says a planned decision will reverse it; the ingest that drops
+  `planned:` from the new page marks the old one. `status`
   is Open Knowledge Format's own key (`draft`, `stable`, `deprecated`; absent means `stable`), so
   no other value goes in it.
 

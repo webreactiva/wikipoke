@@ -215,6 +215,8 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    decision page with `planned: true` is usually the code catching up: if the diff
    carries the decision out, drop the key, add the new files to `sources:` and say
    from which SHA; if it only goes part of the way, keep it and say what is left.
+   When the page that lands reverses another, mark that one `status: deprecated` now
+   and turn its opening line from "will reverse" into "reversed", with the SHA.
    The code that carries one out can land in a file the page does not cite, so read
    every `planned: true` page, stale or not, against the commits since the
    checkpoint (`grep -rl '^planned: true' wiki/decisions`): a handful of pages,

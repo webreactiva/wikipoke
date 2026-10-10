@@ -256,7 +256,8 @@ none of their reasons. Here you give the reason and the agent writes the page.
 4. It reads the wiki and the code. An existing decision page on the same subject is extended, or,
    if the new decision reverses it, superseded. When the code does not do what you decided, it
    says so with the file and line, and you choose: record it as planned, for code still to come,
-   or correct what you told it. A policy with no code behind it cites the file that states it,
+   or correct what you told it. When the decision leaves open something the code depends on, it
+   asks you that one question too. A policy with no code behind it cites the file that states it,
    such as `AGENTS.md` or a CI workflow.
 5. It shows the page and every other change, and writes only after your yes. Then it runs
    `wikipoke check lint`.
@@ -271,7 +272,8 @@ What it changes in your project:
 - Decision pages may carry three keys besides the template's: `decided_by: person` (or `agent`,
   for one that came from a note); `planned: true` while the code does not carry the decision out,
   which the next `/wikipoke-ingest` after that code lands drops; and `status: deprecated` on a
-  decision another one reversed, which keeps the old page as history. `status` is the
+  decision another one reversed, which keeps the old page as history. A reversal that is still
+  planned leaves the old page in force; the ingest that drops `planned:` marks it. `status` is the
   [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)'s own key,
   so the wiki stays a valid bundle. `wikipoke check` ignores all three.
 
