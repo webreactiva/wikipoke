@@ -88,6 +88,7 @@ function seed(root: string, wiki = "wiki"): void {
 
 /** The shapes `check --json` returns, as far as the assertions below read them. */
 interface DriftJson {
+  against?: string;
   repo: { status: string; commits?: number; files?: number; last?: string };
   stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
@@ -841,6 +842,61 @@ test("drift caps the moved citations it prints, like the files", () => {
   assert.equal(out.match(/is now line/g)?.length, 8);
   assert.match(out, /…and 2 more citation\(s\)/);
   assert.equal(wikipoke(root, "check", "drift", "-v").out.match(/is now line/g)?.length, 10);
+});
+
+test("--against measures a ref, not the checkout: fresh here, stale and moved on the branch everyone shares", () => {
+  const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10) });
+  seed(root);
+  page(root, "components/billing.md", { body: "Total: `src/billing/invoice.js:5`. [map](../architecture.md)" });
+  git(root, "commit", "-qam", "cite");
+  // Someone else moves the code on a shared branch; this checkout never sees it.
+  git(root, "switch", "-qc", "shared");
+  put(root, "src/billing/invoice.js", "a\nb\nc\n" + lines(10));
+  git(root, "commit", "-qam", "three lines on top");
+  git(root, "switch", "-q", "-");
+
+  const here = json<DriftJson>(root, "check", "drift", "--json");
+  assert.equal(here.against, undefined, "without the flag, the shape does not change");
+  assert.ok(here.fresh.includes("components/billing"));
+
+  const there = json<DriftJson>(root, "check", "drift", "--against", "shared", "--json");
+  assert.equal(there.against, "shared");
+  assert.equal(there.repo.status, "behind");
+  assert.deepEqual(there.stale.map((s) => [s.id, s.files, s.citations]), [
+    ["components/billing", ["src/billing/invoice.js"], [{ raw: "src/billing/invoice.js:5", now: 8 }]],
+  ]);
+  const out = wikipoke(root, "check", "drift", "--against", "shared").out;
+  assert.match(out, /stale\s+components\/billing \([0-9a-f]+\.\.shared\)/);
+  assert.match(out, /invoice\.js:5 is now line 8/);
+  assert.equal(json<{ drift: DriftJson }>(root, "check", "--against", "shared", "--json").drift.against, "shared");
+});
+
+test("--against leaves the checkout out: uncommitted and untracked files are stale here, not on the ref", () => {
+  const root = repo();
+  seed(root);
+  put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
+  put(root, "src/billing/discount.js", "export const off = 0;\n");
+  const here = json<DriftJson>(root, "check", "drift", "--json");
+  assert.deepEqual(here.stale.map((s) => [s.id, s.files]), [["components/billing", ["src/billing/discount.js", "src/billing/tax.js"]]]);
+  const there = json<DriftJson>(root, "check", "drift", "--against", "HEAD", "--json");
+  assert.deepEqual(there.stale, []);
+  assert.equal(there.repo.status, "current");
+  assert.equal(wikipoke(root, "check", "drift", "--against", "HEAD").out, "", "silent when current, as the hooks expect");
+});
+
+test("--against fails on a ref that is not a commit, and on a check that is not drift", () => {
+  const root = repo();
+  seed(root);
+  for (const args of [["check", "drift"], ["check"]]) {
+    const { code, out } = wikipoke(root, ...args, "--against", "origin/nowhere", "--json");
+    assert.equal(code, 2, out);
+    assert.match(out, /--against: origin\/nowhere is not a commit here/);
+    assert.doesNotMatch(out, /"stale"/, "an error, never an empty result");
+  }
+  const { code, out } = wikipoke(root, "check", "lint", "--against", "HEAD");
+  assert.equal(code, 2);
+  assert.match(out, /--against applies to drift/);
 });
 
 test("lint warns when a link's text and its line anchor disagree", () => {
