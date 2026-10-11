@@ -447,6 +447,8 @@ wikipoke check lint         # fields, types, links, citations, dead and over-bro
 ```
 
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
+`--against <ref>` measures drift on that commit instead of your working tree, so the answer is the
+same from any branch: `wikipoke check --against origin/main --strict` in CI on main.
 A plain run exits 1 only on lint errors.
 
 ## `wikipoke atlas`

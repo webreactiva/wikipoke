@@ -236,6 +236,8 @@ wikipoke check lint         # is the wiki internally sound?
 ```
 
 Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
+`--against <ref>` measures drift on a commit instead of the working tree, so every branch gets the
+same answer: use it to ask "is the wiki true for main?", for example in CI on main.
 
 - **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares

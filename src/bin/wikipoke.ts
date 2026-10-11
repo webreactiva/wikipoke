@@ -4,7 +4,7 @@
 //
 //   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
 //   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
-//   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
+//   wikipoke check [lint|drift|coverage]... [--against <ref>] [--json] [--strict] [-v]
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
@@ -23,7 +23,7 @@ import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
 import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import { IGNORE_FILE, STATE_FILE, chooseWiki, color, commitExists, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 import { interactiveInit } from "../lib/setup.ts";
@@ -58,6 +58,8 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke hooks add <name>... install hooks, or update installed ones: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
   wikipoke check [lint|drift|coverage]...
+      --against <ref>          drift compares with this commit, not the working tree: is the
+                               wiki true for main, from any branch (CI on main)
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
@@ -78,6 +80,7 @@ try {
       verbose: { type: "boolean", short: "v" },
       dir: { type: "string" },
       yes: { type: "boolean", short: "y" },
+      against: { type: "string" },
       out: { type: "string" },
       port: { type: "string" },
       help: { type: "boolean", short: "h" },
@@ -277,6 +280,18 @@ if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
 
 const all = !rest.length;
 
+// Before anything runs: a ref that is not there must never read as "nothing changed".
+if (flags.against !== undefined) {
+  if (!all && !rest.includes("drift")) {
+    console.error("--against applies to drift: run `wikipoke check drift --against <ref>`, or `wikipoke check --against <ref>`.");
+    process.exit(2);
+  }
+  if (!flags.against || !commitExists(root, flags.against)) {
+    console.error(`--against: ${flags.against || "(empty)"} is not a commit here. Fetch it first, or name a branch, tag or sha.`);
+    process.exit(2);
+  }
+}
+
 // Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
 // still runs: seeding reads coverage to decide what to ignore.
 if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
@@ -290,7 +305,7 @@ const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
 
 const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
   name === "drift"
-    ? { name, result: drift.run(ctx) }
+    ? { name, result: drift.run(ctx, { against: flags.against }) }
     : name === "coverage"
       ? { name, result: coverage.run(ctx) }
       : { name, result: lint.run(ctx) };
