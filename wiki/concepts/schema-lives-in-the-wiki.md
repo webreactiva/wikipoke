@@ -5,7 +5,8 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: ecc7b09
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -50,6 +51,14 @@ complies — every key of it prose, and every key of it owned by this file.
 Since `52980e2` the file also opens with a two-line frontmatter, `type: schema`, so the wiki reads
 as an Open Knowledge Format bundle; lint warns when it is missing, and `init` names it first among
 what an older copy should carry over.
+
+The trust keys joined them in `7526c5e`. `generated:` and `verified:` — who last wrote a page's
+claims and who last confirmed them — are defined under "The one template" in this file
+(`templates/CONVENTIONS.md:181`): one `{ by, at }` map per key, the actor's form, the ISO time with
+its offset, and the four cases that decide which of the two a pass writes. The skills repeat the
+rule instead of re-deriving it (`templates/skills/wikipoke-ingest/SKILL.md:38`), and the only code
+it got is lint checking the map's shape (`src/lib/lint.ts:283`) — a strict YAML reader must see a
+map there too, so prose owns the meaning and the code owns only the shape.
 
 The rest of the schema — the five required keys, the two `confidence:` values — is still constants
 in `src/lib/lib.ts`. The direction is clear from the types table, and where the file cannot be read

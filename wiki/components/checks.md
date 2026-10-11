@@ -6,7 +6,8 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: ee3921c
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -76,7 +77,7 @@ page because a broken map is as bad as a broken page (`src/lib/lint.ts:96`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
 the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
-(`src/lib/lint.ts:348`). Nobody cites a closing brace, so that one is almost always code that moved
+(`src/lib/lint.ts:373`). Nobody cites a closing brace, so that one is almost always code that moved
 underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
 and it catches some of what a reconcile re-stamped without re-pointing. A link that carries its
 line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:193`):
@@ -103,9 +104,14 @@ and so flag the page stale for work that has nothing to do with it (`src/lib/lin
 flat reader (`src/lib/lint.ts:228`): a `responsibility:` holding `: `, an unquoted value that opens
 with a symbol. wikipoke reads those pages fine, but Obsidian, site generators and every YAML library
 do not, and since `52980e2` the wiki is meant to be an Open Knowledge Format bundle other tools
-read. In the same spirit it warns when `CONVENTIONS.md` has no frontmatter with a `type`
+read. Since `6f2b5f6` one frontmatter value is meant as a map rather than a string: a trust key,
+`generated:` or `verified:`, opening with `{` (`src/lib/lint.ts:283`). There the check is not the
+misread but the map's shape: one `{ by, at }` on its line, an actor OKF §7 names —
+`<harness>/<model>`, `human:<id>` or `process:<id>` — and an ISO 8601 time with its offset
+(`src/lib/lint.ts:289`). A `{` under any other key still gets the misread warning, because no other
+template key may carry a map. In the same spirit it warns when `CONVENTIONS.md` has no frontmatter with a `type`
 (`src/lib/lint.ts:83`) and when `log.md` is not newest first with one `## YYYY-MM-DD` heading per
-day (`src/lib/lint.ts:297`); a log in the older one-heading-per-pass shape is named so the next
+day (`src/lib/lint.ts:322`); a log in the older one-heading-per-pass shape is named so the next
 ingest rewrites it. All of these are warnings: what breaks is other tools, not wikipoke. Past 80 pages it warns once that reading `index.md` first has stopped ranking
 anything — a deliberate nudge to reopen the "do we need search?" question rather than a measured
 limit (`src/lib/lib.ts:171`).
