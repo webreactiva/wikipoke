@@ -9,7 +9,8 @@
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
 // `check` exits 1 on lint errors (a broken wiki), or on any finding at all with --strict.
-// Staleness and coverage are debt, not breakage: they do not fail a plain run.
+// Staleness and coverage are debt, not breakage: they do not fail a plain run. The days since the
+// last deep lint pass are information, and fail nothing.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -58,6 +59,8 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke hooks add <name>... install hooks, or update installed ones: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
   wikipoke check [lint|drift|coverage]...
+                               lint also says how long since the last wikipoke-lint --deep pass
+                               in log.md, and drift says it past ${lint.DEEP_PASS_DAYS} days. That line fails nothing
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
@@ -322,6 +325,15 @@ if (flags.json) {
 } else {
   for (const ran of results)
     if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
+}
+
+// Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
+// `check` and `check lint` always say it; `check drift`, which the notifier runs, only once the pass
+// is overdue, so a current wiki stays silent there.
+if (!flags.json && (names.includes("lint") || names.includes("drift"))) {
+  const logPath = join(wikiPath, "log.md");
+  const pass = lint.deepPass(existsSync(logPath) ? readFileSync(logPath, "utf8") : "");
+  if (names.includes("lint") || pass.due) console.log(lint.deepPassLine(pass));
 }
 
 const errors = lintResult?.errors.length ?? 0;

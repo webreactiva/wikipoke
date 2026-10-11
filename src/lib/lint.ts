@@ -48,6 +48,8 @@ export interface LintResult {
   errors: Finding[];
   warnings: Finding[];
   pages: number;
+  /** The day of the newest `wikipoke-lint --deep` pass in the log, or null. Information, never a finding. */
+  lastDeepLint: string | null;
 }
 
 /** Records a finding. Everything in this file reports through one of these. */
@@ -212,7 +214,54 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     errors: findings.filter((f) => f.level === "error"),
     warnings: findings.filter((f) => f.level === "warn"),
     pages: pages.length,
+    lastDeepLint: deepPass(logRaw).last,
   };
+}
+
+/** Past this many days without a deep pass, `check drift`, and so the notifier, says so. */
+export const DEEP_PASS_DAYS = 30;
+
+/** How long since the wikipoke-lint skill last read the pages, as `log.md` records it. */
+export interface DeepPass {
+  /** The day of the newest `wikipoke-lint --deep` entry, or null when the log has none. */
+  last: string | null;
+  /** Days since that pass or, with none, since the oldest day in the log; null with no day at all. */
+  days: number | null;
+  /** Older than DEEP_PASS_DAYS. A wiki seeded this month is not due, pass or no pass. */
+  due: boolean;
+}
+
+/**
+ * Reads both shapes of the log: a `* **wikipoke-lint --deep**: …` entry under its day, and the old
+ * `## YYYY-MM-DD · wikipoke-lint --deep` heading. The newest date wins, not the first one: the old
+ * shape is oldest first. A plain `wikipoke-lint` entry does not count; it reads no page.
+ */
+export function deepPass(raw: string, today = new Date().toISOString().slice(0, 10)): DeepPass {
+  const text = raw.replace(/^```[\s\S]*?^```/gm, "");
+  let day: string | undefined;
+  let first: string | undefined;
+  let last: string | null = null;
+  for (const line of text.split("\n")) {
+    const heading = /^## (\d{4}-\d{2}-\d{2})(?=\s|$)(.*)$/.exec(line);
+    if (heading) {
+      day = heading[1] as string;
+      if (!first || day < first) first = day;
+    }
+    const deep = heading
+      ? /^\s*·\s*wikipoke-lint --deep\b/.test(heading[2] as string)
+      : /^\s*[*-] \*\*wikipoke-lint --deep\b/.test(line);
+    if (deep && day && (!last || day > last)) last = day;
+  }
+  const from = last ?? first;
+  const days = from === undefined ? null : Math.round((Date.parse(today) - Date.parse(from)) / 86_400_000);
+  return { last, days, due: days !== null && days > DEEP_PASS_DAYS };
+}
+
+/** The one line `check` prints about it. Yellow past the threshold, with the skill to run. */
+export function deepPassLine({ last, days, due }: DeepPass): string {
+  const ago = (n: number): string => (n === 0 ? "today" : n === 1 ? "1 day ago" : `${n} days ago`);
+  const when = last === null ? `never${due && days !== null ? `, in a log that starts ${ago(days)}` : ""}` : ago(days ?? 0);
+  return `${due ? color.yellow("lint") : color.dim("lint")}      last deep pass: ${when} ${color.dim("-> wikipoke-lint --deep")}`;
 }
 
 /** A plain value opening with one of these is read by YAML as something else: a list, a map, a tag, an anchor… */
