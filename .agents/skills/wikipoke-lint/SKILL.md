@@ -74,6 +74,10 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
   decision>"`.
 - **Confidence**: `high` on a claim you cannot find in the code, or `inferred` on
   something now confirmed.
+- **Planned decisions**: a page with `planned: true` whose code now does what it
+  says (propose dropping the key), or whose plan nobody is carrying out any more (ask
+  the person: drop it, or mark it `status: deprecated`). A decision page whose code
+  contradicts it and carries no `planned:` is a contradiction, above.
 
 ## Output
 

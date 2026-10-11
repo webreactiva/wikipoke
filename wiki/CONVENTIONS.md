@@ -18,6 +18,9 @@ disagree with it, this file wins.
 | **`wikipoke-query`** | answer a question from the wiki, and file the answer back when it is worth keeping |
 | **`wikipoke-lint`** | is the wiki sound? `wikipoke check` for what a machine decides, a deep pass for what needs reading |
 
+Two narrower skills feed the `decisions/` pages: `wikipoke-decision` writes one decision a person
+tells it, after a yes, and `wikipoke-implement` leaves notes in `.inbox/` for the next ingest.
+
 A person launches the skills; the agent follows them and writes the pages directly in `wiki/`.
 `wikipoke check` sits underneath and only measures: it never writes a page.
 
@@ -125,8 +128,8 @@ related:          # links to sibling pages (optional)
 ```
 
 Five required keys, two optional. That is the whole schema. A page may carry any other key it
-finds useful (`trigger:` on a flow, `options:` on a decision, `reversible: true` or `false` on
-a decision that came from a note); the checks ignore them. There is deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
+finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. Decision
+pages have a few of their own, below. There is deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
 page was verified against, which is the date that matters.
 
 The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
@@ -173,10 +176,12 @@ this project's own; an entry with no `/` is a file name, found in any folder.
 ## Decisions worth recording
 
 A decision page is worth its place only when it tells what the code cannot: why this and not the
-alternative. This section is the bar a decision has to clear before anyone writes it down: the
-`decisions` hook and the `wikipoke-implement` skill capture by it while code is being written,
-and `wikipoke-ingest` applies it again before a note becomes a page. Widen or narrow it here; the
-hook and both skills follow. A wider variant waits, commented, below.
+alternative. This section is the bar a decision has to clear before an agent writes it down on
+its own: the `decisions` hook and the `wikipoke-implement` skill capture by it while code is being
+written, and `wikipoke-ingest` applies it again before a note becomes a page. Widen or narrow it
+here; the hook and both skills follow. A wider variant waits, commented, below. A decision a
+person asks to keep, through `wikipoke-decision`, is the person's to judge: the skill only asks
+for the alternative that was set aside and why.
 
 Record a decision only when the change
 
@@ -194,6 +199,27 @@ code already makes evident, or anything already written down in the spec, the pl
 Record a decision when the change chooses between plausible alternatives and the choice affects
 architecture, contracts, invariants, dependencies, data, concurrency, security or performance,
 whether it is easy to reverse or not. -->
+
+**On the page.** A decision page carries, besides the template:
+
+- `decided_by: agent` or `person`: who took it, only when that is known first hand: a note
+  says it, and a person who tells a decision through `wikipoke-decision` is `person`. A page
+  reconstructed from the code, the specs or the history leaves it out rather than guess.
+- `reversible: true` or `false`, when it is known.
+- `planned: true` while the code does not carry the decision out yet. Its `sources:` are the
+  files that exist and will change, never one still to be written, which the body names instead.
+  The commit that carries it out makes the page stale, and the ingest that reads that diff drops
+  the key.
+- `status: deprecated` once another decision reverses it and the code follows the new one. The
+  page keeps its body, which is the history, and opens with a link to the decision that replaced
+  it; that one links back. While the reversal is still `planned: true`, the old page stays in
+  force and its opening line says a planned decision will reverse it; the ingest that drops
+  `planned:` from the new page marks the old one. `status`
+  is Open Knowledge Format's own key (`draft`, `stable`, `deprecated`; absent means `stable`), so
+  no other value goes in it.
+
+A decision with no code behind it, a policy or a process, cites the file that states or enforces
+it (`AGENTS.md`, a CI workflow). A decision page always has `sources:`.
 
 **The note.** One file per decision in `wiki/.inbox/`, never several in one, named `YYYY-MM-DD-<slug>.md` so two
 branches never collide, written in seconds when the choice is made, without reading the wiki:

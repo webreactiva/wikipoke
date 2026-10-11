@@ -4,7 +4,7 @@ type: entity
 responsibility: How init, hooks add/remove and uninstall write files without ever taking something the project owns.
 sources:
   - src/lib/install.ts
-synced: ee3921c
+synced: 1097b15
 related:
   - ../concepts/file-ownership.md
   - ./hooks.md
@@ -69,7 +69,8 @@ When the hooks directory holds husky's `h` wrapper, `post-commit` goes to its pa
 (`src/lib/install.ts:165`), `.husky/post-commit`, which a project versions: in a husky repository
 the git hook travels with the clone like the other four.
 
-The skills go into both homes every time (`src/lib/install.ts:176`), where the hooks go into none.
+The skills go into both homes every time (`src/lib/install.ts:176`) — six since `3e94960` put
+`wikipoke-decision` in the `SKILLS` list — where the hooks go into none.
 The difference is not ownership but whether the file acts on its own, and it is the subject of
 [what may be written unasked](../concepts/file-ownership.md).
 
