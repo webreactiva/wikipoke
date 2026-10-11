@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { get } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -11,7 +11,7 @@ import { serve } from "../src/atlas/serve.ts";
 import type { Snapshot } from "../src/atlas/snapshot.ts";
 import { hookStatus } from "../src/lib/install.ts";
 import { DEFAULT_NEVER_SOURCES, neverMatchers, neverSourceHit, parseFrontmatter } from "../src/lib/lib.ts";
-import { logProblems, yamlProblems } from "../src/lib/lint.ts";
+import { DEEP_PASS_DAYS, deepPass, logProblems, yamlProblems } from "../src/lib/lint.ts";
 import { hookChoices } from "../src/lib/setup.ts";
 
 // The sources, not the build: Node strips the types as it runs them, so `npm test` needs no
@@ -73,13 +73,17 @@ function page(root: string, path: string, options: PageOptions = {}): void {
   );
 }
 
+/** The UTC day `n` days before today, as the log writes it. */
+const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+
 /** Seeds the wiki the way the ingest skill would: pages, index, log, checkpoint. */
 function seed(root: string, wiki = "wiki"): void {
   wikipoke(root, "init", ...(wiki === "wiki" ? [] : ["--dir", wiki]));
   page(root, "architecture.md", { type: "architecture", sources: ["src/cli.js"], body: "See [billing](./components/billing.md).", wiki });
   page(root, "components/billing.md", { body: "Back to [the map](../architecture.md).", wiki });
   put(root, `${wiki}/index.md`, "# Wiki\n\n- [Architecture](./architecture.md)\n- [Billing](./components/billing.md)\n");
-  put(root, `${wiki}/log.md`, "# Log\n\n## 2026-09-11\n\n* **wikipoke-ingest (seed)**: seeded\n");
+  // Seeded today: a log that starts a month back is due a deep lint pass, and drift would say so.
+  put(root, `${wiki}/log.md`, `# Log\n\n## ${daysAgo(0)}\n\n* **wikipoke-ingest (seed)**: seeded\n`);
   put(root, `${wiki}/.wikipoke-state.json`, JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
   git(root, "add", "-A");
   git(root, "commit", "-qm", "seed wiki");
@@ -100,6 +104,7 @@ interface CoverageJson {
 interface LintJson {
   errors: { page?: string; message: string }[];
   warnings: { page?: string; message: string }[];
+  lastDeepLint: string | null;
 }
 
 const json = <T>(root: string, ...args: string[]): T => JSON.parse(wikipoke(root, ...args).out) as T;
@@ -494,6 +499,73 @@ test("the log is newest first, one heading per day, and the old shape is named f
   const { code, out } = wikipoke(root, "check", "lint");
   assert.equal(code, 0, out);
   assert.match(out, /wiki\/log\.md has the old shape/);
+});
+
+test("the last deep lint pass is read from both shapes of the log, and a plain pass does not count", () => {
+  const today = "2026-10-11";
+  const log = (...days: string[]): string => `# Log\n\n${days.join("\n\n")}\n`;
+  // Never: the log starts on the seed day, so the wiki is judged by its age, not nagged on day one.
+  assert.deepEqual(deepPass(log("## 2026-10-01\n\n* **wikipoke-ingest (seed)**: seeded"), today), { last: null, days: 10, due: false });
+  assert.deepEqual(deepPass(log("## 2026-09-01\n\n* **wikipoke-ingest (seed)**: seeded"), today), { last: null, days: 40, due: true });
+  assert.deepEqual(deepPass("", today), { last: null, days: null, due: false });
+  // The new shape: an entry under its day, newest first, a target after the mode allowed.
+  const current = log(
+    "## 2026-10-01\n\n* **wikipoke-lint**: 2 findings\n* **wikipoke-ingest**: reconciled",
+    "## 2026-08-31\n\n* **wikipoke-lint --deep --path=src/billing**: 4 findings (1 critical) · fine",
+    "## 2026-08-01\n\n* **wikipoke-lint --deep**: 9 findings",
+  );
+  assert.deepEqual(deepPass(current, today), { last: "2026-08-31", days: 41, due: true });
+  // The old shape: a heading per pass, oldest first, so the newest date wins and not the first.
+  const old = log("## 2026-08-01 · wikipoke-lint --deep\n- 9 findings", "## 2026-09-20 · wikipoke-lint --deep\n- 2 findings", "## 2026-10-01 · wikipoke-lint\n- clean");
+  assert.deepEqual(deepPass(old, today), { last: "2026-09-20", days: 21, due: false });
+  // A plain pass reads no page; an example in a code block is not a pass.
+  assert.equal(deepPass(log("## 2026-10-01\n\n* **wikipoke-lint**: clean\n\n```\n* **wikipoke-lint --deep**: N findings\n```"), today).last, null);
+  assert.equal(deepPass(log("## 2026-10-11\n\n* **wikipoke-lint --deep**: 0 findings"), today).days, 0);
+});
+
+test("check says when the last deep pass was; drift and the notifier only once it is overdue; no exit code moves", () => {
+  const root = repo();
+  seed(root);
+  wikipoke(root, "hooks", "add", "git");
+  // The notifier runs the wikipoke a project installs; this one is the source under test.
+  put(root, "node_modules/.bin/wikipoke", `#!/bin/sh\nexec "${process.execPath}" "${cli}" "$@"\n`);
+  chmodSync(join(root, "node_modules/.bin/wikipoke"), 0o755);
+  const hook = (): string => execFileSync("sh", ["wiki/.wikipoke-hook.sh"], { cwd: root, encoding: "utf8" });
+  const set = (log: string): void => put(root, "wiki/log.md", `# Log\n\n${log}\n`);
+
+  // A fresh seed: check says "never", drift and the notifier stay silent.
+  let out = wikipoke(root, "check").out;
+  assert.match(out, /current, covered and sound/);
+  assert.match(out, /lint +last deep pass: never -> wikipoke-lint --deep/);
+  assert.match(wikipoke(root, "check", "lint").out, /last deep pass: never/);
+  assert.equal(wikipoke(root, "check", "drift").out, "");
+  assert.equal(hook(), "");
+  assert.equal(json<LintJson>(root, "check", "lint", "--json").lastDeepLint, null);
+  assert.equal(json<{ lint: LintJson }>(root, "check", "--json").lint.lastDeepLint, null);
+
+  // A pass inside the threshold: named by check, still silent in drift.
+  const recent = daysAgo(DEEP_PASS_DAYS);
+  set(`## ${daysAgo(0)}\n\n* **wikipoke-ingest**: reconciled\n\n## ${recent}\n\n* **wikipoke-lint --deep**: 3 findings`);
+  assert.match(wikipoke(root, "check").out, new RegExp(`last deep pass: ${DEEP_PASS_DAYS} days ago`));
+  assert.equal(wikipoke(root, "check", "drift").out, "");
+  assert.equal(json<LintJson>(root, "check", "lint", "--json").lastDeepLint, recent);
+
+  // Past the threshold: drift and the notifier say it, once, and nothing fails, not even --strict.
+  const overdue = DEEP_PASS_DAYS + 11;
+  set(`## ${daysAgo(0)}\n\n* **wikipoke-lint**: clean\n\n## ${daysAgo(overdue)}\n\n* **wikipoke-lint --deep**: 3 findings`);
+  const drift = wikipoke(root, "check", "drift");
+  assert.equal(drift.code, 0);
+  assert.match(drift.out, new RegExp(`^lint +last deep pass: ${overdue} days ago -> wikipoke-lint --deep\n$`));
+  assert.equal(hook(), drift.out);
+  out = wikipoke(root, "check").out;
+  assert.equal(out.match(/last deep pass/g)?.length, 1, out);
+  for (const args of [["check"], ["check", "--strict"], ["check", "drift", "--strict"], ["check", "lint", "--strict"]])
+    assert.equal(wikipoke(root, ...args).code, 0, args.join(" "));
+  assert.equal(json<DriftJson & { lastDeepLint?: string }>(root, "check", "drift", "--json").lastDeepLint, undefined, "drift's JSON keeps its shape");
+
+  // Never, on a wiki whose log starts past the threshold: it is due as well.
+  set(`## ${daysAgo(0)}\n\n* **wikipoke-lint**: clean\n\n## ${daysAgo(overdue)}\n\n* **wikipoke-ingest (seed)**: seeded`);
+  assert.match(wikipoke(root, "check", "drift").out, new RegExp(`last deep pass: never, in a log that starts ${overdue} days ago`));
 });
 
 test("the wiki is an OKF bundle: CONVENTIONS.md carries a type, and an older one is named on upgrade", () => {
