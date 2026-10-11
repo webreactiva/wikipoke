@@ -251,6 +251,13 @@ export function yamlProblems(raw: string): string[] {
       continue;
     }
     const value = rest.trim();
+    const key = pair?.[1]?.slice(0, -1);
+    if (key && PROVENANCE.has(key) && value.startsWith("{")) {
+      // Meant as a map: the Open Knowledge Format's `{ by, at }`, which wikipoke keeps as text.
+      const problem = provenanceProblem(value);
+      if (problem) problems.push(`frontmatter \`${key}: …\` ${problem}`);
+      continue;
+    }
     // `- [a, b]` is a list inside the list to YAML, and one string to wikipoke.
     const reason = value && (item && value.startsWith("[") ? "is a `[…]` list inside a list" : misread(value));
     if (!reason) continue;
@@ -270,6 +277,24 @@ export function yamlProblems(raw: string): string[] {
 function singleQuoted(value: string): string {
   const text = /^(["']).*\1$/.test(value) ? value.slice(1, -1) : value;
   return `'${text.replaceAll("'", "''")}'`;
+}
+
+/** The trust keys of the Open Knowledge Format (§5.2), the only frontmatter values meant as a map. */
+const PROVENANCE = new Set(["generated", "verified"]);
+
+/**
+ * What is wrong with a `{ by: <actor>, at: <datetime> }` value, or null. The actor follows OKF §7
+ * (`<producer>/<version>`, `human:<id>`, `process:<id>`); the time is ISO 8601 with its offset.
+ */
+export function provenanceProblem(value: string): string | null {
+  const map = value.match(/^\{\s*by:\s*([^,{}\s]+)\s*,\s*at:\s*([^,{}\s]+)\s*\}$/);
+  if (!map) return "is not `{ by: <actor>, at: <datetime> }`";
+  const [, by = "", at = ""] = map;
+  if (!/^(?:human:[\w.@-]+|process:[\w.-]+|[\w.-]+\/[\w.:-]+)$/.test(by))
+    return `names \`${by}\`, not an actor: \`<harness>/<model>\`, \`human:<id>\` or \`process:<id>\``;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})$/.test(at))
+    return `has \`at: ${at}\`, not an ISO 8601 time with its offset, such as \`2026-10-11T14:00:00Z\``;
+  return null;
 }
 
 function misread(value: string): string | null {

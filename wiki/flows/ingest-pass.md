@@ -5,7 +5,8 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: ecc7b09
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -67,7 +68,7 @@ than the gap it closed, and coverage will list exactly what was left as
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
 as the other pages teach the agent more. Since `ecc7b09` the avenues include any type the project
 added: what such a page holds comes from its entry under "Where each type comes from" in
-`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:158`) — the skill's own table is only
+`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:164`) — the skill's own table is only
 the fallback for a copy installed before the section, and a type neither the section nor the table
 answers is written as no page at all, said in the report. Anything reconstructed rather than read is marked
 `confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
@@ -104,7 +105,9 @@ means reading the code again. Pages that are fresh but whose pointers moved anyw
 `moved[]` — usually a page an earlier pass re-stamped without re-pointing — and are fixed the same
 way. Both are re-pointed before the re-stamp, though since `4943a76` the order is no longer what
 keeps them honest: each citation is dated by the commit that wrote it, so a re-stamp cannot hide a
-skipped one and a re-pointed one is never moved twice.
+skipped one and a re-pointed one is never moved twice. Since `7526c5e` the re-stamp also names its
+kind: `generated:` on a page whose claims the diff forced to be rewritten, `verified:` on one that
+was still true (`templates/skills/wikipoke-ingest/SKILL.md:244`).
 
 Reconcile, since `9c722ab`, also reads every `planned: true` decision page against the commits
 since the checkpoint, stale or not, because the code that carries a plan out can land in a file

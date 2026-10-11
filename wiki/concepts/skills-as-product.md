@@ -4,8 +4,11 @@ type: concept
 responsibility: Why most of wikipoke's behaviour lives in Markdown templates that no code ever reads.
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
+  - templates/CONVENTIONS.md
   - src/lib/install.ts
-synced: ecc7b09
+  - src/lib/lint.ts
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -61,3 +64,10 @@ seed pages of a type the project added, by lint to ask for that type's missing p
 pick the type of an answer offered to file — shipped in `ecc7b09` as prose pointing at prose: a
 section the project owns, three skills that read it, and no code beyond the checker that already read
 the types table.
+
+Issue #5 is the rule with a foot in each world. Telling a re-check apart from a rewrite — which of
+`generated:`/`verified:` a pass stamps — is judgement, so it is prose: the marking paragraph in the
+ingest skill (`templates/skills/wikipoke-ingest/SKILL.md:38`), one line in each of the other three
+skills, and the four-case table in CONVENTIONS.md (`templates/CONVENTIONS.md:192`). The only `src/`
+change, `6f2b5f6`, is the deterministic half: 25 lines of lint that check a `{ by, at }` trust
+map's shape (`src/lib/lint.ts:289`).

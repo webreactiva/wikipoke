@@ -5,7 +5,8 @@ responsibility: How a too-wide `sources:` entry makes coverage lie, and what the
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: ee3921c
+synced: 7526c5e
+verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ./coverage-as-debt.md
   - ../components/checks.md

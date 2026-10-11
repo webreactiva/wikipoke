@@ -10,7 +10,8 @@ sources:
   - templates/skills/wikipoke-decision/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: ecc7b09
+synced: 7526c5e
+verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 reversible: true
 related:
   - ./notify-never-write.md
@@ -31,12 +32,12 @@ issue #19 (`3e94960`) added a third that skips the inbox, treated below.
 ## One bar, strict, in the project's CONVENTIONS.md
 
 Which decisions count is written once, in the section "Decisions worth recording"
-(`templates/CONVENTIONS.md:199`), and the hook, `wikipoke-implement` and the ingest's drain all
+(`templates/CONVENTIONS.md:220`), and the hook, `wikipoke-implement` and the ingest's drain all
 point at it instead of carrying their own wording. The default is the strict one: a runtime
 dependency, an architectural pattern, or a choice hard to reverse
-(`templates/CONVENTIONS.md:211`), never routine fixes, linter preferences or what the code already
+(`templates/CONVENTIONS.md:232`), never routine fixes, linter preferences or what the code already
 says. A project widens or narrows it by editing its copy, as it already does with the page types;
-a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:221`).
+a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:242`).
 
 **Discarded: record every decision.** It was the first of two ways the course this came from asks
 for ADRs, and the one that fills a folder with notes on every small choice. More documentation
