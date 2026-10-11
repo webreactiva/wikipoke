@@ -104,7 +104,8 @@ name a commit that holds the code the page describes.
 Show the person, in one message:
 
 - the page as it will be written, frontmatter included: `type: decision`, `decided_by: person`,
-  `synced:` from `git rev-parse --short HEAD`, `reversible:` `true` or `false` when it is clear
+  `synced:` from `git rev-parse --short HEAD`, `generated:` as `{ by: <you>, at: <now> }` (you
+  wrote the page; `decided_by:` says who took the decision), `reversible:` `true` or `false` when it is clear
   from what the decision constrains (leave it out rather than ask), `planned: true` when §4 said
   so, `related:` the pages from §3;
 - the other changes, each in one line: the pages that gain a link to it, the old page that is
