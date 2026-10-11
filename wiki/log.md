@@ -2,6 +2,18 @@
 
 ## 2026-10-11
 
+* **wikipoke-ingest**: reconciled 2 commits since `1097b15` — the page-types evidence release (#20).
+  - components/skills.md, flows/ingest-pass.md: what a page of each type holds is now an entry under
+    "Where each type comes from" in CONVENTIONS.md, which ingest and query read and lint's
+    missing-kind lens enforces for added types (ecc7b09); the skill's own table demoted to fallback.
+  - concepts/schema-lives-in-the-wiki.md: adding a type needs the table row **and** the evidence
+    entry; a fourth schema section read by the skills, not by the checker.
+  - concepts/skills-as-product.md: #20 as the limit case — a behaviour change with no line of src/.
+  - concepts/two-axes-of-staleness.md: re-read against the diff (nothing it claims moved) and
+    re-stamped.
+  - decisions/capture-decisions.md: CONVENTIONS citations re-pointed for the inserted section
+    (176→199, 188→211, 198→221).
+
 * **wikipoke-ingest**: reconciled 9 commits since `dbfe0cf` — the `wikipoke-decision` release (#19).
   - components/skills.md: the sixth skill documented; the query skill answers with the `planned:`/
     `deprecated` caveats, lint's deep pass gained the planned-decisions lens (3e94960), and

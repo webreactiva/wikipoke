@@ -68,7 +68,8 @@ question ──► search {{WIKI}}/  (the candidates' responsibility lines, or i
    added to that page, the next question stays in the wiki.
 6. **Offer to file it back**, and where it fits: a **section** on an existing page
    when it extends one, a **new page** of the right type when it is its own unit,
-   pattern or comparison. Write only on a yes.
+   pattern or comparison: "Where each type comes from" in `CONVENTIONS.md` says what each type
+   holds, the ones the project added included. Write only on a yes.
 7. **When filing:** the template, **narrow** `sources:` for what you actually read,
    `git rev-parse --short HEAD` as `synced:`, and `confidence: inferred` when the
    answer is your reading rather than something the code states. **Link the new
