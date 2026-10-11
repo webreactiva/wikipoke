@@ -201,16 +201,18 @@ const lines = (s: string | null): string[] => (s ?? "").split("\n").map((l) => l
 
 /**
  * Files changed between `sha` and the working tree, new files included. Uncommitted work counts:
- * a page is stale the moment its source is edited, not only once it is committed.
+ * a page is stale the moment its source is edited, not only once it is committed. With `ref`, the
+ * files changed between `sha` and that commit instead, and nothing of the checkout counts.
  */
-export function changedSince(root: string, sha: string): string[] {
+export function changedSince(root: string, sha: string, ref?: string): string[] {
+  if (ref) return lines(gitOrNull(root, ["diff", "--name-only", sha, ref, "--"])).sort();
   const tracked = gitOrNull(root, ["diff", "--name-only", sha, "--"]);
   const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
   return [...new Set([...lines(tracked), ...lines(untracked)])].sort();
 }
 
-export function commitsSince(root: string, sha: string): number {
-  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..HEAD`]);
+export function commitsSince(root: string, sha: string, ref = "HEAD"): number {
+  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..${ref}`]);
   return out ? Number(out.trim()) : 0;
 }
 
