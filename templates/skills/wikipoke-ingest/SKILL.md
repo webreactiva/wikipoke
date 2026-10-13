@@ -8,8 +8,11 @@ argument-hint: "[<path> | <topic> | all]"
 # wikipoke-ingest: take the code into the wiki
 
 One verb, three ways in. Two are decided for you; the third is the one you aim.
+Whichever it is, **the inbox is drained first** (below); a seed drains it once the avenues exist.
 
 ```
+{{WIKI}}/.inbox/ holds notes? ──► DRAIN them into decision pages, then:
+
 argument given?
    │
    ├── yes ──► INGEST A PART   that path or topic, whether or not it ever changed
@@ -45,12 +48,54 @@ reaches the disk.
 | --- | --- |
 | `entity` | a folder: the module and what it owns |
 | `flow` | an entry point (a route, a command, a job, a webhook, a listener), followed across modules until the sequence ends |
-| `decision` | the history and the prose: `git log` (a fix that changed the design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of coverage but not out of reading |
+| `decision` | the notes in `{{WIKI}}/.inbox/` first; then the history and the prose: `git log` (a fix that changed the design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of coverage but not out of reading |
 | `concept` | a pattern that three or more modules repeat |
 
 Coverage counts files, so following it alone writes `entity` pages and nothing else.
 A concept is a pattern, not a place for the folders left over: tests, config and
 tooling go in the ignore list or on the page of what they serve.
+
+---
+
+## First, in every mode but SEED · DRAIN THE INBOX
+
+`{{WIKI}}/.inbox/` holds decision notes an agent wrote while implementing (the `decisions` hook
+or `wikipoke-implement`); `wikipoke check drift` counts them as `pending`. They are the only
+place the discarded alternative survives, and they live only in this working copy, so they go
+before anything else. A seed drains them too, after its avenues are written, so the pages have
+something to link to. No notes, or no folder: skip this.
+
+```
+each note ──► clears the bar in CONVENTIONS.md "Decisions worth recording"?
+                 ├── no  ──► delete it, name it in the log entry as dropped
+                 └── yes ──► read the files it names: does the code say what the note claims?
+                                ├── code says otherwise      ──► write what the code says, or ask
+                                ├── no decision page on it   ──► new decisions/<slug>.md
+                                ├── one already, compatible  ──► extend it
+                                └── one already, contradicted ─► supersede it: say so on both
+                             ──► delete the note
+```
+
+1. **Apply the bar again.** The note was written in seconds by an agent in the middle of
+   other work. Re-read the project's "Decisions worth recording" section and drop a note that
+   does not clear it. A note that bundles several decisions is judged one decision at a time:
+   each clears the bar or is dropped on its own, and one already written in the spec, the plan
+   or the wiki is dropped however well it reads. A dropped note is deleted, never kept "just in case".
+2. **Check it against the code.** Open the files the note names. A note is a lead, not a fact
+   to copy: when the code says otherwise, the code wins, and if the reason itself is in doubt,
+   ask the person or write the page `confidence: inferred`. If a file the note names has
+   uncommitted changes, ask the person to commit first, or leave the note for the next pass:
+   `synced:` has to name a commit that holds the code the page describes.
+3. **Write the page** with the template: `sources:` the files the decision constrains, so drift
+   flags it when they change; `synced:` is `git rev-parse --short HEAD`; `related:` and inbound links
+   to the components and flows it touches, found by reading the wiki; `reversible:` carried
+   over from the note as `true` or `false`. The discarded alternative and why is the body's centre.
+4. **Delete each note right after its page is written**, so a pass cut short never integrates
+   one twice. Leave the inbox's `.gitignore` in place.
+5. **Log it and say it**: in the log entry of this pass and in your close to the person, the
+   pages written or extended from notes, and the notes dropped with the reason in a few words.
+
+Then go on to the mode the argument decides.
 
 ---
 
@@ -64,6 +109,8 @@ tailor .wikipokeignore ──► write architecture.md now, from the survey
    ▼
 one avenue at a time:  read what its page needs ──► write the page ──► next
    ▼
+drain the inbox, if it holds notes
+   ▼
 index.md · log.md (first entry) · .wikipoke-state.json { last_indexed_commit: HEAD }
    ▼
 wikipoke check must pass without errors before you are done
@@ -71,7 +118,7 @@ wikipoke check must pass without errors before you are done
 
 1. **Record the base SHA:** `git rev-parse --short HEAD` for every page's `synced:`,
    copied from the command's output. The full form goes into the checkpoint at the
-   end, written by a command rather than by hand (step 8). Read
+   end, written by a command rather than by hand (step 9). Read
    `git log --oneline`: the history explains why the code looks like this and lives
    in no file.
 2. **Survey without reading the sources.** `git ls-files`, the manifests, the
@@ -112,9 +159,11 @@ wikipoke check must pass without errors before you are done
    name) is `confidence: inferred` and carries no `path:line`: a line number you
    never read is a guess that lands on real code, and no check can tell it apart
    from a true one.
-7. **Write `index.md`** grouped by type, one line per page (its `responsibility`). It
+7. **Drain the inbox** now, if it holds notes (see above): the avenues exist, so the decision
+   pages have something to link to.
+8. **Write `index.md`** grouped by type, one line per page (its `responsibility`). It
    opens with a frontmatter holding `okf_version: "0.2"` and nothing else.
-8. **Write the first `log.md` entry, then the checkpoint**. The entry is
+9. **Write the first `log.md` entry, then the checkpoint**. The entry is
    `* **wikipoke-ingest (seed)**: …` under today's `## YYYY-MM-DD` (the log's shape is
    below, under "Every mode ends here"). The checkpoint goes with this exact command —
    never type the sha yourself; a hand-copied sha keeps its first seven characters
@@ -151,9 +200,9 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
 ```
 
 1. **Detect.** `wikipoke check drift --json` gives `repo` (commits since the
-   checkpoint) and `stale[]` (the pages whose sources changed since their own
-   `synced:`). Nothing stale and the repository current: **say so and stop**; do
-   not invent work.
+   checkpoint), `pending[]` (the inbox notes, drained above) and `stale[]` (the pages
+   whose sources changed since their own `synced:`). Nothing stale and the repository
+   current (the notes were drained above): **say so and stop**; do not invent work.
 2. **Read the diff, not the repository.** For each stale page, read only its own
    diff: `git diff <its synced> HEAD -- <its sources>`. Anything in `skipped[]` has
    a broken contract; fix that first.

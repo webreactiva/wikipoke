@@ -48,15 +48,17 @@ question ──► search {{WIKI}}/  (the candidates' responsibility lines, or i
    word. What a step brings in is re-sent by every step after it, so reading five
    pages to answer from one is paid for again and again.
 3. **A current page is the map, and its citations are the evidence.** Unless a
-   notice this session said the wiki owes work, a page's `path:line` citations point
-   where it says. Answer from the page and cite those lines: re-reading code the page
+   notice this session named the page stale or its citations moved, a page's
+   `path:line` citations point where it says; `pending` decision notes are not about
+   any page. Answer from the page and cite those lines: re-reading code the page
    already cites buys nothing. Open code only for what the page does not cover, and
    then read the lines around a citation (`sed -n '40,60p' <file>`), not the whole
    file and not by searching again, every range you need in the same step. Keep apart what
    the page keeps apart: two cases in neighbouring sentences are still two cases.
 4. **Fall back to the code** for what the wiki does not have. Research the source,
    answer from it, and cite what you read as `path:line`. If a page you read is stale
-   against the code, say so.
+   against the code, say so. Notes in `{{WIKI}}/.inbox/` are leads waiting for an ingest,
+   not answers: never cite them.
 5. **Name the gap.** When the answer came from the code, say the wiki did not have
    it: the gap is a finding. So is a detail you had to open code for that the page
    should carry (what a command covers, a limit, which way a value or a flag works):

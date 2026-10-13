@@ -24,9 +24,9 @@ What this repository knows about itself. Start at
 - [components/checks.md](./components/checks.md) — what drift, coverage and lint each decide, and why all three are deterministic and read-only.
 - [components/lib.md](./components/lib.md) — the git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
 - [components/install.md](./components/install.md) — how init, hooks add/remove and uninstall write files without ever taking something the project owns.
-- [components/hooks.md](./components/hooks.md) — the five optional hooks, the one notifier they all run, and why none of them can write the wiki.
+- [components/hooks.md](./components/hooks.md) — the six optional hooks, the one notifier five of them run, and why none of them can write the wiki.
 - [components/atlas.md](./components/atlas.md) — how `wikipoke atlas` turns the wiki into one snapshot that a browser page renders, served live or exported as a static site, without ever writing in the wiki.
-- [components/skills.md](./components/skills.md) — what each skill template instructs the agent to do, and the boundaries the three wiki skills share.
+- [components/skills.md](./components/skills.md) — what each skill template instructs the agent to do, and the boundaries the wiki skills share.
 
 ## Concepts
 
@@ -39,6 +39,7 @@ What this repository knows about itself. Start at
 
 ## Decisions
 
+- [decisions/capture-decisions.md](./decisions/capture-decisions.md) — why agents note decisions in an uncommitted inbox as they implement, why one strict, editable section of CONVENTIONS.md decides which ones count, and why the hook that asks for them is not a notifier.
 - [decisions/cli-read-only.md](./decisions/cli-read-only.md) — why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
 - [decisions/interactive-init.md](./decisions/interactive-init.md) — why `wikipoke init` asks a person step by step with a bundled @clack/prompts, why agents never see it, and which of its choices are hard to undo.
 - [decisions/notify-never-write.md](./decisions/notify-never-write.md) — why no hook updates the wiki automatically, and why the notifier can never fail.

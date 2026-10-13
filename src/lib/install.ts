@@ -1,9 +1,10 @@
 // Puts the wiki's working parts into a repository and takes them out again.
 //
 // `init` writes what every wiki needs: the schema, the ignore list and the skills. Hooks are
-// optional and only installed on request (`wikipoke hooks add <name>`). Each one runs the wiki's
+// optional and only installed on request (`wikipoke hooks add <name>`). Most run the wiki's
 // notifier at a moment where knowing that the wiki is behind is useful: after a commit, or when an
-// agent starts a session. None of them writes the wiki.
+// agent starts a session. One, `decisions`, asks the agent to jot down the decisions it makes in
+// the wiki's inbox instead. None of them writes the wiki.
 //
 // Everything written here is spelled for this repository's wiki directory: the templates carry a
 // {{WIKI}} placeholder, so a project that keeps its wiki in docs/wiki gets skills, hooks and a
@@ -14,19 +15,20 @@
 //
 // `templates/` sits next to `src/` in the repository and next to `dist/` in an install, and this
 // file is two levels down in both, so one relative URL reaches it either way.
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, chooseWiki, gitOrNull, wikiDir } from "./lib.ts";
+import { CONFIG_FILE, DEFAULT_WIKI, HOOK_FILE, IGNORE_FILE, INBOX_DIR, chooseWiki, gitOrNull, wikiDir } from "./lib.ts";
 
 export const MARKER = "managed by wikipoke";
-export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents"];
+export const SKILLS = ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents", "wikipoke-implement"];
 const NEUTRAL_SKILLS = ".agents/skills";
 const CLAUDE_SKILLS = ".claude/skills";
 const SETTINGS = ".claude/settings.json";
 const AGENTS = "AGENTS.md";
 const BLOCK = /<!-- wikipoke:start[\s\S]*?<!-- wikipoke:end -->\n?/;
+const DECISIONS_BLOCK = /<!-- wikipoke:decisions:start[\s\S]*?<!-- wikipoke:decisions:end -->\n?/;
 const templates = fileURLToPath(new URL("../../templates/", import.meta.url));
 
 /** What every command that writes returns: one bucket per outcome, all of them paths but `manual`. */
@@ -48,7 +50,7 @@ export interface Hook {
   signs: string[];
 }
 
-export type HookName = "git" | "claude" | "opencode" | "cursor" | "agents";
+export type HookName = "git" | "claude" | "opencode" | "cursor" | "agents" | "decisions";
 
 /**
  * A hook plus what this repository says about it right now. `outdated` means installed, but its
@@ -70,6 +72,21 @@ type HookAction = (root: string, wiki: string, out: Report) => void;
 
 const notifier = (wiki: string): string => `${wiki}/${HOOK_FILE}`;
 const notify = (wiki: string): string => `sh ${notifier(wiki)}`;
+const inboxIgnore = (root: string, wiki: string): string => join(root, wiki, INBOX_DIR, ".gitignore");
+const INBOX_IGNORE = `# ${MARKER}: decision notes are scratch work, never committed\n*\n`;
+const DECISIONS_SECTION = /^##\s+decisions worth recording\s*$/im;
+
+/** Whether an ignore file does nothing but ignore everything: wikipoke's, or an agent's bare `*`. */
+const ignoresAll = (text: string | null): boolean =>
+  text !== null &&
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .join("\n") === "*";
+
+/** The hooks that run the notifier. `decisions` is the one that does not: it asks for notes. */
+export const NOTIFIES = (name: HookName): boolean => name !== "decisions";
 
 /** The optional hooks: where each one lives, when it speaks, and what suggests the project uses it. */
 export const HOOKS: Record<HookName, Hook> = {
@@ -80,6 +97,8 @@ export const HOOKS: Record<HookName, Hook> = {
   opencode: { where: ".opencode/plugin/wikipoke.js", when: "when an OpenCode session starts", signs: [".opencode", "opencode.json"] },
   cursor: { where: ".cursor/rules/wikipoke.mdc", when: "a rule Cursor reads in every session", signs: [".cursor", ".cursorrules"] },
   agents: { where: AGENTS, when: "a note for Codex and any agent that reads AGENTS.md", signs: [AGENTS] },
+  // No signs: capturing decisions is a habit a project chooses, nothing in a repository implies it.
+  decisions: { where: AGENTS, when: "agents note their decisions for the next ingest", signs: [] },
 };
 
 const template = (name: string, wiki: string): string =>
@@ -219,6 +238,7 @@ const HOOK_FILES: Record<HookName, (root: string, wiki: string) => { path: strin
   opencode: (root, wiki) => ({ path: join(root, HOOKS.opencode.where), content: template("opencode-plugin.js", wiki) }),
   cursor: (root, wiki) => ({ path: join(root, HOOKS.cursor.where), content: template("cursor-rule.mdc", wiki) }),
   agents: (root, wiki) => ({ path: join(root, AGENTS), content: template("agents-block.md", wiki) }),
+  decisions: (root, wiki) => ({ path: join(root, AGENTS), content: template("agents-decisions.md", wiki) }),
 };
 
 /**
@@ -226,13 +246,14 @@ const HOOK_FILES: Record<HookName, (root: string, wiki: string) => { path: strin
  * a hook changes what someone's terminal or agent sees, so updating it waits for them to ask.
  */
 function outdated(root: string, wiki: string, name: HookName): boolean {
-  if (read(join(root, notifier(wiki))) !== template("wikipoke-hook.sh", wiki)) return true;
+  if (NOTIFIES(name) && read(join(root, notifier(wiki))) !== template("wikipoke-hook.sh", wiki)) return true;
   const file = HOOK_FILES[name](root, wiki);
   if (!file) return false;
   const current = read(file.path) ?? "";
   // AGENTS.md is shared: only wikipoke's block is compared. A post-commit the project owns holds
   // only the line it was told to add, and the notifier that line runs was compared above.
   if (name === "agents") return current.match(BLOCK)?.[0] !== file.content.match(BLOCK)?.[0];
+  if (name === "decisions") return current.match(DECISIONS_BLOCK)?.[0] !== file.content.match(DECISIONS_BLOCK)?.[0];
   return current.includes(MARKER) && current !== file.content;
 }
 
@@ -244,6 +265,7 @@ const INSTALLED: Record<HookName, (root: string, wiki: string) => boolean> = {
   opencode: (root) => read(join(root, HOOKS.opencode.where))?.includes(MARKER) ?? false,
   cursor: (root) => read(join(root, HOOKS.cursor.where))?.includes(MARKER) ?? false,
   agents: (root) => BLOCK.test(read(join(root, AGENTS)) ?? ""),
+  decisions: (root) => DECISIONS_BLOCK.test(read(join(root, AGENTS)) ?? ""),
 };
 
 /** Every optional hook, whether it is installed, and whether the project shows signs of using it. */
@@ -281,15 +303,21 @@ const ADD: Record<HookName, HookAction> = {
   },
   opencode: (root, wiki, out) => place(root, join(root, HOOKS.opencode.where), template("opencode-plugin.js", wiki), out),
   cursor: (root, wiki, out) => place(root, join(root, HOOKS.cursor.where), template("cursor-rule.mdc", wiki), out),
-  agents(root, wiki, out) {
-    const path = join(root, AGENTS);
-    const old = read(path);
-    const block = template("agents-block.md", wiki);
-    const rest = withoutBlock(old ?? "");
-    const next = rest.trim() ? `${rest.replace(/\n+$/, "")}\n\n${block}` : block;
-    if (next === old) return;
-    write(path, next);
-    out[old === null ? "created" : "updated"].push(AGENTS);
+  agents: (root, wiki, out) => addBlock(root, BLOCK, template("agents-block.md", wiki), out),
+  decisions(root, wiki, out) {
+    addBlock(root, DECISIONS_BLOCK, template("agents-decisions.md", wiki), out);
+    // The inbox ignores itself, so no project has to touch its own .gitignore for scratch notes.
+    // It is never committed, so in a fresh clone the agent that writes the first note creates it:
+    // a bare `*` is the same file, and is left as it is.
+    if (!ignoresAll(read(inboxIgnore(root, wiki)))) place(root, inboxIgnore(root, wiki), INBOX_IGNORE, out);
+    // The block points at a section a CONVENTIONS.md older than this hook does not have, and
+    // without it capture has no bar. Said, not written: the schema is the project's.
+    const conventions = read(join(root, wiki, "CONVENTIONS.md"));
+    if (conventions !== null && !DECISIONS_SECTION.test(conventions))
+      out.manual.push(
+        `${wiki}/CONVENTIONS.md has no "## Decisions worth recording" section, so agents have no bar to capture by: ` +
+          `copy it from ${join(templates, "CONVENTIONS.md")}.`,
+      );
   },
 };
 
@@ -306,21 +334,52 @@ const REMOVE: Record<HookName, HookAction> = {
   },
   opencode: (root, _wiki, out) => unplace(root, join(root, HOOKS.opencode.where), out),
   cursor: (root, _wiki, out) => unplace(root, join(root, HOOKS.cursor.where), out),
-  agents(root, _wiki, out) {
-    const path = join(root, AGENTS);
-    const old = read(path);
-    if (old === null || !BLOCK.test(old)) return;
-    const rest = withoutBlock(old);
-    if (rest.trim()) write(path, rest);
-    else rmSync(path);
-    out.removed.push(`${AGENTS} (wikipoke block)`);
+  agents: (root, _wiki, out) => removeBlock(root, BLOCK, "wikipoke block", out),
+  decisions(root, wiki, out) {
+    removeBlock(root, DECISIONS_BLOCK, "decisions block", out);
+    // Anything still in the inbox would reach git without the ignore file, so it stays until the
+    // folder holds nothing else. Every entry counts, not only the notes drift reports.
+    const path = inboxIgnore(root, wiki);
+    const left = existsSync(dirname(path)) ? readdirSync(dirname(path)).filter((name) => name !== ".gitignore").length : 0;
+    if (left) out.manual.push(`${wiki}/${INBOX_DIR}/ still holds ${left} file(s): integrate the notes with wikipoke-ingest, then remove the folder.`);
+    else if (ignoresAll(read(path))) {
+      rmSync(path);
+      prune(dirname(path), root);
+      out.removed.push(relative(root, path));
+    } else unplace(root, path, out);
   },
 };
+
+/** Adds a managed block to the end of AGENTS.md, or replaces the one already there. */
+function addBlock(root: string, pattern: RegExp, block: string, out: Report): void {
+  const path = join(root, AGENTS);
+  const old = read(path);
+  const match = old?.match(pattern);
+  const next =
+    old && match
+      ? old.replace(pattern, block)
+      : old?.trim()
+        ? `${old.replace(/\n+$/, "")}\n\n${block}`
+        : block;
+  if (next === old) return;
+  write(path, next);
+  out[old === null ? "created" : "updated"].push(AGENTS);
+}
+
+function removeBlock(root: string, pattern: RegExp, label: string, out: Report): void {
+  const path = join(root, AGENTS);
+  const old = read(path);
+  if (old === null || !pattern.test(old)) return;
+  const rest = withoutBlock(old, pattern);
+  if (rest.trim()) write(path, rest);
+  else rmSync(path);
+  out.removed.push(`${AGENTS} (${label})`);
+}
 
 /** Installs the named hooks, and the notifier they all run. */
 export function addHooks(root: string, names: HookName[], wiki: string = wikiDir(root)): Report {
   const out = report();
-  place(root, join(root, notifier(wiki)), template("wikipoke-hook.sh", wiki), out, { mode: 0o755 });
+  if (names.some(NOTIFIES)) place(root, join(root, notifier(wiki)), template("wikipoke-hook.sh", wiki), out, { mode: 0o755 });
   for (const name of names) ADD[name](root, wiki, out);
   return out;
 }
@@ -329,7 +388,7 @@ export function addHooks(root: string, names: HookName[], wiki: string = wikiDir
 export function removeHooks(root: string, names: HookName[], wiki: string = wikiDir(root)): Report {
   const out = report();
   for (const name of names) REMOVE[name](root, wiki, out);
-  if (!hookStatus(root, wiki).some((hook) => hook.installed)) unplace(root, join(root, notifier(wiki)), out);
+  if (!hookStatus(root, wiki).some((hook) => hook.installed && NOTIFIES(hook.name))) unplace(root, join(root, notifier(wiki)), out);
   return out;
 }
 
@@ -342,9 +401,9 @@ export function uninstall(root: string): Report {
   return out;
 }
 
-/** The file without wikipoke's block, and without the blank lines the block sat between. */
-function withoutBlock(text: string): string {
-  const match = text.match(BLOCK);
+/** The file without one of wikipoke's blocks, and without the blank lines the block sat between. */
+function withoutBlock(text: string, pattern: RegExp): string {
+  const match = text.match(pattern);
   if (!match || match.index === undefined) return text;
   const before = text.slice(0, match.index).replace(/\n+$/, "");
   const after = text.slice(match.index + match[0].length).replace(/^\n+/, "");

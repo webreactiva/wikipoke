@@ -6,7 +6,7 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 78adf3b
+synced: ee3921c
 related:
   - ./lib.md
   - ../concepts/two-axes-of-staleness.md
@@ -20,7 +20,7 @@ the `wikipoke-lint` skill's deep pass.
 Since `df4db0e` each module also names the object it returns — `DriftResult`, `CoverageResult`,
 `LintResult` — and those names are what let the CLI keep treating the three uniformly without
 forgetting which is which (see [the entry point](./cli.md)). The most useful of them is drift's
-`RepoAxis` (`src/lib/drift.ts:36`): its four states are a union rather than a `status` string
+`RepoAxis` (`src/lib/drift.ts:41`): its four states are a union rather than a `status` string
 beside optional fields, so the two that know a commit count are the only two that can be asked for
 one, and the report cannot print a count that was never computed.
 
@@ -29,11 +29,11 @@ one, and the report cannot print a count that was never computed.
 checkpoint; the page axis compares each page's `sources:` against its own `synced:`. A page with no
 `sources:`/`synced:`, or a `synced:` that is not a commit here, lands in `skipped[]` rather than in
 either bucket: it has no contract, so it cannot be called fresh or stale
-(`src/lib/drift.ts:110`). Diffs are cached per sha (`src/lib/drift.ts:87`), so a wiki where most pages
+(`src/lib/drift.ts:119`). Diffs are cached per sha (`src/lib/drift.ts:96`), so a wiki where most pages
 carry the same `synced:` runs one `git diff`, not one per page.
 
 Drift also carries every citation through the diff to the line it names now, or reports it as
-changed when a hunk rewrote the line itself (`src/lib/drift.ts:137`, `src/lib/drift.ts:189`). A
+changed when a hunk rewrote the line itself (`src/lib/drift.ts:146`, `src/lib/drift.ts:198`). A
 stale page lists them as `citations[]`; a fresh page whose pointers moved anyway lands in
 `moved[]`. The first version (`aafa306`) looked only at stale pages and mapped from `synced:`, on
 the theory that re-stamping was the last moment a move could be seen. Both halves were wrong in
@@ -41,12 +41,19 @@ practice. A page re-stamped without its pointers being moved is fresh, and an ag
 that to nine citations pushed between 56 and 286 lines down, with `lint` saying OK to all nine. And
 `synced:` is not when a citation was written: a pointer into a file added after it, or one
 re-pointed but not yet re-stamped, got moved a second time. Since `4943a76` each citation is dated
-by the commit that last wrote its page line (`git blame`, `src/lib/drift.ts:161`), and a line not
+by the commit that last wrote its page line (`git blame`, `src/lib/drift.ts:170`), and a line not
 committed yet counts as current. A checkpoint that is not a commit is printed in full
-(`src/lib/drift.ts:225`), because the usual cause is a sha typed by hand whose first seven
+(`src/lib/drift.ts:234`), because the usual cause is a sha typed by hand whose first seven
 characters are right, and seven characters that match HEAD read as a contradiction. The report
 prints at most eight moved citations per page without `-v`, like the file list, because the
-notifier puts it into an agent's prompt (`src/lib/drift.ts:255`).
+notifier puts it into an agent's prompt (`src/lib/drift.ts:270`).
+
+Since `35f9c8a` drift also lists the decision notes waiting in `wiki/.inbox/` as `pending`
+(`src/lib/drift.ts:92`). It counts files and never reads them — what a note says is for
+`wikipoke-ingest` to judge — and like a stale page it is debt: one finding for `--strict`, silence
+when the inbox is empty, never a failure. It sits in drift rather than in a fourth check because
+it is the same question, what the wiki owes, and the notifier already runs drift
+([why the inbox exists](../decisions/capture-decisions.md)).
 
 **coverage** is drift's mirror: tracked files, minus `.wikipokeignore`, that no page's `sources:`
 claims. It groups what is left into clusters by folder so the backlog reads as "five files in
@@ -65,14 +72,14 @@ run. It decides the frontmatter contract (required keys, a `type:` that
 [CONVENTIONS.md lists](../concepts/schema-lives-in-the-wiki.md), a `confidence:` from a fixed set,
 a `synced:` that exists in git), that every `sources:` entry still matches a tracked file, and that
 every Markdown link resolves — on pages, in `related:`, and in `index.md`, which is checked like a
-page because a broken map is as bad as a broken page (`src/lib/lint.ts:83`).
+page because a broken map is as bad as a broken page (`src/lib/lint.ts:96`).
 
 It also re-reads every `path:line` citation in a page's prose and warns when one now falls past
 the end of its file, on a blank line, or on a line that only closes a block — `}`, `);`
-(`src/lib/lint.ts:218`). Nobody cites a closing brace, so that one is almost always code that moved
+(`src/lib/lint.ts:348`). Nobody cites a closing brace, so that one is almost always code that moved
 underneath: it is the one post-hoc symptom of a shifted citation a machine can tell from real code,
 and it catches some of what a reconcile re-stamped without re-pointing. A link that carries its
-line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:166`):
+line twice, `[event.ts:41](…#L43)`, is also checked for the two agreeing (`src/lib/lint.ts:193`):
 re-pointing the anchor and not the text is the usual way they part.
 
 Both checks read citations in both forms agents write: `path:line` in prose, and a link into the
@@ -89,6 +96,16 @@ Its other warnings are about a wiki nobody can navigate rather than one that is 
 follow, and the [over-broad `sources:`](../concepts/over-broad-sources.md) that turn coverage
 green by lying — a whole package, since `3eb714c` any source that claims more than half the
 repository, and since `dc452c1` and `d63f692` more than fifty files, one source or a page's folders
-counted together. Past 80 pages it warns once that reading `index.md` first has stopped ranking
+counted together. Since `072403d` it also warns about a source on the "Never a source" list
+CONVENTIONS.md owns — lock files and whatever the project adds, files that change with most commits
+and so flag the page stale for work that has nothing to do with it (`src/lib/lint.ts:128`). Since
+`d04d1a1` it warns about frontmatter a strict YAML parser reads differently from wikipoke's own
+flat reader (`src/lib/lint.ts:228`): a `responsibility:` holding `: `, an unquoted value that opens
+with a symbol. wikipoke reads those pages fine, but Obsidian, site generators and every YAML library
+do not, and since `52980e2` the wiki is meant to be an Open Knowledge Format bundle other tools
+read. In the same spirit it warns when `CONVENTIONS.md` has no frontmatter with a `type`
+(`src/lib/lint.ts:83`) and when `log.md` is not newest first with one `## YYYY-MM-DD` heading per
+day (`src/lib/lint.ts:297`); a log in the older one-heading-per-pass shape is named so the next
+ingest rewrites it. All of these are warnings: what breaks is other tools, not wikipoke. Past 80 pages it warns once that reading `index.md` first has stopped ranking
 anything — a deliberate nudge to reopen the "do we need search?" question rather than a measured
-limit (`src/lib/lib.ts:138`).
+limit (`src/lib/lib.ts:171`).

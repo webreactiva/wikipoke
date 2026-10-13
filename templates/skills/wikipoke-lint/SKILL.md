@@ -36,7 +36,9 @@ It **proposes; it does not rewrite.** Reconciling with the code is
    Everything it reports is already decided: **list it, don't re-derive it**.
 2. Explain each finding in plain terms: what it means, why it matters, the fix.
    Keep the two scales apart: **errors** are a broken wiki; **staleness and
-   coverage are debt**, not breakage.
+   coverage are debt**, not breakage. So are `pending` decision notes: the fix is
+   `wikipoke-ingest`, before the branch or the worktree goes away, because the notes
+   live only in this working copy.
 3. Watch for the two false greens the machine cannot judge on its own. **An
    over-broad `sources:`** makes coverage read green for code nobody wrote up: read
    those warnings and the coverage total together, and report the total as false while
