@@ -1,0 +1,32 @@
+# A version tag publishes that exact commit to npm and creates its GitHub release, in one run, so
+# the tag, the package and the release can never disagree. The one human step is
+# `npm version patch|minor` and `git push --follow-tags`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml # the same checks a pull request runs, before anything ships
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # npm trusted publishing (OIDC): no NPM_TOKEN secret, and a provenance statement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # its npm supports trusted publishing
+          registry-url: "https://registry.npmjs.org"
+      # A tag that does not match package.json publishes nothing: the version would be a lie.
+      - run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - run: npm publish
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
