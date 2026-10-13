@@ -613,7 +613,10 @@ every file other than `index.md` and `log.md` has frontmatter a strict YAML pars
 from that; a wiki made by an older wikipoke gets its log rewritten by the next pass that writes it.
 Every document in this repository's own wiki loads with no error in the OKF reference agent's
 parser. Pages carry more than OKF asks (`sources:`, `synced:`, `responsibility:`); OKF allows
-extra keys.
+extra keys. The skills also write OKF's own trust keys: `generated:` when a pass writes or
+rewrites a page's claims, `verified:` when a pass reads the code again and the page is still
+true, each with who did it (`claude-code/<model>`, `human:<id>`) and when. So a page that was
+only re-checked reads differently from one that was rewritten; `lint` checks their shape.
 
 ## Uninstall
 

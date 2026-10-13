@@ -145,15 +145,19 @@ synced:           # short SHA this page was last reconciled against
 confidence:       # high | inferred (optional, absent means high)
 related:          # links to sibling pages (optional)
   - ./payments.md
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T14:00:00Z }   # who last wrote its claims
+verified: { by: human:daniel, at: 2026-10-12T09:30:00Z }                  # who last confirmed them (optional)
 ---
 
 <!-- body: stay high-altitude, do not transcribe the code -->
 ```
 
-Five required keys, two optional. That is the whole schema. A page may carry any other key it
+Five required keys, four optional. That is the whole schema. A page may carry any other key it
 finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. Decision
-pages have a few of their own, below. There is deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
-page was verified against, which is the date that matters.
+pages have a few of their own, below. There is deliberately no date field for the code:
+`git show -s --format=%cs <synced>` gives the date of the commit the page was verified against.
+The times in `generated:` and `verified:` are when a pass wrote or confirmed the page, not when
+the code changed.
 
 The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
 **Quote a value that holds `: ` or ` #`, or starts with a symbol** such as `{`, `*`, `&`, `!`, `|`,
@@ -174,6 +178,23 @@ tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns ab
   the code". `inferred` means "this is my reading and it may be wrong": use it for intent,
   rationale and history you reconstructed rather than found. Prefer asking the person over
   guessing; when you do guess, say so here.
+- **`generated:` and `verified:`** tell what the last passes did, and who did them: `confidence:`
+  says *how* a claim is known, these say *who last wrote it and who last confirmed it*. Both are
+  the Open Knowledge Format's trust keys, written as one `{ by: <actor>, at: <time> }` map on one
+  line, with no quotes, because a YAML reader takes it as a map; wikipoke keeps it as text and
+  `wikipoke check lint` checks its shape. The actor is `<harness>/<model>` for an agent
+  (`claude-code/claude-opus-5-5`, `opencode/glm-5.3-flash`; the harness alone when you do not
+  know your model), or `human:<id>` for a person. The time is ISO 8601 with its offset:
+  `date -u +%Y-%m-%dT%H:%M:%SZ`. Each pass replaces the map it writes; git keeps the earlier ones.
+
+  | What the pass did | What changes |
+  | --- | --- |
+  | Wrote the page, or rewrote claims after reading the code | `generated:` and `synced:` |
+  | Read the code again, and the page was still true (citations re-pointed included) | `verified:` and `synced:`; `generated:` stays |
+  | Fixed a claim without reading the code again (a lint fix) | `generated:`; `synced:` stays, since nothing was re-read |
+  | Fixed a link, a typo or the wording | nothing |
+
+  A page without them is still valid: they start with the next pass that touches it.
 
 ## Never a source
 

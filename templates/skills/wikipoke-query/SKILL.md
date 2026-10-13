@@ -71,7 +71,8 @@ question ──► search {{WIKI}}/  (the candidates' responsibility lines, or i
    pattern or comparison: "Where each type comes from" in `CONVENTIONS.md` says what each type
    holds, the ones the project added included. Write only on a yes.
 7. **When filing:** the template, **narrow** `sources:` for what you actually read,
-   `git rev-parse --short HEAD` as `synced:`, and `confidence: inferred` when the
+   `git rev-parse --short HEAD` as `synced:`, `generated:` as `{ by: <you>, at: <now> }`
+   (see "The one template" in `CONVENTIONS.md`), and `confidence: inferred` when the
    answer is your reading rather than something the code states. **Link the new
    page from the pages it relates to**, then add its line to `index.md` and an entry
    to `log.md` (`* **wikipoke-query**: …` at the top of today's heading; if the log

@@ -7,7 +7,8 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: 6a9925f
+synced: 7526c5e
+verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md

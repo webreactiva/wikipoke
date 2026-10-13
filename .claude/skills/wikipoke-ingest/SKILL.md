@@ -35,6 +35,12 @@ else; running the project's builds, generators or scripts counts, so read them
 instead), and **never re-stamp `synced:` on a page you did not re-read against the
 code**.
 
+**Mark what you did to each page.** Every page you write or rewrite gets `generated:`;
+every page you re-read and found still true gets `verified:` instead, and its
+`generated:` stays. Both are `{ by: <you>, at: <now> }`, as "The one template" in
+`CONVENTIONS.md` says: the four cases and the actor are there. A page you only re-point
+citations on was re-read, so it is `verified:`. A link or a typo is neither.
+
 **Write as you go.** Read what one page needs, write that page, then move on to the
 next. Never study the whole repository before writing: reading you are not about to
 turn into a page is spent twice, once now and again when you have forgotten it. If
@@ -235,7 +241,8 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    (update a line number repeated in the link text too). `now` is the line each
    points at today; `now: null` means the cited line itself was edited or deleted,
    so open the file and find what the sentence was about. Then set `synced:` to
-   `git rev-parse --short HEAD`. Re-stamping does not hide a pointer you skipped —
+   `git rev-parse --short HEAD`, with `generated:` on a page whose claims you rewrote and
+   `verified:` on one that was still true. Re-stamping does not hide a pointer you skipped —
    drift dates each citation by the commit that wrote it and reports the page under
    `moved[]` — and one you already re-pointed is current, committed or not.
 5. **New and moved code.** Changed files no page covers: propose a page, or leave

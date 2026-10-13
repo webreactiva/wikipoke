@@ -5,7 +5,8 @@ responsibility: Why the wiki uses `[text](./page.md)` and reports `[[term]]` ins
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: ee3921c
+synced: 7526c5e
+verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ../components/lib.md
 ---

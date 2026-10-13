@@ -536,6 +536,9 @@ test("lint warns about frontmatter a strict YAML parser reads differently, and i
     ["title:Billing", /no space after `title:`/],
     ["title:\tBilling", /holds a tab/],
     ["summary: first\n  second line", /is not `key: value` or `- item`/],
+    ["generated: { by: opus }", /is not `\{ by: <actor>, at: <datetime> \}`/],
+    ["generated: { by: opus, at: 2026-10-11T14:00:00Z }", /not an actor/],
+    ["verified: { by: human:daniel, at: 2026-10-11 }", /not an ISO 8601 time/],
   ];
   for (const [line, reason] of warns) {
     const found = yamlProblems(front(line));
@@ -552,6 +555,9 @@ test("lint warns about frontmatter a strict YAML parser reads differently, and i
     "title: -\"q\"",
     "title: https://example.com/x",
     "sources:\n  - src/billing/invoice.ts",
+    "generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T14:00:00Z }",
+    "verified: { by: human:daniel, at: 2026-10-11T16:30:00+02:00 }",
+    "verified: { by: process:nightly, at: 2026-10-11T02:00Z }",
   ])
     assert.deepEqual(yamlProblems(front(line)), [], line);
 

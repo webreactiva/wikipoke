@@ -2,6 +2,27 @@
 
 ## 2026-10-11
 
+* **wikipoke-ingest**: reconciled 3 commits since `ecc7b09` — the trust-keys release (#5).
+  - components/checks.md: lint reads a `{` value under `generated:`/`verified:` as the OKF trust
+    map and checks its shape — one `{ by, at }`, an OKF §7 actor, an ISO time with its offset —
+    instead of warning about a misread (6f2b5f6); citations re-pointed for the inserted code
+    (297→322, 348→373).
+  - components/skills.md: the four wiki skills say what a pass stamps now — ingest marks every page
+    it touches, lint's claim fix stamps `generated:` and a link or typo neither, query and the
+    decision draft carry `generated:` (7526c5e); the "Where each type comes from" citation
+    re-pointed (158→164).
+  - concepts/schema-lives-in-the-wiki.md: the trust keys are schema prose under "The one template";
+    lint owns only the shape check.
+  - concepts/skills-as-product.md: #5 as the judgement/determinism split — prose in four skills and
+    the four-case table, 25 lines of src/ for the shape check.
+  - flows/ingest-pass.md: the reconcile re-stamp names its kind, `generated:` for rewritten claims
+    and `verified:` for re-read-and-true (7526c5e); citation re-pointed (158→164).
+  - flows/check.md, concepts/over-broad-sources.md, concepts/two-axes-of-staleness.md,
+    decisions/plain-markdown-links.md: re-read against the diff, nothing they claim moved, and
+    re-stamped.
+  - decisions/capture-decisions.md: citations re-pointed (199→220, 211→232, 221→242), claims
+    unchanged. No inbox notes; no `planned: true` pages to sweep.
+
 * **wikipoke-ingest**: reconciled 2 commits since `1097b15` — the page-types evidence release (#20).
   - components/skills.md, flows/ingest-pass.md: what a page of each type holds is now an entry under
     "Where each type comes from" in CONVENTIONS.md, which ingest and query read and lint's
