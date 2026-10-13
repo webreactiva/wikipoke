@@ -5,7 +5,7 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 6a9925f
+synced: 1097b15
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -31,6 +31,13 @@ implement and ingest turns into pages; no code reads it, the `decisions` hook, `
 and `wikipoke-ingest` all point at it, and `hooks add decisions` only checks that the heading
 exists ([the decision](../decisions/capture-decisions.md)). It starts strict, and widening it is
 an edit to this file, which is the whole argument for putting it here.
+
+Since `3e94960` the section carries two more rules of that kind. It states who the bar governs: a
+decision a person asks to keep, through `wikipoke-decision`, is the person's to judge, because a
+bar is for what an agent writes down on its own. And its "On the page" part is the specification
+the decision pages follow — `decided_by:` only when known first hand, `planned: true` while the
+code has yet to follow, `status: deprecated` once another decision reverses it and the code
+complies — every key of it prose, and every key of it owned by this file.
 
 Since `52980e2` the file also opens with a two-line frontmatter, `type: schema`, so the wiki reads
 as an Open Knowledge Format bundle; lint warns when it is missing, and `init` names it first among

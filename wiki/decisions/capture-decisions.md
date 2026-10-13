@@ -7,9 +7,10 @@ sources:
   - templates/agents-decisions.md
   - templates/skills/wikipoke-implement/SKILL.md
   - templates/skills/wikipoke-ingest/SKILL.md
+  - templates/skills/wikipoke-decision/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: dbfe0cf
+synced: 1097b15
 reversible: true
 related:
   - ./notify-never-write.md
@@ -21,20 +22,21 @@ related:
 **Decision.** The reason behind a choice is lost the moment the code is written: the commit keeps
 the result, a squash merge drops even the commit, and an ingest days later finds "decisions: none".
 So the agent that writes the code jots the decision down while it still knows what it discarded,
-and the next `wikipoke-ingest` turns the note into a page. Two ways in, neither the default: the
-`decisions` hook puts a block in `AGENTS.md` that asks every agent for notes
-(`templates/agents-decisions.md`), and the `wikipoke-implement` skill does it for one piece of work,
-only when a person names it. Introduced in issue #18 (`35f9c8a`, `e52be54`).
+and the next `wikipoke-ingest` turns the note into a page. Two ways in, neither the default, both
+landing a note in the inbox: the `decisions` hook puts a block in `AGENTS.md` that asks every agent
+for notes (`templates/agents-decisions.md`), and the `wikipoke-implement` skill does it for one
+piece of work, only when a person names it. Introduced in issue #18 (`35f9c8a`, `e52be54`);
+issue #19 (`3e94960`) added a third that skips the inbox, treated below.
 
 ## One bar, strict, in the project's CONVENTIONS.md
 
 Which decisions count is written once, in the section "Decisions worth recording"
-(`templates/CONVENTIONS.md:173`), and the hook, `wikipoke-implement` and the ingest's drain all
+(`templates/CONVENTIONS.md:176`), and the hook, `wikipoke-implement` and the ingest's drain all
 point at it instead of carrying their own wording. The default is the strict one: a runtime
 dependency, an architectural pattern, or a choice hard to reverse
-(`templates/CONVENTIONS.md:183`), never routine fixes, linter preferences or what the code already
+(`templates/CONVENTIONS.md:188`), never routine fixes, linter preferences or what the code already
 says. A project widens or narrows it by editing its copy, as it already does with the page types;
-a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:193`).
+a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:198`).
 
 **Discarded: record every decision.** It was the first of two ways the course this came from asks
 for ADRs, and the one that fills a folder with notes on every small choice. More documentation
@@ -42,9 +44,30 @@ buries the few decisions that matter and soon contradicts the code; the bar keep
 code cannot say, which is the wiki's own rule. **Discarded: a CLI setting.** The bar is prose an
 agent applies, not something the CLI could check, and the CLI only measures.
 
+The same section, since `3e94960`, also spells the page's lifecycle out under "On the page":
+`decided_by:` only when known first hand (`f4554ee` had to fix the ingest to leave it out of the
+pages it seeds — the code and the history say what was chosen, never who), `reversible:` when
+known, `planned: true` while the code has yet to carry it out, and `status: deprecated` once
+another decision reverses it and the code follows. That last key was the half of supersede the
+first capture left open; `d34957f` and `9c722ab` closed it: at reconcile the ingest reads every
+planned page, stale or not, drops the key where the code has caught up, and marks the decision it
+supersedes — whose opening line turns from "will reverse" into "reversed" — as deprecated.
+
 A schema older than the section has no bar to read. `hooks add decisions` says so and names the
 template (`src/lib/install.ts:316`), and the hook and both skills tell the agent to record nothing
 until it is added rather than invent one.
+
+## The way in that skips the inbox
+
+`wikipoke-decision` (`3e94960`) exists for the decisions people take away from the code — in a
+meeting, in a review — where the choice survives and the reason never does. The person's words
+supply what was chosen, what was set aside and why; the skill asks for whichever is missing, one
+short question at a time, checks the code, and writes the page with `decided_by: person` at once,
+after a yes to the draft it showed. The bar does not gate it: that section says itself that a bar
+is for what an agent writes down on its own, and a decision the person asks to keep is the person's
+to judge. What the skill refuses is a page with nothing set aside — that is a rule, and it belongs
+in `AGENTS.md` — and it touches neither the checkpoint nor `.inbox/`. The first page written this
+way is [the wiki's own viewer](./own-viewer.md).
 
 ## An uncommitted inbox, counted as debt
 

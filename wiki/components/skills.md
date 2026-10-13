@@ -8,14 +8,15 @@ sources:
   - templates/skills/wikipoke-lint/SKILL.md
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
-synced: dbfe0cf
+  - templates/skills/wikipoke-decision/SKILL.md
+synced: 1097b15
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
   - ../decisions/capture-decisions.md
 ---
 
-Five Markdown files that no Node code ever reads. They are copied into `.agents/skills/` and
+Six Markdown files that no Node code ever reads. They are copied into `.agents/skills/` and
 `.claude/skills/` alike — since `08177b5` both, always, because Claude Code reads only the second
 and nothing in a repository reliably says it is used — an agent follows them, and the wiki appears.
 Most of wikipoke's behaviour is here rather than in `src/lib/`; see
@@ -38,7 +39,9 @@ Since `e52be54` every mode but a seed starts by draining `wiki/.inbox/`: each de
 checked against the project's "Decisions worth recording" bar a second time — a note that bundles
 several, one decision at a time — against the code it
 names, and against the decision pages already there, then becomes a new page, extends one or
-supersedes one, and is deleted right after, so a pass cut short never integrates a note twice. A
+supersedes one — the old page gaining `status: deprecated` once the code follows the new decision,
+staying in force with a "will reverse" line while the reversal is still planned — and is deleted
+right after, so a pass cut short never integrates a note twice. A
 seed drains after its avenues, so the pages have something to link to. A note about code not yet
 committed waits, because `synced:` has to name a commit that holds it. Dropped notes are named in
 the log and in the close. Since `52980e2` and `62cc97d` it also writes the log in the Open
@@ -47,6 +50,12 @@ Knowledge Format shape — newest first, one `## YYYY-MM-DD` per day, each pass 
 to it, never changing what an old entry says; `wikipoke-query` and `wikipoke-lint --deep` log the
 same way. And since `072403d` it reads the "Never a source" list before choosing `sources:`, so a
 lock file or a registry does not make a page stale on every commit.
+
+Since `3e94960` the skill also carries the decision-page lifecycle in its reconcile mode: a seeded
+decision page leaves `decided_by:` out (`f4554ee`), because the code and the history say what was
+chosen, never who, and Mode B reads every `planned: true` page against the commits since the
+checkpoint, stale or not (`9c722ab`), dropping the key where the diff carries the plan out and
+turning the superseded page's "will reverse" into "reversed" (`d34957f`).
 
 Three changes came from running it on a 1,480-file Laravel app through OpenCode. Every pass now
 closes with what it left, in numbers, and the next command to type (`3f36deb`): a seed that stops
@@ -62,7 +71,10 @@ decision.
 
 **`wikipoke-query`** answers a question from the wiki first, falls back to the code, and then
 offers to file the answer back. Notes waiting in `wiki/.inbox/` are leads, not answers: it never
-cites them, and a `pending` notice does not make any page's citations suspect. That offer is the point: it grows the wiki *where people actually
+cites them, and a `pending` notice does not make any page's citations suspect. A decision page
+carries two reading caveats since `3e94960`: `planned: true` is an intent the code does not carry
+out yet, and `status: deprecated` was reversed — answer from it only when saying which, and follow
+the link to what replaced it. That offer is the point: it grows the wiki *where people actually
 ask*, which is a better prior than where the index looks thin. It writes only on a yes, and never
 moves the checkpoint. Its sharpest line is the last one — for inventory questions ("every place we
 do X"), never accept an answer that rests on the wiki's silence.
@@ -90,8 +102,10 @@ description still never fired for a plain question, so every answer was raw expl
 code behaves … before any grep, glob or opening a source file"), and it fired on the first try.
 
 **`wikipoke-lint`** reads `wikipoke check` and explains it, and with `--deep` reads the pages as a
-body of text through seven lenses no script can apply: contradiction, expired claim, orphan concept,
-density, gap, missing kind, confidence. Missing kind, since `86294e6`, counts pages by type and
+body of text through eight lenses no script can apply: contradiction, expired claim, orphan concept,
+density, gap, missing kind, confidence, and, since `3e94960`, planned decisions — drop `planned:`
+where the code now does what the page says; ask the person when a plan sits that nobody carries
+out any more. Missing kind, since `86294e6`, counts pages by type and
 looks for what coverage cannot ask for — an entry point no flow follows, a design choice buried in a
 module page or in `git log` — and proposes each as a `wikipoke-ingest "<topic>"` command; on the
 Laravel app it produced the wiki's first two decision pages. The same change made an over-broad
@@ -107,6 +121,20 @@ an ingest before the branch or worktree goes away, since the notes live only in 
 The ingest skill also says what to do when wikipoke itself was upgraded: `wikipoke init`, which
 refreshes the skills and lists the outdated hooks, then ask before updating a hook — never copy the
 templates by hand.
+
+**`wikipoke-decision`**, since `3e94960`, is how a decision a person took becomes a page without
+passing through the inbox. The person's words are the source — what was chosen, what was set aside
+and why — and the skill asks for whichever is missing, one short question at a time; a "no
+alternative" after asking is answered honestly with there being no decision, only a rule that
+belongs in `AGENTS.md` (`/wikipoke-agents`). It reads the wiki to write new, extend or supersede,
+and reads the code to say which of three things is true: the code already does it, the code does
+not yet (`planned: true`, its `sources:` the files the change will touch), or the code says
+otherwise — and that last one is the person's call, never the skill's. It writes
+`decided_by: person` at `confidence: high`, shows the whole draft before writing, touches neither
+the checkpoint nor `.inbox/`, and is why the wiki holds
+[the viewer decision](../decisions/own-viewer.md) straight from Daniel. A choice smaller than the
+bar is still recorded when the person asks: the bar governs what agents note on their own, not what
+a person keeps.
 
 **`wikipoke-implement`**, since `e52be54`, is the one skill that writes code. It implements what
 the person asked for, unchanged, and notes in `wiki/.inbox/` each decision that clears the
@@ -130,9 +158,10 @@ and dropped a rule the person had written. The content always goes in `AGENTS.md
 wiki, so its guard is different: every change is shown as a unified diff, created files included,
 and nothing is written until the person says yes to that diff.
 
-Four boundaries the three wiki skills repeat, because a skill is read by an agent that has not
+Four boundaries the four wiki skills repeat, because a skill is read by an agent that has not
 read the others (`wikipoke-agents` keeps only the first; `wikipoke-implement` writes code, so it
-keeps only the last two, and touches nothing in the wiki but the inbox):
+keeps only the last two, and touches nothing in the wiki but the inbox; `wikipoke-decision` carries
+the four as steps of its own workflow — the schema read before anything, the code never changed):
 
 - **Never modify code.** The pass touches `wiki/**` and nothing else — running a generator counts.
   A bug found on the way is noted on the page and reported to the person.

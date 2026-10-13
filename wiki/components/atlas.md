@@ -16,6 +16,7 @@ related:
   - ../architecture.md
   - ./cli.md
   - ../decisions/cli-read-only.md
+  - ../decisions/own-viewer.md
   - ../concepts/file-ownership.md
 ---
 
@@ -24,7 +25,8 @@ the CLI that is not a check, and it measures nothing new: it shows what the page
 already say. It arrived in
 `12ff4b8`, and with it the project's rule for CLI code widened from "a deterministic, read-only
 check" to "that, or atlas" — on the condition that it reads the wiki and writes only outside it.
-[The decision page](../decisions/cli-read-only.md) records that change.
+[The decision page](../decisions/cli-read-only.md) records that change, and whose viewer it is
+has its own: [the wiki ships its own viewer](../decisions/own-viewer.md).
 
 ```
             src/bin/wikipoke.ts  (atlas branch)

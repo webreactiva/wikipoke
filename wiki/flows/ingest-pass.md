@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 6a9925f
+synced: 1097b15
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -51,7 +51,9 @@ Since `e52be54` a pass starts with the decision notes an agent left in `wiki/.in
 implementing, because they are the only place the discarded alternative survives and they live in
 one working copy. Each is judged against the project's "Decisions worth recording" bar a second
 time, one decision at a time when a note bundles several, read against the files it names, and turned into a new decision page, an extension or a
-supersede; then it is deleted, right after its page, so a pass cut short never integrates one twice.
+supersede — the old page gaining `status: deprecated` once the code follows the new one, and
+staying in force with a "will reverse" line while the reversal is still planned; then it is
+deleted, right after its page, so a pass cut short never integrates one twice.
 A note about uncommitted code waits for a commit, because `synced:` has to name one. A seed drains
 after its avenues, so the decision pages have something to link to. What was dropped is said in the
 log and in the close ([the decision](../decisions/capture-decisions.md)).
@@ -99,6 +101,13 @@ means reading the code again. Pages that are fresh but whose pointers moved anyw
 way. Both are re-pointed before the re-stamp, though since `4943a76` the order is no longer what
 keeps them honest: each citation is dated by the commit that wrote it, so a re-stamp cannot hide a
 skipped one and a re-pointed one is never moved twice.
+
+Reconcile, since `9c722ab`, also reads every `planned: true` decision page against the commits
+since the checkpoint, stale or not, because the code that carries a plan out can land in a file
+the page does not cite — staleness is the only signal that could ever fire there. Where the diff
+carries the plan out, the ingest drops the key, adds the files that now carry the decision to
+`sources:`, and marks the page it supersedes `status: deprecated`, its opening line turned from
+"will reverse" into "reversed" (`d34957f`).
 
 Nothing stale and the repository current is a complete outcome: say so and stop.
 

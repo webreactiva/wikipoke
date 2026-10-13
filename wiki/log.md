@@ -1,5 +1,25 @@
 # Log
 
+## 2026-10-11
+
+* **wikipoke-ingest**: reconciled 9 commits since `dbfe0cf` — the `wikipoke-decision` release (#19).
+  - components/skills.md: the sixth skill documented; the query skill answers with the `planned:`/
+    `deprecated` caveats, lint's deep pass gained the planned-decisions lens (3e94960), and
+    reconcile now reads every planned page, stale or not (9c722ab).
+  - decisions/capture-decisions.md: the decision-page lifecycle ("On the page" keys, f4554ee/
+    d34957f/9c722ab) and the way in that skips the inbox (the first page written with it:
+    decisions/own-viewer.md); its CONVENTIONS citations re-pointed to the new lines (173→176,
+    183→188, 193→198).
+  - flows/ingest-pass.md: supersede marks the old page `status: deprecated` once the code follows,
+    and the `planned: true` sweep joins Mode B.
+  - concepts/schema-lives-in-the-wiki.md, concepts/skills-as-product.md, concepts/two-axes-of-
+    staleness.md: the bar's person exception, the one-code-line proof (`src/lib/install.ts:25`),
+    planned staleness; components/install.md, flows/install.md: the sixth skill in `SKILLS`;
+    concepts/file-ownership.md re-read against the diff (nothing it claims moved) and re-stamped.
+
+* **wikipoke-decision**: new decisions/own-viewer.md — own HTML viewer over a third-party one
+  (Obsidian), to control how the wiki looks.
+
 ## 2026-10-03
 
 * **wikipoke-ingest**: reconciled 4 commits since `6a9925f`, from more OpenCode runs on copies of

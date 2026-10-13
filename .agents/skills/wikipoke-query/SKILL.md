@@ -55,6 +55,9 @@ question ──► search wiki/  (the candidates' responsibility lines, or index
    then read the lines around a citation (`sed -n '40,60p' <file>`), not the whole
    file and not by searching again, every range you need in the same step. Keep apart what
    the page keeps apart: two cases in neighbouring sentences are still two cases.
+   A decision page with `planned: true` is an intent the code does not carry out yet,
+   and one with `status: deprecated` was reversed: answer with what it says only when
+   you say which, and follow the link to the decision that replaced it.
 4. **Fall back to the code** for what the wiki does not have. Research the source,
    answer from it, and cite what you read as `path:line`. If a page you read is stale
    against the code, say so. Notes in `wiki/.inbox/` are leads waiting for an ingest,
