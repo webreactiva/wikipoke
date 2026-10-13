@@ -5,7 +5,8 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 78adf3b
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -19,6 +20,9 @@ program involved is `wikipoke check`, which measures and then gets out of the wa
 ```
 person: /wikipoke-ingest [<path> | <topic> | all]
    │
+   ├─ wiki/.inbox/ holds notes? ─► DRAIN: bar again → check against the code → decision page
+   │                                       → delete the note       (a seed: after its avenues)
+   │
    ├─ argument?  ── yes ─────────────────────────────► C · INGEST A PART
    │                                                    a path: coverage -v → pick ONE cluster
    │                                                    a topic: its entry point or its history
@@ -29,7 +33,7 @@ person: /wikipoke-ingest [<path> | <topic> | all]
                                          → re-point its citations[] and re-stamp, in one edit
    │
    ▼
-write pages under wiki/  ·  index.md  ·  log.md entry
+write pages under wiki/  ·  index.md  ·  log.md entry (newest first, one ## YYYY-MM-DD per day)
    │
    ▼
 wikipoke check  ── errors? ─► fix, re-run
@@ -42,6 +46,19 @@ checkpoint: Mode A and B write last_indexed_commit = HEAD, by printf, never by h
             Mode C never touches it.
 ```
 
+## The inbox goes first
+
+Since `e52be54` a pass starts with the decision notes an agent left in `wiki/.inbox/` while
+implementing, because they are the only place the discarded alternative survives and they live in
+one working copy. Each is judged against the project's "Decisions worth recording" bar a second
+time, one decision at a time when a note bundles several, read against the files it names, and turned into a new decision page, an extension or a
+supersede — the old page gaining `status: deprecated` once the code follows the new one, and
+staying in force with a "will reverse" line while the reversal is still planned; then it is
+deleted, right after its page, so a pass cut short never integrates one twice.
+A note about uncommitted code waits for a commit, because `synced:` has to name one. A seed drains
+after its avenues, so the decision pages have something to link to. What was dropped is said in the
+log and in the close ([the decision](../decisions/capture-decisions.md)).
+
 ## Seeding stops at the avenues, and says so
 
 A seed writes the map, two or three flows and one page per subsystem — a dozen or so pages — and
@@ -49,7 +66,11 @@ then stops, on purpose. The alternative produces a hundred pages nobody reviewed
 than the gap it closed, and coverage will list exactly what was left as
 [the backlog](../concepts/coverage-as-debt.md). The order inside a seed is also fixed:
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
-as the other pages teach the agent more. Anything reconstructed rather than read is marked
+as the other pages teach the agent more. Since `ecc7b09` the avenues include any type the project
+added: what such a page holds comes from its entry under "Where each type comes from" in
+`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:164`) — the skill's own table is only
+the fallback for a copy installed before the section, and a type neither the section nor the table
+answers is written as no page at all, said in the report. Anything reconstructed rather than read is marked
 `confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
 repository wrote a page about a directory it never opened and cited a line in it, which landed on
 unrelated code and passed every check. Only a file opened in the pass may be cited, and only a file
@@ -61,6 +82,10 @@ half-way. The starting list ignores `*.md`, and in a repository whose product is
 skills, agent instructions, a spec — that hides exactly what should be documented; a `!` line
 brings it back. This wiki is the case in point: the three `SKILL.md` files and `CONVENTIONS.md`
 under `templates/` are most of what wikipoke is, and the generic rule had hidden all four.
+
+Choosing `sources:` follows one more list since `072403d`: the "Never a source" files in
+`CONVENTIONS.md`, lock files by default, which change with most commits and would mark a page stale
+for work that has nothing to do with it. A page cites the files its claim rests on instead.
 
 The rule that makes a seed finish at all is **write as you go**: read what one page needs, write
 that page, move on. Reading the whole repository first is paid for twice, once now and again after
@@ -80,9 +105,23 @@ means reading the code again. Pages that are fresh but whose pointers moved anyw
 `moved[]` — usually a page an earlier pass re-stamped without re-pointing — and are fixed the same
 way. Both are re-pointed before the re-stamp, though since `4943a76` the order is no longer what
 keeps them honest: each citation is dated by the commit that wrote it, so a re-stamp cannot hide a
-skipped one and a re-pointed one is never moved twice.
+skipped one and a re-pointed one is never moved twice. Since `7526c5e` the re-stamp also names its
+kind: `generated:` on a page whose claims the diff forced to be rewritten, `verified:` on one that
+was still true (`templates/skills/wikipoke-ingest/SKILL.md:244`).
+
+Reconcile, since `9c722ab`, also reads every `planned: true` decision page against the commits
+since the checkpoint, stale or not, because the code that carries a plan out can land in a file
+the page does not cite — staleness is the only signal that could ever fire there. Where the diff
+carries the plan out, the ingest drops the key, adds the files that now carry the decision to
+`sources:`, and marks the page it supersedes `status: deprecated`, its opening line turned from
+"will reverse" into "reversed" (`d34957f`).
 
 Nothing stale and the repository current is a complete outcome: say so and stop.
+
+Every pass writes its entry the Open Knowledge Format way since `52980e2`: `log.md` newest first,
+one `## YYYY-MM-DD` heading per day, each pass a `* **<skill>**: …` entry at the top of its day. A
+log still in the older one-heading-per-pass shape is rewritten first, never changing what an old
+entry says (`62cc97d`).
 
 ## A pass ends by saying what it left
 

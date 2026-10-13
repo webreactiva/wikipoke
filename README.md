@@ -114,7 +114,9 @@ What a repository gets once wikipoke is installed:
   mentions wikipoke.
 - 🕰️ **A wiki that knows when it is out of date.** Every page names the files it documents and the
   commit it was checked against, so `wikipoke check drift` lists the stale pages and every
-  `path:line` citation the code has moved, with the line it points at now.
+  `path:line` citation the code has moved, with the line it points at now. It survives a squash or
+  rebase merge, which throws that commit away: each page also carries what its sources hashed to,
+  so the answer does not depend on how the team merges.
 - 📋 **Coverage as a backlog.** The code no page covers, grouped by folder, so the next pass knows
   where to go, and a count of what the ignore list hides.
 - 🩺 **Lint for the wiki.** Missing fields, broken links, sources that no longer exist, citations that
@@ -124,6 +126,18 @@ What a repository gets once wikipoke is installed:
 - 🔔 **Optional hooks.** A notice after each commit or when an agent session starts, for
   git, Claude Code, OpenCode, Cursor and `AGENTS.md`. Silent when the wiki is current, and none of
   them ever writes it.
+- 🧭 **Decisions caught while they are made** (optional, and the one feature that changes how
+  agents work in your project: [read this first](#5-the-decisions-behind-the-code)). With the
+  `decisions` hook, or by launching `/wikipoke-implement`, the agent that writes the code jots down the choices worth
+  keeping — what it chose, what it discarded and why — in an uncommitted inbox, and the next
+  `wikipoke-ingest` turns them into decision pages. Only what clears a strict bar the project
+  sets in its `CONVENTIONS.md`: a new dependency, an architectural pattern, a choice hard to undo.
+- 🗣️ **Decisions people took, written down.** Tell the agent what you decided and why, in your own
+  words (`/wikipoke-decision <the decision>`), and it writes the decision page: it asks for the
+  alternative you set aside if you did not say it, finds the code it constrains and the pages it
+  relates to, warns when the code says otherwise, and shows the draft before writing anything. A
+  decision not carried out yet is kept as planned until the code catches up
+  ([use case 6](#6-a-decision-a-person-took)).
 - 💸 **Fewer tokens on the questions it covers.** 37% to 49% fewer on two small repositories; on a
   large one, 21% to 75% fewer on five of six questions once their answers were filed, and 7% more
   on the sixth. The first time a question finds a gap it costs more than asking without a wiki
@@ -133,7 +147,7 @@ What a repository gets once wikipoke is installed:
 
 ## Use cases
 
-Four ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
+Six ways to run it, start to finish. Commands starting with `/` go to your agent; the rest run in
 a terminal.
 
 ### 1. The whole system, from scratch
@@ -189,6 +203,81 @@ The ingest writes the pages; the atlas puts them in a browser, or in a folder yo
    each page as the agent writes it.
 4. `wikipoke atlas --out site` exports it as a static site, with citations pointing at your GitHub
    or GitLab remote. Publish the folder wherever you host static pages.
+
+### 5. The decisions behind the code
+
+The code keeps every choice and none of the reasons. Here the agent writes the reason down while
+it still knows what it discarded, and the wiki keeps it.
+
+> [!WARNING]
+> **This is the one part of wikipoke that changes how agents work in your project, not only what
+> they read.** Everything else waits for a person to launch a skill. With the `decisions` hook on,
+> every agent that reads `AGENTS.md` and writes code here is told to stop at each choice that
+> clears the bar, write a note, and sweep its diff before finishing — in every task, whoever
+> asked for it. Concretely, it:
+>
+> - adds a block to `AGENTS.md`, which you commit, so every clone and every teammate's agent
+>   gets it;
+> - creates `wiki/.inbox/`, a folder agents write into and git never sees;
+> - puts the notes in front of the next `/wikipoke-ingest`, which writes `decisions/` pages from
+>   them — pages that become part of your wiki and of every answer drawn from it;
+> - costs some tokens and reading on every implementation, even when no note comes out of it.
+>
+> Turn it on when the team wants decisions kept, with the bar it agrees on, and say so to whoever
+> works in the repository. `wikipoke hooks remove decisions` takes the block out. If you would
+> rather choose case by case, skip the hook and name `/wikipoke-implement` when you want notes.
+
+1. `wikipoke init` and `/wikipoke-ingest`, as above.
+2. Pick one of the two ways in, they are alternatives:
+   - **Always**: `wikipoke hooks add decisions` asks every agent that reads `AGENTS.md` to take
+     notes whenever it writes code here.
+   - **When you ask**: `/wikipoke-implement <plan>` takes notes only for that piece of work. It
+     runs only when named, never on a plain "implement X".
+3. Read `## Decisions worth recording` in `wiki/CONVENTIONS.md`. That is the bar, and it starts
+   strict: a new runtime dependency, an architectural pattern, or a choice hard to reverse; no
+   routine fixes, linter preferences or anything the code already says. Widen or narrow it there;
+   a wider variant waits, commented, in the same section. Most tasks leave no note.
+4. The agent writes one note per decision in `wiki/.inbox/`, which is never committed.
+   `wikipoke check drift` counts them as `pending`, and the notifier says so.
+5. Before the branch or the worktree goes away, `/wikipoke-ingest` turns the notes into
+   `decisions/` pages, checked against the code and linked to the rest of the wiki, and deletes
+   them. It applies the bar again and drops what does not clear it.
+
+### 6. A decision a person took
+
+Many decisions are taken by people, in a meeting, a review or a conversation, and the code keeps
+none of their reasons. Here you give the reason and the agent writes the page.
+
+1. `wikipoke init` and `/wikipoke-ingest`, as above: the page needs a wiki to link into.
+2. Tell the agent the decision, what you chose, what you set aside and why:
+   `/wikipoke-decision we keep the CLI read-only: a writing CLI would need a lock and a staging
+   area, and the skills already write`. A plain "record this decision: …" works too.
+3. If something is missing, usually the alternative you set aside, it asks, one question at a
+   time. With no alternative at all it says there is no decision to record, and points a rule to
+   `AGENTS.md` instead.
+4. It reads the wiki and the code. An existing decision page on the same subject is extended, or,
+   if the new decision reverses it, superseded. When the code does not do what you decided, it
+   says so with the file and line, and you choose: record it as planned, for code still to come,
+   or correct what you told it. When the decision leaves open something the code depends on, it
+   asks you that one question too. A policy with no code behind it cites the file that states it,
+   such as `AGENTS.md` or a CI workflow.
+5. It shows the page and every other change, and writes only after your yes. Then it runs
+   `wikipoke check lint`.
+
+What it changes in your project:
+
+- `init` writes one more skill, `wikipoke-decision`, in both skill homes. An agent may load it on
+  its own when you ask it to record a decision, but it writes nothing until you approve the draft.
+- Each yes writes a page in `wiki/decisions/`, a link to it from the pages it relates to, a line in
+  `wiki/index.md` and an entry in `wiki/log.md`, all files you commit. It never touches your code,
+  `.wikipoke-state.json` or the inbox, and commits nothing on its own.
+- Decision pages may carry three keys besides the template's: `decided_by: person` (or `agent`,
+  for one that came from a note); `planned: true` while the code does not carry the decision out,
+  which the next `/wikipoke-ingest` after that code lands drops; and `status: deprecated` on a
+  decision another one reversed, which keeps the old page as history. A reversal that is still
+  planned leaves the old page in force; the ingest that drops `planned:` marks it. `status` is the
+  [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)'s own key,
+  so the wiki stays a valid bundle. `wikipoke check` ignores all three.
 
 ## Install
 
@@ -254,9 +343,14 @@ so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on
 
 ¹ Or the directory `--dir` set, see below.
 
+To add a page type of your own (a `runbook`, an `incident`), add a row to the "Page types" table
+in `wiki/CONVENTIONS.md` and an entry under "Where each type comes from": what a page of that type
+holds and where its evidence is. The row lets `wikipoke check` accept the type; the entry is what
+the skills read to write, file and look for those pages.
+
 Both skill homes are always written. Claude Code reads only `.claude/skills` and runs perfectly
 well against a checkout with no `.claude/` and no `CLAUDE.md` in it, so there is nothing in a
-repository to detect it by; writing the skills for an agent that never comes costs four inert
+repository to detect it by; writing the skills for an agent that never comes costs a few inert
 Markdown files, and not writing them costs the agent every skill it has. A skill is inert either
 way — nothing runs one until a person names it — which is the whole reason hooks are treated
 differently below.
@@ -272,7 +366,7 @@ the folder, edit `.wikipoke.json` and run `init` again to refresh the skills.
 ## Hooks (optional)
 
 A hook tells you or your agent, at the right moment, that the wiki has fallen behind. Every hook
-runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` finds, stays silent
+but `decisions` runs the same notifier, `wiki/.wikipoke-hook.sh`, which prints what `drift` finds, stays silent
 when the wiki is current, and never fails or calls a model. None of them writes the wiki. Coverage
 stays out of it on purpose: that backlog is meant to outlive every pass, and a notifier that
 repeats it at every commit and every session start is never silent, which is how a notifier gets
@@ -302,7 +396,7 @@ sequenceDiagram
 > quietly stops being true. `wikipoke hooks` says so whenever none is installed.
 
 Only `git` has to be installed again in every clone, because `.git/hooks` is not versioned; the
-other four are ordinary repository files, so committing one covers everyone who clones.
+others are ordinary repository files, so committing one covers everyone who clones.
 
 ```sh
 wikipoke hooks                        # the list: which are installed, which are outdated
@@ -317,8 +411,11 @@ wikipoke hooks remove claude          # take one out
 | `opencode` | `.opencode/plugin/wikipoke.js` | when an OpenCode session starts, once per session |
 | `cursor` | `.cursor/rules/wikipoke.mdc` | a rule Cursor reads in every session |
 | `agents` | a delimited block in `AGENTS.md`, created if missing | Codex and any agent that reads `AGENTS.md` |
+| `decisions` | its own block in `AGENTS.md`, and `wiki/.inbox/.gitignore` | never: it asks agents to note decisions as they work ([use case 5](#5-the-decisions-behind-the-code)) |
 
-The notifier is written with the first hook and removed with the last.
+The notifier is written with the first hook that runs it and removed with the last. `decisions`
+does not run it, so on its own it tells nobody the wiki is behind: pair it with one that does.
+`hooks remove decisions` keeps the inbox's ignore file while notes are still in it.
 
 ## Files wikipoke manages
 
@@ -341,6 +438,8 @@ are until someone runs it.
 | `wikipoke-ingest` | seeds the wiki; reconciles pages with what changed since the checkpoint; or, given a path or a topic, documents a part no pass has covered (`all`: every part, one pass each) |
 | `wikipoke-query` | answers from the wiki first, falls back to the code, and offers to file the answer back |
 | `wikipoke-lint` | explains what `check` found; with `--deep`, reads the pages for contradictions, expired claims, gaps, and the flows and decisions coverage cannot ask for |
+| `wikipoke-decision` | writes a decision a person took, in their words, as a decision page: asks what is missing, checks it against the code, shows the draft and writes after a yes |
+| `wikipoke-implement` | implements a plan and notes the decisions worth keeping in `wiki/.inbox/` as it goes; runs only when you name it |
 | `wikipoke-agents` *(experimental)* | audits or writes `AGENTS.md`, and the nested ones a subdirectory needs, about the code and not the wiki; shows the change as a diff and writes only after a yes |
 
 `wikipoke-agents` is the one skill that does not touch the wiki, and it does not need one: it works
@@ -360,7 +459,8 @@ same command seeds a new repository and keeps an old one current:
 
 ```mermaid
 flowchart TD
-    run(["/wikipoke-ingest"]) --> arg{"a path or topic given?"}
+    run(["/wikipoke-ingest"]) --> inbox["<b>drain the inbox</b><br/>decision notes become pages<br/>(a seed does it after the avenues)"]
+    inbox --> arg{"a path or topic given?"}
     arg -- yes --> part["<b>ingest a part</b><br/>document that path or topic<br/>checkpoint untouched"]
     arg -- no --> state{"a checkpoint exists?"}
     state -- no --> seed["<b>seed</b><br/>the map, the main flows,<br/>one page per subsystem"]
@@ -441,13 +541,17 @@ The same runs showed more than tokens:
 
 ```sh
 wikipoke check              # all three
-wikipoke check drift        # commits not indexed, stale pages, and citations the code moved
+wikipoke check drift        # commits not indexed, stale pages, citations the code moved, pending decision notes
 wikipoke check coverage     # tracked files no page's `sources:` claims
 wikipoke check lint         # fields, types, links, citations, dead and over-broad sources, orphans
+wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
 `--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
-A plain run exits 1 only on lint errors.
+`--against <ref>` measures drift on that commit instead of your working tree, so the answer is the
+same from any branch: `wikipoke check --against origin/main --strict` in CI on main.
+A plain run exits 1 only on lint errors. Pending decision notes never fail it, and CI never
+sees them: the inbox is not committed.
 
 `check` and `check lint` also say how long since the last deep review of the pages, read from
 `log.md`:
@@ -527,7 +631,10 @@ every file other than `index.md` and `log.md` has frontmatter a strict YAML pars
 from that; a wiki made by an older wikipoke gets its log rewritten by the next pass that writes it.
 Every document in this repository's own wiki loads with no error in the OKF reference agent's
 parser. Pages carry more than OKF asks (`sources:`, `synced:`, `responsibility:`); OKF allows
-extra keys.
+extra keys. The skills also write OKF's own trust keys: `generated:` when a pass writes or
+rewrites a page's claims, `verified:` when a pass reads the code again and the page is still
+true, each with who did it (`claude-code/<model>`, `human:<id>`) and when. So a page that was
+only re-checked reads differently from one that was rewritten; `lint` checks their shape.
 
 ## Uninstall
 
@@ -558,6 +665,20 @@ npm run build    # tsc -> dist/, the ESM that actually ships, plus atlas's page,
 npm run link     # build, then `npm link`: the working copy becomes your global wikipoke
 npm run unlink   # take it off the PATH again
 ```
+
+**Releasing.** A version tag is the whole release. `npm version` bumps `package.json`, commits it
+and tags the commit; pushing the tag runs `.github/workflows/release.yml`, which runs the same
+checks as a pull request, publishes that commit to npm with provenance, and creates the GitHub
+release with notes generated from the merged pull requests:
+
+```sh
+npm version patch        # or minor: bumps, commits "0.3.2", tags v0.3.2
+git push --follow-tags
+```
+
+A tag that does not match `package.json` publishes nothing. There is no npm token: npm trusts the
+workflow itself (trusted publishing), configured once on npmjs.com for this repository and
+`release.yml`.
 
 Node runs a `.ts` file by stripping the types out of it, so during development there is nothing
 to build and the tests exercise the same file you just edited. It refuses to do that for anything

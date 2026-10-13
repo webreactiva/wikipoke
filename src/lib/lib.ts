@@ -4,6 +4,7 @@
 // edit. This file must never become the place where the schema is defined by accident: when the
 // two disagree, CONVENTIONS.md wins and this file gets fixed.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
@@ -17,6 +18,8 @@ export const CONFIG_FILE = ".wikipoke.json";
 export const IGNORE_FILE = ".wikipokeignore";
 export const STATE_FILE = ".wikipoke-state.json";
 export const HOOK_FILE = ".wikipoke-hook.sh";
+/** Where agents leave decision notes for the next ingest. A dot folder, so it is never a page. */
+export const INBOX_DIR = ".inbox";
 
 /**
  * What `check` hands every check: the repository root, the wiki's absolute path, and the wiki's
@@ -159,8 +162,22 @@ export const CONFIDENCE = ["high", "inferred"];
  * Frontmatter keys every page must carry. There is deliberately no date: `synced:` already answers
  * "how old is this knowledge?" through `git show -s --format=%cs <sha>`. Pages may carry any other
  * key; the checks do not police them.
+ *
+ * `sources_key` is not here on purpose: a wiki written before #3 has none, and a page without one
+ * is checked exactly as it always was. It is asked for in CONVENTIONS.md, not enforced here.
  */
 export const REQUIRED_KEYS = ["title", "type", "responsibility", "sources", "synced"];
+
+/**
+ * How much of the sha-256 goes into `sources_key:`. Twelve hex characters is 48 bits: this is
+ * compared against the same page's own previous key, never searched across a corpus, so the number
+ * only has to make an accidental collision between two states of one page implausible, and it does.
+ * Short enough that a person reading the frontmatter does not skip the line.
+ */
+export const KEY_LENGTH = 12;
+
+/** A well-formed `sources_key:`: exactly what `sourcesKey` prints. */
+export const KEY_SHAPE = new RegExp(`^[0-9a-f]{${KEY_LENGTH}}$`);
 
 /**
  * Page count past which reading index.md first stops telling pages apart. A conservative marker,
@@ -201,16 +218,18 @@ const lines = (s: string | null): string[] => (s ?? "").split("\n").map((l) => l
 
 /**
  * Files changed between `sha` and the working tree, new files included. Uncommitted work counts:
- * a page is stale the moment its source is edited, not only once it is committed.
+ * a page is stale the moment its source is edited, not only once it is committed. With `ref`, the
+ * files changed between `sha` and that commit instead, and nothing of the checkout counts.
  */
-export function changedSince(root: string, sha: string): string[] {
+export function changedSince(root: string, sha: string, ref?: string): string[] {
+  if (ref) return lines(gitOrNull(root, ["diff", "--name-only", sha, ref, "--"])).sort();
   const tracked = gitOrNull(root, ["diff", "--name-only", sha, "--"]);
   const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
   return [...new Set([...lines(tracked), ...lines(untracked)])].sort();
 }
 
-export function commitsSince(root: string, sha: string): number {
-  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..HEAD`]);
+export function commitsSince(root: string, sha: string, ref = "HEAD"): number {
+  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..${ref}`]);
   return out ? Number(out.trim()) : 0;
 }
 
@@ -221,6 +240,105 @@ export function shortSha(sha: string | undefined): string {
 /** Every tracked file in the repository. */
 export function trackedFiles(root: string): string[] {
   return lines(gitOrNull(root, ["ls-files"]));
+}
+
+/**
+ * Every file in the working tree git would index: tracked, plus untracked ones nothing ignores.
+ * The same universe `changedSince` reports over, so a page's content key moves exactly when its
+ * page axis would have.
+ */
+export function workingFiles(root: string): string[] {
+  const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
+  return [...new Set([...trackedFiles(root), ...lines(untracked)])].sort();
+}
+
+/**
+ * The files one page's `sources:` match in the working tree. Only regular files, and only ones that
+ * are there: a tracked file deleted but not yet committed has no contents to hash, and its absence
+ * is itself the change the key reports. A submodule is a path `git ls-files` prints and
+ * `git hash-object` refuses — one of those under a page's folder used to fail the whole batch and
+ * leave the page unkeyable.
+ */
+export function sourceFiles(root: string, meta: Frontmatter | null, universe?: string[]): string[] {
+  const patterns = sourcePatterns(meta, root);
+  if (!patterns.length) return [];
+  return (universe ?? workingFiles(root)).filter((f) => matchesAny(f, patterns) && isFile(join(root, f)));
+}
+
+/** A regular file that is really there: false for a directory, a submodule or a broken symlink. */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A page's sources as they are *now*, in one short hash: every file they match, sorted, each with
+ * the git blob id of its contents. It answers the same question `synced:` does — "has the code this
+ * page rests on moved?" — without needing any commit to still exist, which is what a squash or
+ * rebase merge takes away (#3).
+ *
+ * The blob ids come from `git hash-object`, so the working tree decides, uncommitted edits
+ * included, exactly as `changedSince` does. The path goes into the hash next to the id, so a rename
+ * counts as a change; a file deleted since simply leaves the list, which changes the hash too. A
+ * change later reverted hashes back to what it was, and the page reads fresh again — something a
+ * commit distance can never see.
+ *
+ * Null when the page claims no sources: there is nothing to key, and lint already says so.
+ */
+export function sourcesKey(root: string, meta: Frontmatter | null, universe?: string[]): string | null {
+  if (!asList(meta?.sources).length) return null;
+  const files = sourceFiles(root, meta, universe);
+  const ids = blobIds(root, files);
+  return ids === null ? null : keyOf(files, ids);
+}
+
+/**
+ * `sourcesKey` for the files as commit `ref` holds them, for `check drift --against <ref>`: the
+ * working tree must not decide a question asked about a commit. `tree` is `treeBlobs(root, ref)`,
+ * read once per run. A file's blob id in a tree is what `git hash-object` gives for the same
+ * contents, so a page keyed on one branch matches the same code on another.
+ */
+export function sourcesKeyAt(root: string, meta: Frontmatter | null, tree: Map<string, string>): string | null {
+  if (!asList(meta?.sources).length) return null;
+  const patterns = sourcePatterns(meta, root);
+  const files = [...tree.keys()].filter((f) => matchesAny(f, patterns)).sort();
+  return keyOf(files, files.map((f) => tree.get(f) as string));
+}
+
+/** Every regular file in commit `ref`, with its blob id: no submodules and no symlinks, as above. */
+export function treeBlobs(root: string, ref: string): Map<string, string> {
+  const blobs = new Map<string, string>();
+  for (const entry of (gitOrNull(root, ["ls-tree", "-r", "-z", ref]) ?? "").split("\0")) {
+    const m = /^100(?:644|755) blob ([0-9a-f]+)\t([^]*)$/.exec(entry);
+    if (m) blobs.set(m[2] as string, m[1] as string);
+  }
+  return blobs;
+}
+
+function keyOf(files: string[], ids: string[]): string {
+  const hash = createHash("sha256");
+  // NUL and newline: neither can appear in a git path, so no two file lists hash the same.
+  for (const [i, file] of files.entries()) hash.update(`${file}\0${ids[i]}\n`);
+  return hash.digest("hex").slice(0, KEY_LENGTH);
+}
+
+/**
+ * The git blob id of each file's contents, in the order given. Through `--stdin-paths` rather than
+ * arguments: a page may claim a folder holding thousands of files, and a command line cannot.
+ * Null when git refuses the batch at all, so a caller reports nothing rather than a wrong key.
+ */
+function blobIds(root: string, files: string[]): string[] | null {
+  if (!files.length) return [];
+  try {
+    const out = git(root, ["hash-object", "--stdin-paths"], { input: `${files.join("\n")}\n`, stdio: ["pipe", "pipe", "ignore"] });
+    const ids = lines(out);
+    return ids.length === files.length ? ids : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -388,6 +506,19 @@ export function neverSourceHit(source: string, matchers: ReturnType<typeof never
   if (existsSync(full) && statSync(full).isDirectory()) return undefined;
   const name = path.split("/").at(-1) ?? path;
   return matchers.find((m) => m.re.test(m.byName ? name : path))?.entry;
+}
+
+/**
+ * The decision notes waiting in the inbox, by file name. Counted, never read: what a note says is
+ * for wikipoke-ingest to judge.
+ */
+export function inboxNotes(wikiDir: string): string[] {
+  const dir = join(wikiDir, INBOX_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name)
+    .sort();
 }
 
 /** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */

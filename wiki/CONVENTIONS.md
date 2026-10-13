@@ -6,7 +6,7 @@ title: Wiki conventions
 # Wiki conventions
 
 This file is the schema of the code wiki: how it is structured and how it is maintained. The
-three skills read it before they write anything, and `wikipoke check` enforces the parts a machine
+skills read it before they write anything, and `wikipoke check` enforces the parts a machine
 can decide. It belongs to this project: edit it to fit, and when the skills or the checks
 disagree with it, this file wins.
 
@@ -17,6 +17,9 @@ disagree with it, this file wins.
 | **`wikipoke-ingest`** | take code in: seeds the wiki, reconciles it with what changed, or ingests a part you aim it at |
 | **`wikipoke-query`** | answer a question from the wiki, and file the answer back when it is worth keeping |
 | **`wikipoke-lint`** | is the wiki sound? `wikipoke check` for what a machine decides, a deep pass for what needs reading |
+
+Two narrower skills feed the `decisions/` pages: `wikipoke-decision` writes one decision a person
+tells it, after a yes, and `wikipoke-implement` leaves notes in `.inbox/` for the next ingest.
 
 A person launches the skills; the agent follows them and writes the pages directly in `wiki/`.
 `wikipoke check` sits underneath and only measures: it never writes a page.
@@ -75,6 +78,7 @@ wiki/
   .wikipoke-state.json  # repository checkpoint: {"version":1,"last_indexed_commit":"<sha>"}
   .wikipokeignore       # git pathspecs of files that never count for coverage
   .wikipoke-hook.sh     # the notifier the optional hooks run (managed by wikipoke)
+  .inbox/               # decision notes waiting for the next ingest; never committed
   index.md              # the map: one line per page, from each page's `responsibility`
   log.md                # the history of every pass, newest first
   architecture.md       # the map and the layers
@@ -84,8 +88,8 @@ wiki/
   decisions/            # "which X when" comparisons and the choices behind them
 ```
 
-`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `wiki/` is a
-page and carries the template below. The wiki is also an
+`CONVENTIONS.md`, `index.md` and `log.md` are not pages; every other `.md` file under `wiki/`,
+outside dot-folders such as `.inbox/`, is a page and carries the template below. The wiki is also an
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle,
 which other tools can read without knowing wikipoke. That is why this file opens with a two-line
 frontmatter (`type: schema`), why `index.md` may open with `okf_version: "0.2"` and nothing else,
@@ -102,8 +106,31 @@ and why `log.md` has the shape below. The checks never read `index.md` or this f
 | `decision`     | a "which X when" comparison or a choice   | `decisions/queue-backend.md` |
 
 `wikipoke check` reads the valid `type:` values from the first column of this table: add a row
-to add a type, remove one to retire it. A **module** is an `entity` at a coarser altitude, nested
-by folder (`components/billing.md` links down to `components/billing/invoice.md`), not a new type.
+**and its entry below** to add a type, remove both to retire it. A **module** is an `entity` at a
+coarser altitude, nested by folder (`components/billing.md` links down to
+`components/billing/invoice.md`), not a new type.
+
+### Where each type comes from
+
+What a page of each type holds, and where its evidence comes from. The skills read this list to
+write, file and look for pages of each type, so a type you add needs its entry here too: the table
+only tells the checker that the type exists.
+
+- `architecture`: the map and the layers, one page. Evidence: the folder tree, the entry points
+  and the manifest; every other page links from it.
+- `entity`: a unit of code, a module or a component, and what it owns. Evidence: a folder, the
+  module and its files. Coverage counts files, so it only ever asks for this type.
+- `flow`: one sequence from start to end. Evidence: an entry point (a route, a command, a job, a
+  webhook, a listener), followed across modules until the sequence ends.
+- `decision`: a choice, with the alternative set aside and why. Evidence: the notes in
+  `wiki/.inbox/` first; then the history and the prose: `git log` (a fix that changed the
+  design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of
+  coverage but not out of reading.
+- `concept`: a pattern or a convention. Evidence: code that three or more modules repeat.
+
+<!-- An added type, for example:
+- `runbook`: how to do one operation in production, step by step. Evidence: the deploy
+  scripts, the CI config and the incident notes; one page per operation. -->
 
 ## The one template (every page)
 
@@ -115,18 +142,23 @@ responsibility:   # ONE sentence: what this page is responsible for (feeds index
 sources:          # the code this page documents: the link to git
   - src/billing/invoice.ts
 synced:           # short SHA this page was last reconciled against
+sources_key:      # what those sources hashed to then: `wikipoke key <page>` prints it
 confidence:       # high | inferred (optional, absent means high)
 related:          # links to sibling pages (optional)
   - ./payments.md
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T14:00:00Z }   # who last wrote its claims
+verified: { by: human:daniel, at: 2026-10-12T09:30:00Z }                  # who last confirmed them (optional)
 ---
 
 <!-- body: stay high-altitude, do not transcribe the code -->
 ```
 
-Five required keys, two optional. That is the whole schema. A page may carry any other key it
-finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. There is
-deliberately no date field: `git show -s --format=%cs <synced>` gives the date of the commit the
-page was verified against, which is the date that matters.
+Five required keys, five optional. That is the whole schema. A page may carry any other key it
+finds useful (`trigger:` on a flow, `options:` on a decision); the checks ignore them. Decision
+pages have a few of their own, below. There is deliberately no date field for the code:
+`git show -s --format=%cs <synced>` gives the date of the commit the page was verified against.
+The times in `generated:` and `verified:` are when a pass wrote or confirmed the page, not when
+the code changed.
 
 The block is YAML, and other tools (Obsidian, site generators, any YAML library) read it strictly.
 **Quote a value that holds `: ` or ` #`, or starts with a symbol** such as `{`, `*`, `&`, `!`, `|`,
@@ -143,10 +175,36 @@ tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns ab
   (`src/jobs/*.ts`); a wildcard-free directory means everything under it.
 - **`synced:`** is per-page staleness: if any of a page's sources changed after its `synced` SHA,
   the page is stale.
+- **`sources_key:`** is the same question asked without git history. A wiki pass usually runs on a
+  branch, so `synced:` names a commit on that branch — and a **squash or rebase merge throws those
+  commits away**. Anyone who clones the project afterwards has a page pointing at a commit that
+  does not exist: drift cannot tell whether it is stale, and lint reads the page as broken. The key
+  is what those same sources hashed to at the moment of the pass, so the comparison survives the
+  merge. Take it from `wikipoke key <page>` after writing the page, never by hand; it is a hash,
+  not something to guess. Keep it in step with `synced:`: both are re-stamped together, and only
+  after re-reading the page against the code. A page without one is checked exactly as before,
+  which is why wikis written before this key keep working.
 - **`confidence:`** separates *read* from *deduced*. `high` (the default) means "I read this in
   the code". `inferred` means "this is my reading and it may be wrong": use it for intent,
   rationale and history you reconstructed rather than found. Prefer asking the person over
   guessing; when you do guess, say so here.
+- **`generated:` and `verified:`** tell what the last passes did, and who did them: `confidence:`
+  says *how* a claim is known, these say *who last wrote it and who last confirmed it*. Both are
+  the Open Knowledge Format's trust keys, written as one `{ by: <actor>, at: <time> }` map on one
+  line, with no quotes, because a YAML reader takes it as a map; wikipoke keeps it as text and
+  `wikipoke check lint` checks its shape. The actor is `<harness>/<model>` for an agent
+  (`claude-code/claude-opus-5-5`, `opencode/glm-5.3-flash`; the harness alone when you do not
+  know your model), or `human:<id>` for a person. The time is ISO 8601 with its offset:
+  `date -u +%Y-%m-%dT%H:%M:%SZ`. Each pass replaces the map it writes; git keeps the earlier ones.
+
+  | What the pass did | What changes |
+  | --- | --- |
+  | Wrote the page, or rewrote claims after reading the code | `generated:` and `synced:` |
+  | Read the code again, and the page was still true (citations re-pointed included) | `verified:` and `synced:`; `generated:` stays |
+  | Fixed a claim without reading the code again (a lint fix) | `generated:`; `synced:` stays, since nothing was re-read |
+  | Fixed a link, a typo or the wording | nothing |
+
+  A page without them is still valid: they start with the next pass that touches it.
 
 ## Never a source
 
@@ -168,6 +226,77 @@ this project's own; an entry with no `/` is a file name, found in any folder.
 - `uv.lock`
 - `Cargo.lock`
 - `go.sum`
+
+## Decisions worth recording
+
+A decision page is worth its place only when it tells what the code cannot: why this and not the
+alternative. This section is the bar a decision has to clear before an agent writes it down on
+its own: the `decisions` hook and the `wikipoke-implement` skill capture by it while code is being
+written, and `wikipoke-ingest` applies it again before a note becomes a page. Widen or narrow it
+here; the hook and both skills follow. A wider variant waits, commented, below. A decision a
+person asks to keep, through `wikipoke-decision`, is the person's to judge: the skill only asks
+for the alternative that was set aside and why.
+
+Record a decision only when the change
+
+- introduces a runtime dependency, or a tool the build depends on (not a version bump),
+- introduces or changes an architectural pattern, or
+- makes a choice that is hard to reverse: a data format, a public contract, a stored schema, a
+  security primitive.
+
+Say whether it is reversible. Do not record routine fixes, naming, mechanical refactors,
+preferences a linter or formatter already enforces, choices with no real alternative, anything the
+code already makes evident, or anything already written down in the spec, the plan or a wiki page
+(ingest checks the wiki; capture need not).
+
+<!-- Not in force. A wider bar, for a project that wants more decisions kept: replace the list above with:
+Record a decision when the change chooses between plausible alternatives and the choice affects
+architecture, contracts, invariants, dependencies, data, concurrency, security or performance,
+whether it is easy to reverse or not. -->
+
+**On the page.** A decision page carries, besides the template:
+
+- `decided_by: agent` or `person`: who took it, only when that is known first hand: a note
+  says it, and a person who tells a decision through `wikipoke-decision` is `person`. A page
+  reconstructed from the code, the specs or the history leaves it out rather than guess.
+- `reversible: true` or `false`, when it is known.
+- `planned: true` while the code does not carry the decision out yet. Its `sources:` are the
+  files that exist and will change, never one still to be written, which the body names instead.
+  The commit that carries it out makes the page stale, and the ingest that reads that diff drops
+  the key.
+- `status: deprecated` once another decision reverses it and the code follows the new one. The
+  page keeps its body, which is the history, and opens with a link to the decision that replaced
+  it; that one links back. While the reversal is still `planned: true`, the old page stays in
+  force and its opening line says a planned decision will reverse it; the ingest that drops
+  `planned:` from the new page marks the old one. `status`
+  is Open Knowledge Format's own key (`draft`, `stable`, `deprecated`; absent means `stable`), so
+  no other value goes in it.
+
+A decision with no code behind it, a policy or a process, cites the file that states or enforces
+it (`AGENTS.md`, a CI workflow). A decision page always has `sources:`.
+
+**The note.** One file per decision in `wiki/.inbox/`, never several in one, named `YYYY-MM-DD-<slug>.md` so two
+branches never collide, written in seconds when the choice is made, without reading the wiki:
+
+```markdown
+---
+decided_by: agent
+reversible: false
+files: [src/audio/capture.ts, src/audio/ring-buffer.ts]
+---
+Chose a preallocated ring buffer between capture and the file writer.
+Discarded a mutex-protected queue: the realtime callback could block.
+```
+
+What was chosen, what was discarded and why, and the files it constrains; `decided_by` is `agent`
+or `person`. Nothing else: the links
+and the context are added by `wikipoke-ingest`, which reads the note against the code, writes or
+extends the decision page, and deletes the note. A note is a lead, not a fact to copy.
+
+The inbox is scratch work and never committed: it holds a `.gitignore` with `*`, which the
+`decisions` hook places and whoever writes the first note creates when it is missing. Notes live
+only in the working copy that wrote them, so integrate them before the branch or the worktree goes
+away; `wikipoke check drift` counts them until then.
 
 ## Links and language
 
@@ -239,13 +368,23 @@ wikipoke check              # all three, silent parts stay silent
 wikipoke check drift        # is the wiki behind the code?
 wikipoke check coverage     # is all the code in the wiki?
 wikipoke check lint         # is the wiki internally sound?
+wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
 Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
+`--against <ref>` measures drift on a commit instead of the working tree, so every branch gets the
+same answer: use it to ask "is the wiki true for main?", for example in CI on main. Everything is
+read from that commit, a page's `sources_key:` included, and the inbox, which no commit holds, is
+left out.
 
-- **drift**: staleness on both axes. Repository: commits since `last_indexed_commit`, minus
+- **drift**: staleness on both axes, plus the decision notes waiting in `.inbox/` (`pending`),
+  which never fail a plain run and are never seen by CI, since the inbox is not committed. Repository: commits since `last_indexed_commit`, minus
   `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
-  against the working tree, so uncommitted edits count. It also lists every citation the code moved
+  against the working tree, so uncommitted edits count. When `synced` names a commit this
+  repository no longer has — what a squash or rebase merge leaves behind — it compares
+  `sources_key:` against what those sources hash to now instead: it still says stale or fresh, but
+  it cannot name which files moved, so the pass re-reads the page's sources. A page with neither a
+  live commit nor a key is reported as unjudgeable rather than guessed at. It also lists every citation the code moved
   since the commit that wrote it, with the line it points at now or a note that the cited line
   itself changed: on a stale page, and on a fresh one (`moved`) that was re-stamped without being
   re-pointed. A citation not committed yet counts as current.
@@ -254,7 +393,7 @@ Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-
   with how many files the ignore list took out, so a rule that hides too much is visible rather
   than silent. In `.wikipokeignore`, a line starting with `!` brings paths back — which is how a
   repository whose product is prose keeps its Markdown countable while still ignoring `*.md`.
-- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit, sources still
+- **lint**: required keys, frontmatter a strict YAML parser reads differently (a warning), valid `type` and `confidence`, `synced` is a real commit — a warning rather than an error when `sources_key:` still answers — a well-formed `sources_key`, sources still
   match a tracked file, a source listed under "Never a source", over-broad sources (a whole package, more than half the indexable files, or more than fifty, a page's folders counted together), broken links (body, `related:` and `index.md`),
   citations (`path:line` or a `#L42` link) that now land past the end of a file, on a blank line
   or on a lone closing bracket, a link whose text and line anchor disagree, orphan pages, pages missing from `index.md`, and a warning past 80 pages, where reading
@@ -278,6 +417,7 @@ request with `wikipoke hooks add <name>` (`wikipoke hooks` lists them):
 | `opencode` | `.opencode/plugin/wikipoke.js` | when an OpenCode session starts |
 | `cursor` | `.cursor/rules/wikipoke.mdc` | a rule Cursor reads in every session |
 | `agents` | a block in `AGENTS.md` | Codex and any agent that reads `AGENTS.md` |
+| `decisions` | its own block in `AGENTS.md` | not a notifier: asks agents to note decisions in `.inbox/` as they work |
 
 Nothing writes the wiki automatically. What a machine cannot check (contradictions between pages,
 expired claims, concepts with no page) is the deep pass of `wikipoke-lint`, which proposes rather

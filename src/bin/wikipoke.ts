@@ -3,8 +3,9 @@
 // it and shows it, and never writes a page.
 //
 //   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
-//   wikipoke hooks [add|remove <name>...] optional notifiers: git, claude, opencode, cursor, agents
-//   wikipoke check [lint|drift|coverage]... [--json] [--strict] [-v]
+//   wikipoke hooks [add|remove <name>...] optional hooks: git, claude, opencode, cursor, agents, decisions
+//   wikipoke check [lint|drift|coverage]... [--against <ref>] [--json] [--strict] [-v]
+//   wikipoke key [<page>...] [--json]     the content key each page's sources: hash to right now
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
@@ -22,9 +23,9 @@ import * as coverage from "../lib/coverage.ts";
 import type { DriftResult } from "../lib/drift.ts";
 import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
-import { HOOKS, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
+import { HOOKS, NOTIFIES, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
-import { IGNORE_FILE, STATE_FILE, chooseWiki, color, listPages, repoRoot, wikiDir } from "../lib/lib.ts";
+import { IGNORE_FILE, INBOX_DIR, KEY_LENGTH, STATE_FILE, asList, chooseWiki, color, commitExists, inboxNotes, listPages, readPage, repoRoot, sourcesKey, wikiDir, workingFiles } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
 import * as lint from "../lib/lint.ts";
 import { interactiveInit } from "../lib/setup.ts";
@@ -61,9 +62,15 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke check [lint|drift|coverage]...
                                lint also says how long since the last wikipoke-lint --deep pass
                                in log.md, and drift says it past ${lint.DEEP_PASS_DAYS} days. That line fails nothing
+      --against <ref>          drift compares with this commit, not the working tree: is the
+                               wiki true for main, from any branch (CI on main)
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
+  wikipoke key [<page>...]     the content key each page's sources: hash to right now, to copy
+                               into its \`sources_key:\`. Every page when none is named. It is what
+                               keeps a page checkable once a squash merge has thrown its commit away
+      --json                   machine-readable, for the skills
   wikipoke atlas               browse the wiki at http://127.0.0.1:${DEFAULT_PORT}, redrawn as pages change
       --port <n>               another port
       --out <dir>              write it as a static site instead, citations linked to the remote
@@ -81,6 +88,7 @@ try {
       verbose: { type: "boolean", short: "v" },
       dir: { type: "string" },
       yes: { type: "boolean", short: "y" },
+      against: { type: "string" },
       out: { type: "string" },
       port: { type: "string" },
       help: { type: "boolean", short: "h" },
@@ -143,7 +151,8 @@ function printHooks(): { installed: number } {
 ${stale.join(", ")}: installed by an older wikipoke and left as they are. ` +
         `\`wikipoke hooks add ${stale.join(" ")}\` updates them.`,
     );
-  return { installed: hooks.filter((hook) => hook.installed).length };
+  // Only the hooks that run the notifier: `decisions` alone still leaves nothing to say the wiki is behind.
+  return { installed: hooks.filter((hook) => hook.installed && NOTIFIES(hook.name)).length };
 }
 
 /**
@@ -154,9 +163,13 @@ ${stale.join(", ")}: installed by an older wikipoke and left as they are. ` +
  * is the one who knows which row is theirs, and the exact command.
  */
 function invitation(): string {
+  // `decisions` alone feeds the wiki but tells nobody it is behind, so "no hook" would read as wrong.
+  const decisions = hookStatus(root, wiki).some((hook) => hook.installed && !NOTIFIES(hook.name));
   return [
     ``,
-    `No hook was installed. Hooks are the only thing that ever tells you the wiki has fallen`,
+    ...(decisions
+      ? [`No notifier hook was installed: decisions captures notes, but says nothing.`, `Notifiers are the only thing that ever tells you the wiki has fallen`]
+      : [`No hook was installed. Hooks are the only thing that ever tells you the wiki has fallen`]),
     `behind — \`wikipoke check\` speaks only when someone runs it — but each one changes what a`,
     `terminal or an agent session does, so wikipoke never adds one on its own.`,
     ``,
@@ -166,7 +179,7 @@ function invitation(): string {
     `    wikipoke hooks add <name>`,
     ``,
     `${color.dim("git is per clone: .git/hooks is not versioned, so every checkout installs it again.")}`,
-    `${color.dim("The other four are ordinary repository files — commit one and everyone who clones has it.")}`,
+    `${color.dim("The others are ordinary repository files — commit one and everyone who clones has it.")}`,
   ].join("\n");
 }
 
@@ -198,7 +211,7 @@ if (command === "init") {
   print(init(root, flags.dir === undefined ? {} : { dir: flags.dir }));
   wiki = wikiDir(root); // --dir may have just moved it
   wikiPath = join(root, wiki);
-  console.log(`\nHooks are optional. Each one tells you or your agent when the wiki falls behind the code:\n`);
+  console.log(`\nHooks are optional. Most tell you or your agent when the wiki falls behind the code:\n`);
   // Run by an agent, or piped: nobody to ask here, so hand the decision on rather than drop it.
   // Which hook fits is something the agent knows about itself and this command cannot see, so
   // the invitation names the choice and the command instead of guessing at one. A re-run on a
@@ -262,81 +275,137 @@ if (command === "atlas") {
   await new Promise<never>(() => {});
 }
 
-if (command !== "check") {
+// Read-only, like the checks: it hashes the working tree and prints. The skill copies the value
+// into the page, because only a skill writes the wiki.
+if (command === "key") {
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
+  const wanted = new Set(rest.map((name) => name.replace(/\.md$/, "")));
+  const pages = listPages(wikiPath).filter((p) => !wanted.size || wanted.has(p.id));
+  const unknown = [...wanted].filter((name) => !pages.some((p) => p.id === name));
+  if (unknown.length) {
+    console.error(`no such page: ${unknown.join(", ")} (a page id is its path under ${wiki}/ without .md)`);
+    process.exit(2);
+  }
+  // One `git ls-files` for the whole run, whether it keys one page or ninety.
+  const working = workingFiles(root);
+  const keys = pages.map((p) => {
+    const meta = readPage(p).meta;
+    // Two different silences: a page claiming nothing has nothing to key, and one whose files git
+    // could not hash has a key that exists and could not be read. Saying "no sources:" to the
+    // second sends the reader to fix a `sources:` line that is perfectly fine.
+    return { page: p.id, sources_key: sourcesKey(root, meta, working), sources: asList(meta?.sources).length };
+  });
+  if (flags.json) console.log(JSON.stringify(keys.map(({ page, sources_key }) => ({ page, sources_key })), null, 2));
+  else
+    for (const { page, sources_key, sources } of keys)
+      console.log(
+        `${sources_key ?? color.dim("—".padEnd(KEY_LENGTH))}  ${page}` +
+          (sources_key ? "" : color.dim(sources ? "  (its sources could not be hashed)" : "  (no sources:)")),
+      );
+  // Not process.exit(): see the note at the end of this file. On a pipe stdout is written
+  // asynchronously, and a wiki of a few hundred pages is more `--json` than a pipe's buffer holds —
+  // which is exactly the output the ingest skill parses.
+} else if (command !== "check") {
   console.error(`unknown command: ${command}\n\n${HELP}`);
   process.exit(2);
-}
-
-const unknown = rest.filter((name) => !isCheck(name));
-if (unknown.length) {
-  console.error(`unknown check: ${unknown.join(", ")} (expected: ${CHECKS.join(", ")})`);
-  process.exit(2);
-}
-
-if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
-  console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
-  process.exit(1);
-}
-
-const all = !rest.length;
-
-// Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
-// still runs: seeding reads coverage to decide what to ignore.
-if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
-  if (flags.json) console.log(JSON.stringify({ seeded: false }));
-  else console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
-  process.exit(flags.strict ? 1 : 0);
-}
-
-const names: CheckName[] = all ? [...CHECKS] : [...new Set(rest.filter(isCheck))];
-const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
-
-const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
-  name === "drift"
-    ? { name, result: drift.run(ctx) }
-    : name === "coverage"
-      ? { name, result: coverage.run(ctx) }
-      : { name, result: lint.run(ctx) };
-
-const countFindings = (ran: Ran): number =>
-  ran.name === "drift"
-    ? ran.result.stale.length + ran.result.moved.length + ran.result.skipped.length + (ran.result.repo.status === "current" ? 0 : 1)
-    : ran.name === "coverage"
-      ? ran.result.unclaimed.length
-      : ran.result.errors.length + ran.result.warnings.length;
-
-const reportOne = (ran: Ran, opts: ReportOptions): void => {
-  if (ran.name === "drift") drift.report(ran.result, opts);
-  else if (ran.name === "coverage") coverage.report(ran.result, opts);
-  else lint.report(ran.result);
-};
-
-const results = names.map((name) => runCheck(name, ctx));
-const total = results.reduce((sum, ran) => sum + countFindings(ran), 0);
-const lintResult = results.find((ran) => ran.name === "lint")?.result as LintResult | undefined;
-
-if (flags.json) {
-  const first = results[0];
-  console.log(
-    JSON.stringify(results.length === 1 && first ? first.result : Object.fromEntries(results.map((r) => [r.name, r.result])), null, 2),
-  );
-} else if (all && !total) {
-  console.log(color.green(`✓ wiki: current, covered and sound (${lintResult?.pages ?? 0} pages)`));
 } else {
-  for (const ran of results)
-    if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
-}
+  const unknown = rest.filter((name) => !isCheck(name));
+  if (unknown.length) {
+    console.error(`unknown check: ${unknown.join(", ")} (expected: ${CHECKS.join(", ")})`);
+    process.exit(2);
+  }
 
-// Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
-// `check` and `check lint` always say it; `check drift`, which the notifier runs, only once the pass
-// is overdue, so a current wiki stays silent there.
-if (!flags.json && (names.includes("lint") || names.includes("drift"))) {
-  const logPath = join(wikiPath, "log.md");
-  const pass = lint.deepPass(existsSync(logPath) ? readFileSync(logPath, "utf8") : "");
-  if (names.includes("lint") || pass.due) console.log(lint.deepPassLine(pass));
-}
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
 
-const errors = lintResult?.errors.length ?? 0;
-// Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
-// `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
-process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
+  const all = !rest.length;
+
+  // Before anything runs: a ref that is not there must never read as "nothing changed".
+  if (flags.against !== undefined) {
+    if (!all && !rest.includes("drift")) {
+      console.error("--against applies to drift: run `wikipoke check drift --against <ref>`, or `wikipoke check --against <ref>`.");
+      process.exit(2);
+    }
+    if (!flags.against || !commitExists(root, flags.against)) {
+      console.error(`--against: ${flags.against || "(empty)"} is not a commit here. Fetch it first, or name a branch, tag or sha.`);
+      process.exit(2);
+    }
+  }
+
+  // Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
+  // still runs: seeding reads coverage to decide what to ignore.
+  if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
+    // Notes can come before the first page: an agent may implement with the decisions hook on and
+    // seed afterwards. The seed drains them, so they are named here rather than lost.
+    const pending = inboxNotes(wikiPath).length;
+    if (flags.json) console.log(JSON.stringify({ seeded: false, pending }));
+    else {
+      console.log(`${color.yellow("unseeded")}  the wiki has no pages yet ${color.dim("-> wikipoke-ingest")}`);
+      if (pending) console.log(`${color.yellow("pending")}   ${pending} decision note(s) in ${wiki}/${INBOX_DIR}/ ${color.dim("-> wikipoke-ingest")}`);
+    }
+    process.exit(flags.strict ? 1 : 0);
+  }
+
+  const names: CheckName[] = all ? [...CHECKS] : [...new Set(rest.filter(isCheck))];
+  const ctx: CheckContext = { root, wikiDir: wikiPath, wiki };
+
+  const runCheck = (name: CheckName, ctx: CheckContext): Ran =>
+    name === "drift"
+      ? { name, result: drift.run(ctx, { against: flags.against }) }
+      : name === "coverage"
+        ? { name, result: coverage.run(ctx) }
+        : { name, result: lint.run(ctx) };
+
+  const countFindings = (ran: Ran): number =>
+    ran.name === "drift"
+      ? ran.result.stale.length +
+        ran.result.moved.length +
+        ran.result.skipped.length +
+        (ran.result.pending.length ? 1 : 0) +
+        (ran.result.repo.status === "current" ? 0 : 1)
+      : ran.name === "coverage"
+        ? ran.result.unclaimed.length
+        : ran.result.errors.length + ran.result.warnings.length;
+
+  const reportOne = (ran: Ran, opts: ReportOptions): void => {
+    if (ran.name === "drift") drift.report(ran.result, opts);
+    else if (ran.name === "coverage") coverage.report(ran.result, opts);
+    else lint.report(ran.result);
+  };
+
+  const results = names.map((name) => runCheck(name, ctx));
+  const total = results.reduce((sum, ran) => sum + countFindings(ran), 0);
+  const lintResult = results.find((ran) => ran.name === "lint")?.result as LintResult | undefined;
+
+  if (flags.json) {
+    const first = results[0];
+    console.log(
+      JSON.stringify(results.length === 1 && first ? first.result : Object.fromEntries(results.map((r) => [r.name, r.result])), null, 2),
+    );
+  } else if (all && !total) {
+    console.log(color.green(`✓ wiki: current, covered and sound (${lintResult?.pages ?? 0} pages)`));
+  } else {
+    for (const ran of results)
+      if (countFindings(ran) || (ran.name === "lint" && !all)) reportOne(ran, { verbose: flags.verbose });
+  }
+
+  // Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
+  // `check` and `check lint` always say it; `check drift`, which the notifier runs, only once the pass
+  // is overdue, so a current wiki stays silent there.
+  if (!flags.json && (names.includes("lint") || names.includes("drift"))) {
+    const logPath = join(wikiPath, "log.md");
+    const pass = lint.deepPass(existsSync(logPath) ? readFileSync(logPath, "utf8") : "");
+    if (names.includes("lint") || pass.due) console.log(lint.deepPassLine(pass));
+  }
+
+  const errors = lintResult?.errors.length ?? 0;
+  // Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
+  // `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
+  process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
+
+}
