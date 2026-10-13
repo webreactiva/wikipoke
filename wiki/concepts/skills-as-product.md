@@ -5,7 +5,7 @@ responsibility: Why most of wikipoke's behaviour lives in Markdown templates tha
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - src/lib/install.ts
-synced: 1097b15
+synced: ecc7b09
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -54,3 +54,10 @@ took in `src/` was joining the `SKILLS` list the installer copies (`src/lib/inst
 Everything else — the new skill, the decision-page keys added to the schema, the `planned:` lens in
 lint — is prose in files the project can diff;
 [the skills page](../components/skills.md) carries the detail.
+
+Issue #20 is the limit case: a behaviour change with no line of `src/` at all. How a page type says
+what goes in it — "Where each type comes from" in `CONVENTIONS.md`, read by the ingest to write and
+seed pages of a type the project added, by lint to ask for that type's missing page, and by query to
+pick the type of an answer offered to file — shipped in `ecc7b09` as prose pointing at prose: a
+section the project owns, three skills that read it, and no code beyond the checker that already read
+the types table.

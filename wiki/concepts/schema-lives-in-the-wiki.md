@@ -5,7 +5,7 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 1097b15
+synced: ecc7b09
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -22,6 +22,14 @@ valid `type:` values out of the first column of the page-types table in `CONVENT
 project adds a page type by adding a table row to a file it owns; nothing is recompiled and nothing
 is configured. Retiring a type is deleting the row, after which lint reports every page still
 carrying it.
+
+Since `ecc7b09` the table alone no longer adds a type: `wikipoke check` reads the row for the valid
+name, and a new section of this file — "Where each type comes from" — is what the skills read to know
+what a page of that type holds and where its evidence comes from; the checker reads only the row,
+which is why adding a type needs the entry as well. It is a fourth part of the schema that lives here
+as prose and no code reads: the ingest writes and seeds a project-added type from the evidence its
+entry names, lint asks for such a type's missing page, and query picks the type of an answer offered
+to file.
 
 Two more sections are read the same way. Since `072403d` lint takes the files it warns about as
 sources from the "Never a source" list (`src/lib/lib.ts:352`): lock files by default, plus whatever

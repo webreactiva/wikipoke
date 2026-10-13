@@ -341,6 +341,11 @@ so it asks you, and runs `wikipoke hooks add <name>`. Nothing installs a hook on
 
 ¹ Or the directory `--dir` set, see below.
 
+To add a page type of your own (a `runbook`, an `incident`), add a row to the "Page types" table
+in `wiki/CONVENTIONS.md` and an entry under "Where each type comes from": what a page of that type
+holds and where its evidence is. The row lets `wikipoke check` accept the type; the entry is what
+the skills read to write, file and look for those pages.
+
 Both skill homes are always written. Claude Code reads only `.claude/skills` and runs perfectly
 well against a checkout with no `.claude/` and no `CLAUDE.md` in it, so there is nothing in a
 repository to detect it by; writing the skills for an agent that never comes costs a few inert

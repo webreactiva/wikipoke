@@ -42,7 +42,11 @@ you notice you are reading for pages you have not started, stop and write the on
 hand. A page written early and corrected later beats a perfect plan that never
 reaches the disk.
 
-**Each page type has its own evidence, and coverage only sees the first.**
+**Each page type has its own evidence, and coverage only sees `entity`.** What goes in a page of
+each type, and where to look for it, is "Where each type comes from" in `CONVENTIONS.md`, under
+"Page types". Read it with the rest of the file: a project that added a type (a `runbook`, an
+`incident`) says there what one holds, and you write those pages from that evidence like any
+other. If the file has no such section (a wiki installed before it), use the five built-in types:
 
 | type | where it comes from |
 | --- | --- |
@@ -50,6 +54,9 @@ reaches the disk.
 | `flow` | an entry point (a route, a command, a job, a webhook, a listener), followed across modules until the sequence ends |
 | `decision` | the notes in `{{WIKI}}/.inbox/` first; then the history and the prose: `git log` (a fix that changed the design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of coverage but not out of reading |
 | `concept` | a pattern that three or more modules repeat |
+
+A type in the table with no entry and no row here has no evidence to go by: write none of it,
+and say so in the report.
 
 Coverage counts files, so following it alone writes `entity` pages and nothing else.
 A concept is a pattern, not a place for the folders left over: tests, config and
@@ -148,6 +155,7 @@ wikipoke check must pass without errors before you are done
    - `decisions/`: the choices behind the code, with the discarded alternative.
      A seeded decision page has no `decided_by:`: the code, the specs and the history
      tell what was chosen, never who chose it. Only a note or a person says that.
+   - Any type the project added: from the evidence its entry names.
 6. **Every page** uses the template with **narrow, verified** `sources:` covering
    what you actually read; never claim a whole package or a folder like `src/`, and
    never list a file you only named — coverage is how the next pass finds it, and a

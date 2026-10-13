@@ -106,8 +106,31 @@ and why `log.md` has the shape below. The checks never read `index.md` or this f
 | `decision`     | a "which X when" comparison or a choice   | `decisions/queue-backend.md` |
 
 `wikipoke check` reads the valid `type:` values from the first column of this table: add a row
-to add a type, remove one to retire it. A **module** is an `entity` at a coarser altitude, nested
-by folder (`components/billing.md` links down to `components/billing/invoice.md`), not a new type.
+**and its entry below** to add a type, remove both to retire it. A **module** is an `entity` at a
+coarser altitude, nested by folder (`components/billing.md` links down to
+`components/billing/invoice.md`), not a new type.
+
+### Where each type comes from
+
+What a page of each type holds, and where its evidence comes from. The skills read this list to
+write, file and look for pages of each type, so a type you add needs its entry here too: the table
+only tells the checker that the type exists.
+
+- `architecture`: the map and the layers, one page. Evidence: the folder tree, the entry points
+  and the manifest; every other page links from it.
+- `entity`: a unit of code, a module or a component, and what it owns. Evidence: a folder, the
+  module and its files. Coverage counts files, so it only ever asks for this type.
+- `flow`: one sequence from start to end. Evidence: an entry point (a route, a command, a job, a
+  webhook, a listener), followed across modules until the sequence ends.
+- `decision`: a choice, with the alternative set aside and why. Evidence: the notes in
+  `{{WIKI}}/.inbox/` first; then the history and the prose: `git log` (a fix that changed the
+  design, an "instead of", a revert) and the docs, plans and ADRs the ignore list keeps out of
+  coverage but not out of reading.
+- `concept`: a pattern or a convention. Evidence: code that three or more modules repeat.
+
+<!-- An added type, for example:
+- `runbook`: how to do one operation in production, step by step. Evidence: the deploy
+  scripts, the CI config and the incident notes; one page per operation. -->
 
 ## The one template (every page)
 

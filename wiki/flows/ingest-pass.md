@@ -5,7 +5,7 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 1097b15
+synced: ecc7b09
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -65,7 +65,11 @@ then stops, on purpose. The alternative produces a hundred pages nobody reviewed
 than the gap it closed, and coverage will list exactly what was left as
 [the backlog](../concepts/coverage-as-debt.md). The order inside a seed is also fixed:
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
-as the other pages teach the agent more. Anything reconstructed rather than read is marked
+as the other pages teach the agent more. Since `ecc7b09` the avenues include any type the project
+added: what such a page holds comes from its entry under "Where each type comes from" in
+`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:158`) — the skill's own table is only
+the fallback for a copy installed before the section, and a type neither the section nor the table
+answers is written as no page at all, said in the report. Anything reconstructed rather than read is marked
 `confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
 repository wrote a page about a directory it never opened and cited a line in it, which landed on
 unrelated code and passed every check. Only a file opened in the pass may be cited, and only a file

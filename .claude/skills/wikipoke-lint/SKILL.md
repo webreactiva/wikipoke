@@ -70,8 +70,11 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
   a command, a job, a webhook) whose sequence no `flow` page follows. A "why", an
   "instead of" or a fix that changed the design, buried in an `entity` page or only in
   `git log`, with no `decision` page. A `concept` that is only a folder left over
-  (tests, config, tooling). Propose each as a command: `wikipoke-ingest "<the flow or
-  decision>"`.
+  (tests, config, tooling). A type the project added, whose evidence ("Where each type
+  comes from" in `CONVENTIONS.md`) is in the repository with no page of it: deploy scripts
+  and no `runbook`. A type in the "Page types" table with no entry in that list: no skill
+  knows what goes in it. Propose each as a command: `wikipoke-ingest "<the flow or
+  decision>"`, or the entry to add.
 - **Confidence**: `high` on a claim you cannot find in the code, or `inferred` on
   something now confirmed.
 - **Planned decisions**: a page with `planned: true` whose code now does what it

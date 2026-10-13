@@ -9,7 +9,7 @@ sources:
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
   - templates/skills/wikipoke-decision/SKILL.md
-synced: 1097b15
+synced: ecc7b09
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -64,7 +64,12 @@ from the clusters with none; it used to run "until coverage prints nothing", and
 led the agent to widen sources to folders it had only skimmed, which the skill now forbids by name.
 And since `da8898c` it says where each page type comes from — folders for entities, entry points
 traced across modules for flows, `git log` and the ignored docs for decisions — because four passes
-that followed coverage wrote twenty-three module pages and not one decision. A part can be a topic
+that followed coverage wrote twenty-three module pages and not one decision. That mapping used to be
+the skill's own table, closed to the types wikipoke ships; `ecc7b09` made an added page type say what
+goes in it: what a type holds and where its evidence is now lives under "Where each type comes from"
+in `CONVENTIONS.md`, which the skill reads, and a type the project added is seeded from the evidence
+its entry names (`templates/skills/wikipoke-ingest/SKILL.md:158`) — the skill's built-in table stays
+only as a fallback for a copy installed before the section existed. A part can be a topic
 as well as a path, so a flow a review proposed is ingested by name, and the close counts pages by
 type and speaks up when flows are fewer than one per three module pages or a dozen pages hold no
 decision.
@@ -76,7 +81,10 @@ carries two reading caveats since `3e94960`: `planned: true` is an intent the co
 out yet, and `status: deprecated` was reversed — answer from it only when saying which, and follow
 the link to what replaced it. That offer is the point: it grows the wiki *where people actually
 ask*, which is a better prior than where the index looks thin. It writes only on a yes, and never
-moves the checkpoint. Its sharpest line is the last one — for inventory questions ("every place we
+moves the checkpoint. When the answer earns its own page, the type it gets — an added type included —
+is chosen by what "Where each type comes from" in `CONVENTIONS.md` says the type holds
+(`templates/skills/wikipoke-query/SKILL.md:71`), a section the skill reads since `ecc7b09` instead of
+carrying rules of its own. Its sharpest line is the last one — for inventory questions ("every place we
 do X"), never accept an answer that rests on the wiki's silence.
 
 How it reads is what makes the wiki cheaper than the code, and `34f14a3` changed it after measuring.
@@ -108,7 +116,11 @@ where the code now does what the page says; ask the person when a plan sits that
 out any more. Missing kind, since `86294e6`, counts pages by type and
 looks for what coverage cannot ask for — an entry point no flow follows, a design choice buried in a
 module page or in `git log` — and proposes each as a `wikipoke-ingest "<topic>"` command; on the
-Laravel app it produced the wiki's first two decision pages. The same change made an over-broad
+Laravel app it produced the wiki's first two decision pages. Since `ecc7b09` the lens also reads
+"Where each type comes from" two ways: a type the project added whose evidence sits in the
+repository with no page of it — deploy scripts and no runbook — is itself a proposal
+(`templates/skills/wikipoke-lint/SKILL.md:73`), and a row in the page-types table with no entry
+under that section is a finding on its own, because no skill then knows what goes in the type. The same change made an over-broad
 warning keep the coverage total false while it stands, after a review called seven of them known
 debt and the coverage complete. Its expired-claim lens opens the citations a page already carries, because `check` knows a cited
 line exists, not that it still says what the sentence claims. It proposes and does not rewrite —
