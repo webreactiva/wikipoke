@@ -33,6 +33,7 @@ const TOUCHES: Record<HookName, string> = {
   opencode: ".opencode/plugin/wikipoke.js · committed",
   cursor: ".cursor/rules/wikipoke.mdc · committed",
   agents: "a block in AGENTS.md · committed",
+  decisions: "a block in AGENTS.md, notes in the wiki's .inbox/ · notes never committed",
 };
 
 /** The checklist's hints: a few words each, the note above says the rest. */
@@ -42,6 +43,7 @@ const SHORT: Record<HookName, string> = {
   opencode: "when OpenCode starts",
   cursor: "a rule Cursor always reads",
   agents: "for Codex and other agents",
+  decisions: "agents note decisions as they work",
 };
 
 /**
@@ -162,7 +164,7 @@ export async function interactiveInit(root: string, dir: string | undefined, ver
       // Here and not only in the hint, which a narrow terminal drops.
       ...(hook.installed ? [`  ${hook.outdated ? color.yellow("installed, outdated: tick it to update it") : color.green("installed")}`] : []),
     ]),
-    "Hooks: they tell you when the wiki falls behind",
+    "Hooks: they tell you when the wiki falls behind, or capture decisions for it",
   );
   const hooks = hookChoices(states, process.stdout.columns);
   const selected = await multiselect({
