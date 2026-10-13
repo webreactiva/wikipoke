@@ -553,6 +553,19 @@ same from any branch: `wikipoke check --against origin/main --strict` in CI on m
 A plain run exits 1 only on lint errors. Pending decision notes never fail it, and CI never
 sees them: the inbox is not committed.
 
+`check` and `check lint` also say how long since the last deep review of the pages, read from
+`log.md`:
+
+```text
+lint      last deep pass: 41 days ago -> wikipoke-lint --deep
+lint      last deep pass: never -> wikipoke-lint --deep
+```
+
+This line is information: it fails nothing, not even with `--strict`. `--json` gives the day as
+`lint.lastDeepLint` (`null` for never). `check drift`, and so the notifier, prints the line only
+when the pass is more than 30 days old. With no pass at all, the 30 days count from the first day
+in the log, so a freshly seeded wiki is not due.
+
 ## `wikipoke atlas`
 
 ```sh
