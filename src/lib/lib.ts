@@ -218,16 +218,18 @@ const lines = (s: string | null): string[] => (s ?? "").split("\n").map((l) => l
 
 /**
  * Files changed between `sha` and the working tree, new files included. Uncommitted work counts:
- * a page is stale the moment its source is edited, not only once it is committed.
+ * a page is stale the moment its source is edited, not only once it is committed. With `ref`, the
+ * files changed between `sha` and that commit instead, and nothing of the checkout counts.
  */
-export function changedSince(root: string, sha: string): string[] {
+export function changedSince(root: string, sha: string, ref?: string): string[] {
+  if (ref) return lines(gitOrNull(root, ["diff", "--name-only", sha, ref, "--"])).sort();
   const tracked = gitOrNull(root, ["diff", "--name-only", sha, "--"]);
   const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
   return [...new Set([...lines(tracked), ...lines(untracked)])].sort();
 }
 
-export function commitsSince(root: string, sha: string): number {
-  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..HEAD`]);
+export function commitsSince(root: string, sha: string, ref = "HEAD"): number {
+  const out = gitOrNull(root, ["rev-list", "--count", `${sha}..${ref}`]);
   return out ? Number(out.trim()) : 0;
 }
 
@@ -290,7 +292,33 @@ export function sourcesKey(root: string, meta: Frontmatter | null, universe?: st
   if (!asList(meta?.sources).length) return null;
   const files = sourceFiles(root, meta, universe);
   const ids = blobIds(root, files);
-  if (ids === null) return null;
+  return ids === null ? null : keyOf(files, ids);
+}
+
+/**
+ * `sourcesKey` for the files as commit `ref` holds them, for `check drift --against <ref>`: the
+ * working tree must not decide a question asked about a commit. `tree` is `treeBlobs(root, ref)`,
+ * read once per run. A file's blob id in a tree is what `git hash-object` gives for the same
+ * contents, so a page keyed on one branch matches the same code on another.
+ */
+export function sourcesKeyAt(root: string, meta: Frontmatter | null, tree: Map<string, string>): string | null {
+  if (!asList(meta?.sources).length) return null;
+  const patterns = sourcePatterns(meta, root);
+  const files = [...tree.keys()].filter((f) => matchesAny(f, patterns)).sort();
+  return keyOf(files, files.map((f) => tree.get(f) as string));
+}
+
+/** Every regular file in commit `ref`, with its blob id: no submodules and no symlinks, as above. */
+export function treeBlobs(root: string, ref: string): Map<string, string> {
+  const blobs = new Map<string, string>();
+  for (const entry of (gitOrNull(root, ["ls-tree", "-r", "-z", ref]) ?? "").split("\0")) {
+    const m = /^100(?:644|755) blob ([0-9a-f]+)\t([^]*)$/.exec(entry);
+    if (m) blobs.set(m[2] as string, m[1] as string);
+  }
+  return blobs;
+}
+
+function keyOf(files: string[], ids: string[]): string {
   const hash = createHash("sha256");
   // NUL and newline: neither can appear in a git path, so no two file lists hash the same.
   for (const [i, file] of files.entries()) hash.update(`${file}\0${ids[i]}\n`);

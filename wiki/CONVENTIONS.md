@@ -366,6 +366,10 @@ wikipoke key [<page>...]    # what each page's sources hash to now, for its `sou
 ```
 
 Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
+`--against <ref>` measures drift on a commit instead of the working tree, so every branch gets the
+same answer: use it to ask "is the wiki true for main?", for example in CI on main. Everything is
+read from that commit, a page's `sources_key:` included, and the inbox, which no commit holds, is
+left out.
 
 - **drift**: staleness on both axes, plus the decision notes waiting in `.inbox/` (`pending`),
   which never fail a plain run and are never seen by CI, since the inbox is not committed. Repository: commits since `last_indexed_commit`, minus

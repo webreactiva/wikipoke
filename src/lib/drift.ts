@@ -12,6 +12,10 @@
 // Citations get a third look, finer than either: each one is carried through the diff from the
 // commit that wrote it, so a page that was re-stamped without its pointers being moved still says
 // where they went.
+//
+// All three compare with the working tree, uncommitted work included: the question of the person
+// making a change. `--against <ref>` compares with a commit instead, the question a team asks of
+// the branch it shares, and gets the same answer from any checkout.
 import { join, posix, relative, sep } from "node:path";
 
 import type { CheckContext, LoadedPage, ReportOptions } from "./lib.ts";
@@ -34,6 +38,8 @@ import {
   shortSha,
   sourcePatterns,
   sourcesKey,
+  sourcesKeyAt,
+  treeBlobs,
   workingFiles,
 } from "./lib.ts";
 
@@ -48,7 +54,8 @@ export type RepoAxis =
 
 /**
  * A citation whose line the code moved since it was written. `now` is where that line sits in the
- * working tree, or null when the line itself was edited or deleted and only re-reading can say.
+ * working tree, or on the `--against` ref, or null when the line itself was edited or deleted and
+ * only re-reading can say.
  */
 export interface MovedCitation {
   raw: string;
@@ -87,6 +94,8 @@ export interface SkippedPage {
 }
 
 export interface DriftResult {
+  /** The ref given to `--against`; absent when drift compares with the working tree. */
+  against?: string;
   repo: RepoAxis;
   /** Decision notes in the inbox, as paths from the repository root. */
   pending: string[];
@@ -97,28 +106,36 @@ export interface DriftResult {
   pages: number;
 }
 
-export function run({ root, wikiDir }: CheckContext): DriftResult {
-  const repo = repoAxis(root, wikiDir);
+/** `against`: a ref the caller has already checked is a commit. */
+export interface DriftOptions {
+  against?: string | undefined;
+}
+
+export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions = {}): DriftResult {
+  const repo = repoAxis(root, wikiDir, against);
+  // The inbox lives in this working copy only: a question about a commit has no notes in it.
   const inbox = relative(root, join(wikiDir, INBOX_DIR)).split(sep).join(posix.sep);
-  const pending = inboxNotes(wikiDir).map((note) => `${inbox}/${note}`);
+  const pending = against ? [] : inboxNotes(wikiDir).map((note) => `${inbox}/${note}`);
   const pages = listPages(wikiDir).map(readPage);
 
   // One `git diff` per distinct sha, not one per page; one per sha and cited file for the lines.
   const cache = new Map<string, string[]>();
   const changesFor = (sha: string): string[] => {
     let changes = cache.get(sha);
-    if (!changes) cache.set(sha, (changes = changedSince(root, sha)));
+    if (!changes) cache.set(sha, (changes = changedSince(root, sha, against)));
     return changes;
   };
   const hunkCache = new Map<string, Hunk[]>();
   const hunksFor = (sha: string, path: string): Hunk[] => {
     let hunks = hunkCache.get(`${sha}:${path}`);
-    if (!hunks) hunkCache.set(`${sha}:${path}`, (hunks = diffHunks(root, sha, path)));
+    if (!hunks) hunkCache.set(`${sha}:${path}`, (hunks = diffHunks(root, sha, path, against)));
     return hunks;
   };
   // Two `git ls-files` for the whole run, and only in a wiki that has a page to judge by content.
   let files: string[] | undefined;
   const working = (): string[] => (files ??= workingFiles(root));
+  let tree: Map<string, string> | undefined;
+  const treeAt = (ref: string): Map<string, string> => (tree ??= treeBlobs(root, ref));
 
   const stale: StalePage[] = [];
   const moved: MovedPage[] = [];
@@ -146,7 +163,7 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
         skipped.push({ id: page.id, reason: `unknown sha: ${synced}${stored ? `, and \`sources_key: ${stored}\` is not a content key` : ""}` });
         continue;
       }
-      const now = sourcesKey(root, meta, working());
+      const now = against ? sourcesKeyAt(root, meta, treeAt(against)) : sourcesKey(root, meta, working());
       // git could not hash the page's files (an unreadable one, a submodule): that is not evidence
       // the code moved, so it must not be reported as if it were.
       if (now === null) skipped.push({ id: page.id, reason: `unknown sha: ${synced}, and its sources could not be hashed` });
@@ -164,14 +181,14 @@ export function run({ root, wikiDir }: CheckContext): DriftResult {
     }
   }
 
-  return { repo, pending, stale, moved, skipped, fresh, pages: pages.length };
+  return { ...(against ? { against } : {}), repo, pending, stale, moved, skipped, fresh, pages: pages.length };
 }
 
 /**
  * The page's citations the code moved since each was written, carried through the diff to the
- * working tree. Not from `synced:`: a citation written after it — into a file added since, or
- * re-pointed and not yet re-stamped — would be moved a second time, and one left behind by a
- * re-stamp would never be moved at all. So the start is the commit that last wrote the page line
+ * working tree, or to the `--against` ref. Not from `synced:`: a citation written after it — into
+ * a file added since, or re-pointed and not yet re-stamped — would be moved a second time, and one
+ * left behind by a re-stamp would never be moved at all. So the start is the commit that last wrote the page line
  * the citation sits on, and a line not committed yet is taken as current.
  */
 function movedCitations(
@@ -213,8 +230,9 @@ interface Hunk {
   newCount: number;
 }
 
-function diffHunks(root: string, sha: string, path: string): Hunk[] {
-  const diff = gitOrNull(root, ["diff", "--no-color", "--no-ext-diff", "-U0", sha, "--", path]) ?? "";
+function diffHunks(root: string, sha: string, path: string, ref?: string): Hunk[] {
+  const range = ref ? [sha, ref] : [sha];
+  const diff = gitOrNull(root, ["diff", "--no-color", "--no-ext-diff", "-U0", ...range, "--", path]) ?? "";
   return [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@/gm)].map((m) => ({
     oldStart: Number(m[1]),
     oldCount: m[2] === undefined ? 1 : Number(m[2]),
@@ -236,27 +254,29 @@ function lineNow(hunks: Hunk[], line: number): number | null {
   return line + shift;
 }
 
-function repoAxis(root: string, wikiDir: string): RepoAxis {
+function repoAxis(root: string, wikiDir: string, ref = "HEAD"): RepoAxis {
   const last = readState(wikiDir)?.last_indexed_commit;
   if (!last) return { status: "no-checkpoint" };
   if (!commitExists(root, last)) return { status: "unknown-checkpoint", last };
 
-  const commits = commitsSince(root, last);
+  const commits = commitsSince(root, last, ref);
   if (!commits) return { status: "current", last, commits: 0, files: 0 };
 
-  const files = indexableChanges(root, wikiDir, `${last}..HEAD`).length;
+  const files = indexableChanges(root, wikiDir, `${last}..${ref}`).length;
   return { status: files ? "behind" : "current", last, commits, files };
 }
 
 /** Human report. Silent when everything is current: the hooks depend on it. */
 export function report(res: DriftResult, { verbose }: ReportOptions = {}): number {
   let found = 0;
+  // Named on every line that compares, so a pasted line still says which code it was measured on.
+  const upTo = (sha: string): string => (res.against ? `${sha}..${res.against}` : `since ${sha}`);
 
   if (res.repo.status === "behind") {
     found++;
     console.log(
       `${color.yellow("behind")}    repo — ${res.repo.commits} commit(s) not indexed ` +
-        `(${res.repo.files} code file(s)) since ${shortSha(res.repo.last)} ` +
+        `(${res.repo.files} code file(s)) ${upTo(shortSha(res.repo.last))} ` +
         color.dim("-> wikipoke-ingest"),
     );
   } else if (res.repo.status === "unknown-checkpoint") {
@@ -281,7 +301,7 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     const how =
       item.by === "sources_key"
         ? `(its sources changed; ${item.synced} is not a commit here any more — re-read its sources:)`
-        : `(since ${item.synced})`;
+        : `(${upTo(item.synced)})`;
     console.log(`${color.yellow("stale")}     ${color.bold(item.id)} ${color.dim(how)}`);
     const shown = verbose ? item.files : item.files.slice(0, 8);
     for (const f of shown) console.log(`    ${color.dim(f)}`);
