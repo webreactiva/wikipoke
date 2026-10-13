@@ -36,7 +36,9 @@ It **proposes; it does not rewrite.** Reconciling with the code is
    Everything it reports is already decided: **list it, don't re-derive it**.
 2. Explain each finding in plain terms: what it means, why it matters, the fix.
    Keep the two scales apart: **errors** are a broken wiki; **staleness and
-   coverage are debt**, not breakage.
+   coverage are debt**, not breakage. So are `pending` decision notes: the fix is
+   `wikipoke-ingest`, before the branch or the worktree goes away, because the notes
+   live only in this working copy.
 3. Watch for the two false greens the machine cannot judge on its own. **An
    over-broad `sources:`** makes coverage read green for code nobody wrote up: read
    those warnings and the coverage total together, and report the total as false while
@@ -68,10 +70,17 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
   a command, a job, a webhook) whose sequence no `flow` page follows. A "why", an
   "instead of" or a fix that changed the design, buried in an `entity` page or only in
   `git log`, with no `decision` page. A `concept` that is only a folder left over
-  (tests, config, tooling). Propose each as a command: `wikipoke-ingest "<the flow or
-  decision>"`.
+  (tests, config, tooling). A type the project added, whose evidence ("Where each type
+  comes from" in `CONVENTIONS.md`) is in the repository with no page of it: deploy scripts
+  and no `runbook`. A type in the "Page types" table with no entry in that list: no skill
+  knows what goes in it. Propose each as a command: `wikipoke-ingest "<the flow or
+  decision>"`, or the entry to add.
 - **Confidence**: `high` on a claim you cannot find in the code, or `inferred` on
   something now confirmed.
+- **Planned decisions**: a page with `planned: true` whose code now does what it
+  says (propose dropping the key), or whose plan nobody is carrying out any more (ask
+  the person: drop it, or mark it `status: deprecated`). A decision page whose code
+  contradicts it and carries no `planned:` is a contradiction, above.
 
 ## Output
 
@@ -79,7 +88,9 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
    the proposed fix. Order by how much damage it does to a reader who trusts the
    page. Say plainly when a finding is a judgement call.
 5. **Fix nothing without a yes**, except trivia (a broken link, a missing `index.md`
-   line, an obviously wrong `type:`), and only with `--fix-trivial`. List those
+   line, an obviously wrong `type:`), and only with `--fix-trivial`. A fix to a claim
+   writes `generated:` (`{ by: <you>, at: <now> }`, see "The one template" in
+   `CONVENTIONS.md`) and leaves `synced:` alone; a link or a typo writes neither. List those
    apart from the proposals.
 6. **Log a `--deep` pass** at the top of today's heading in `wiki/log.md`
    (newest first, one `## YYYY-MM-DD` per day; if the log still has the old

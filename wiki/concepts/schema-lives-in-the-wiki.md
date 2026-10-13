@@ -5,7 +5,8 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 78adf3b
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -18,16 +19,52 @@ question of authority outright: when the skills or the checks disagree with it, 
 
 That is not only a documentation convention — one part of it is wired up. `pageTypes()` reads the
 valid `type:` values out of the first column of the page-types table in `CONVENTIONS.md`
-(`src/lib/lib.ts:271`), falling back to the defaults only when the file or the table is missing. A
+(`src/lib/lib.ts:304`), falling back to the defaults only when the file or the table is missing. A
 project adds a page type by adding a table row to a file it owns; nothing is recompiled and nothing
 is configured. Retiring a type is deleting the row, after which lint reports every page still
 carrying it.
+
+Since `ecc7b09` the table alone no longer adds a type: `wikipoke check` reads the row for the valid
+name, and a new section of this file — "Where each type comes from" — is what the skills read to know
+what a page of that type holds and where its evidence comes from; the checker reads only the row,
+which is why adding a type needs the entry as well. It is a fourth part of the schema that lives here
+as prose and no code reads: the ingest writes and seeds a project-added type from the evidence its
+entry names, lint asks for such a type's missing page, and query picks the type of an answer offered
+to file.
+
+Two more sections are read the same way. Since `072403d` lint takes the files it warns about as
+sources from the "Never a source" list (`src/lib/lib.ts:352`): lock files by default, plus whatever
+the project adds, and an empty list switches the warning off. And since `e52be54` the
+"Decisions worth recording" section is the bar for which decisions agents capture while they
+implement and ingest turns into pages; no code reads it, the `decisions` hook, `wikipoke-implement`
+and `wikipoke-ingest` all point at it, and `hooks add decisions` only checks that the heading
+exists ([the decision](../decisions/capture-decisions.md)). It starts strict, and widening it is
+an edit to this file, which is the whole argument for putting it here.
+
+Since `3e94960` the section carries two more rules of that kind. It states who the bar governs: a
+decision a person asks to keep, through `wikipoke-decision`, is the person's to judge, because a
+bar is for what an agent writes down on its own. And its "On the page" part is the specification
+the decision pages follow — `decided_by:` only when known first hand, `planned: true` while the
+code has yet to follow, `status: deprecated` once another decision reverses it and the code
+complies — every key of it prose, and every key of it owned by this file.
+
+Since `52980e2` the file also opens with a two-line frontmatter, `type: schema`, so the wiki reads
+as an Open Knowledge Format bundle; lint warns when it is missing, and `init` names it first among
+what an older copy should carry over.
+
+The trust keys joined them in `7526c5e`. `generated:` and `verified:` — who last wrote a page's
+claims and who last confirmed them — are defined under "The one template" in this file
+(`templates/CONVENTIONS.md:181`): one `{ by, at }` map per key, the actor's form, the ISO time with
+its offset, and the four cases that decide which of the two a pass writes. The skills repeat the
+rule instead of re-deriving it (`templates/skills/wikipoke-ingest/SKILL.md:38`), and the only code
+it got is lint checking the map's shape (`src/lib/lint.ts:283`) — a strict YAML reader must see a
+map there too, so prose owns the meaning and the code owns only the shape.
 
 The rest of the schema — the five required keys, the two `confidence:` values — is still constants
 in `src/lib/lib.ts`. The direction is clear from the types table, and where the file cannot be read
 the defaults keep the checks working rather than failing closed.
 
-The reason to put the schema *in* the wiki rather than in the tool is that the three skills read it
+The reason to put the schema *in* the wiki rather than in the tool is that the skills read it
 before writing anything. A project that documents in Spanish, adds a `runbook` type or forbids
 ASCII diagrams changes one Markdown file, and the agent follows the change on its next pass —
 without a wikipoke release, and without the tool having to anticipate what any project wanted.

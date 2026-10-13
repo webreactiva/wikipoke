@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { get } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -58,19 +58,28 @@ interface PageOptions {
   type?: string;
   sources?: string[];
   synced?: string;
+  key?: string;
   body?: string;
   wiki?: string;
 }
 
 function page(root: string, path: string, options: PageOptions = {}): void {
-  const { type = "entity", sources = ["src/billing"], synced, body = "", wiki = "wiki" } = options;
+  const { type = "entity", sources = ["src/billing"], synced, key, body = "", wiki = "wiki" } = options;
   put(
     root,
     `${wiki}/${path}`,
     `---\ntitle: ${path}\ntype: ${type}\nresponsibility: documents ${path}\nsources:\n` +
       sources.map((s) => `  - ${s}\n`).join("") +
-      `synced: ${synced ?? git(root, "rev-parse", "--short", "HEAD")}\n---\n${body}\n`,
+      `synced: ${synced ?? git(root, "rev-parse", "--short", "HEAD")}\n` +
+      (key === undefined ? "" : `sources_key: ${key}\n`) +
+      `---\n${body}\n`,
   );
+}
+
+/** The content key the CLI prints for a page, as the ingest skill would copy it. */
+function keyOf(root: string, id: string): string {
+  const printed = json<{ page: string; sources_key: string | null }[]>(root, "key", id, "--json");
+  return printed[0]?.sources_key ?? "";
 }
 
 /** Seeds the wiki the way the ingest skill would: pages, index, log, checkpoint. */
@@ -89,9 +98,11 @@ function seed(root: string, wiki = "wiki"): void {
 /** The shapes `check --json` returns, as far as the assertions below read them. */
 interface DriftJson {
   against?: string;
+  pending: string[];
   repo: { status: string; commits?: number; files?: number; last?: string };
-  stale: { id: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
+  stale: { id: string; by: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
+  skipped: { id: string; reason: string }[];
   fresh: string[];
 }
 interface CoverageJson {
@@ -103,6 +114,48 @@ interface LintJson {
   warnings: { page?: string; message: string }[];
 }
 
+/**
+ * A wiki pass on a branch, squash-merged into the trunk, then cloned afresh: exactly how a page's
+ * `synced:` commit stops existing for everybody (#3). The clone is the point — the commit object
+ * survives in the repository that wrote it, so only a fresh clone shows what the rest of the team
+ * sees. Returns the clone and the sha the page still names.
+ */
+function squashMerged(options: { key?: boolean; thenEdit?: string } = {}): { clone: string; gone: string } {
+  const root = repo();
+  seed(root);
+  const trunk = git(root, "rev-parse", "--abbrev-ref", "HEAD");
+
+  git(root, "checkout", "-qb", "feature");
+  put(root, "src/billing/invoice.js", "export const total = 2;\n");
+  git(root, "commit", "-qam", "invoices round per line");
+  const gone = git(root, "rev-parse", "--short", "HEAD");
+  // The pass re-reads the page against that commit and re-stamps it, with the key wikipoke prints.
+  page(root, "components/billing.md", {
+    synced: gone,
+    ...(options.key === false ? {} : { key: keyOf(root, "components/billing") }),
+    body: "Back to [the map](../architecture.md).",
+  });
+  git(root, "commit", "-qam", "wiki: reconcile billing");
+
+  git(root, "checkout", "-q", trunk);
+  git(root, "merge", "--squash", "feature");
+  git(root, "commit", "-qm", "invoices round per line (#1)");
+  git(root, "branch", "-qD", "feature");
+
+  // Through file://, not the path: a plain local clone hardlinks the whole object database across,
+  // unreachable commits and all, and the squashed sha would still resolve. Over a transport only
+  // what the branch reaches is packed, which is what everyone but the author of the branch gets.
+  const clone = mkdtempSync(join(tmpdir(), "wikipoke-clone-"));
+  execFileSync("git", ["clone", "-q", `file://${root}`, clone], { stdio: "pipe" });
+  git(clone, "config", "user.email", "test@example.com");
+  git(clone, "config", "user.name", "test");
+  if (options.thenEdit !== undefined) {
+    put(clone, "src/billing/invoice.js", options.thenEdit);
+    git(clone, "commit", "-qam", "invoices round per total again");
+  }
+  return { clone, gone };
+}
+
 const json = <T>(root: string, ...args: string[]): T => JSON.parse(wikipoke(root, ...args).out) as T;
 const read = (root: string, path: string): string => readFileSync(join(root, path), "utf8");
 const ALL_HOOKS = ["git", "claude", "opencode", "cursor", "agents"];
@@ -112,7 +165,7 @@ test("init writes the schema, the ignore list and the skills in both homes, and 
   const { code, out } = wikipoke(root, "init");
   assert.equal(code, 0);
   for (const home of [".agents/skills", ".claude/skills"])
-    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents"])
+    for (const skill of ["wikipoke-ingest", "wikipoke-query", "wikipoke-lint", "wikipoke-agents", "wikipoke-implement", "wikipoke-decision"])
       assert.ok(existsSync(join(root, home, skill, "SKILL.md")), `${home}/${skill}`);
   for (const path of ["wiki/CONVENTIONS.md", "wiki/.wikipokeignore"]) assert.ok(existsSync(join(root, path)), path);
   // A skill is inert until someone names it; a hook fires on its own. Only the second needs a yes.
@@ -209,6 +262,114 @@ test("hooks remove takes out one hook at a time, and the notifier goes with the 
   assert.ok(existsSync(join(bare, "AGENTS.md")));
   wikipoke(bare, "hooks", "remove", "agents");
   assert.ok(!existsSync(join(bare, "AGENTS.md")));
+});
+
+test("the decisions hook asks agents for notes in its own block, and the inbox ignores itself", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n\nBe kind.\n" });
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "agents", "decisions");
+  const agents = read(root, "AGENTS.md");
+  assert.match(agents, /<!-- wikipoke:decisions:start[\s\S]*wiki\/CONVENTIONS\.md[\s\S]*<!-- wikipoke:decisions:end -->/);
+  assert.match(agents, /Decisions worth recording/, "it points at the bar, it does not restate it");
+  assert.match(read(root, "wiki/.inbox/.gitignore"), /^\*$/m);
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "---\ndecided_by: agent\n---\nChose a ring buffer.\n");
+  assert.equal(git(root, "status", "--porcelain", "--untracked-files=all", "wiki/.inbox"), "", "notes never reach git");
+  assert.doesNotMatch(wikipoke(root, "hooks", "add", "decisions").out, /created|updated/, "idempotent");
+
+  // A note is not a notifier: on its own it installs none, and `hooks` still says none is.
+  const bare = repo();
+  wikipoke(bare, "init");
+  wikipoke(bare, "hooks", "add", "decisions");
+  assert.ok(!existsSync(join(bare, "wiki/.wikipoke-hook.sh")));
+  assert.match(wikipoke(bare, "hooks").out, /decisions .* installed[\s\S]*No notifier hook was installed/);
+
+  // Removing it leaves the agents block, and keeps the ignore file while notes still wait.
+  const removed = wikipoke(root, "hooks", "remove", "decisions").out;
+  assert.doesNotMatch(read(root, "AGENTS.md"), /wikipoke:decisions/);
+  assert.match(read(root, "AGENTS.md"), /^# Rules\n\nBe kind\.\n\n<!-- wikipoke:start/);
+  assert.match(removed, /still holds 1 file/);
+  assert.ok(existsSync(join(root, "wiki/.inbox/.gitignore")));
+  assert.ok(existsSync(join(root, "wiki/.wikipoke-hook.sh")), "the agents hook still runs the notifier");
+  rmSync(join(root, "wiki/.inbox/2026-10-02-ring-buffer.md"));
+  wikipoke(root, "hooks", "remove", "decisions");
+  assert.ok(!existsSync(join(root, "wiki/.inbox")), "an empty inbox goes with the hook");
+});
+
+test("the decisions hook keeps an agent's own `*`, warns about a schema with no bar, and follows --dir", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  wikipoke(root, "init", "--dir", "docs/wiki");
+  // In a fresh clone the ignore file is gone (it ignores itself), and an agent writes a bare `*`.
+  put(root, "docs/wiki/.inbox/.gitignore", "*\n");
+  const added = wikipoke(root, "hooks", "add", "decisions").out;
+  assert.doesNotMatch(added, /not managed by wikipoke|CONVENTIONS\.md has no/);
+  assert.equal(read(root, "docs/wiki/.inbox/.gitignore"), "*\n", "left as the agent wrote it");
+  assert.match(read(root, "AGENTS.md"), /docs\/wiki\/CONVENTIONS\.md[\s\S]*docs\/wiki\/\.inbox\//);
+  put(root, "docs/wiki/.inbox/2026-10-02-ring-buffer.md", "note\n");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, ["docs/wiki/.inbox/2026-10-02-ring-buffer.md"]);
+  rmSync(join(root, "docs/wiki/.inbox/2026-10-02-ring-buffer.md"));
+  assert.match(wikipoke(root, "hooks", "remove", "decisions").out, /removed\s+docs\/wiki\/\.inbox\/\.gitignore/);
+
+  // A schema older than the hook has no bar, and says so rather than letting agents invent one.
+  writeFileSync(join(root, "docs/wiki/CONVENTIONS.md"), "---\ntype: schema\n---\n# our own\n");
+  assert.match(wikipoke(root, "hooks", "add", "decisions").out, /has no "## Decisions worth recording" section/);
+});
+
+test("a managed block is updated where it sits, and AGENTS.md goes only with the last block", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "agents", "decisions");
+  const tail = "\n## Later\n\nWritten after the blocks.\n";
+  const edited = `${read(root, "AGENTS.md").replace("## Decisions while implementing", "## An older wording")}${tail}`;
+  writeFileSync(join(root, "AGENTS.md"), edited);
+  assert.match(wikipoke(root, "hooks").out, /decisions .* installed, outdated/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /^ {2}agents .* outdated/m);
+  wikipoke(root, "hooks", "add", "decisions");
+  const now = read(root, "AGENTS.md");
+  assert.ok(now.endsWith(tail), "the project's text after the block stays after it");
+  assert.match(now, /## Decisions while implementing/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /outdated/);
+
+  // Removing agents keeps decisions and drops the notifier; removing both leaves only the project's text.
+  wikipoke(root, "hooks", "remove", "agents");
+  assert.match(read(root, "AGENTS.md"), /wikipoke:decisions:start/);
+  assert.ok(!existsSync(join(root, "wiki/.wikipoke-hook.sh")), "no notifier hook is left to run it");
+  wikipoke(root, "hooks", "remove", "decisions");
+  assert.equal(read(root, "AGENTS.md"), `# Rules\n${tail}`);
+
+  const bare = repo();
+  wikipoke(bare, "hooks", "add", "agents", "decisions");
+  wikipoke(bare, "hooks", "remove", "decisions", "agents");
+  assert.ok(!existsSync(join(bare, "AGENTS.md")));
+});
+
+test("before seeding, check still names the decision notes waiting for the seed", () => {
+  const root = repo();
+  wikipoke(root, "init");
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "note\n");
+  const { code, out } = wikipoke(root, "check");
+  assert.equal(code, 0);
+  assert.match(out, /unseeded[\s\S]*pending\s+1 decision note\(s\) in wiki\/\.inbox\//);
+  assert.deepEqual(json(root, "check", "--json"), { seeded: false, pending: 1 });
+});
+
+test("drift counts the decision notes waiting in the inbox, and they never fail check or become pages", () => {
+  const root = repo();
+  seed(root);
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, []);
+  put(root, "wiki/.inbox/.gitignore", "*\n");
+  put(root, "wiki/.inbox/2026-10-02-ring-buffer.md", "---\ndecided_by: agent\n---\nChose a ring buffer.\n");
+  put(root, "wiki/.inbox/2026-10-02-overflow.md", "---\ndecided_by: agent\n---\nDrop the oldest.\n");
+  const { code, out } = wikipoke(root, "check");
+  assert.equal(code, 0, "pending notes are debt, not breakage");
+  assert.match(out, /pending\s+2 decision note\(s\) in wiki\/\.inbox\//);
+  assert.equal(wikipoke(root, "check", "--strict").code, 1);
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").pending, [
+    "wiki/.inbox/2026-10-02-overflow.md",
+    "wiki/.inbox/2026-10-02-ring-buffer.md",
+  ]);
+  const lint = json<LintJson & { pages: number }>(root, "check", "lint", "--json");
+  assert.equal(lint.pages, 2, "the inbox is never walked as pages");
+  assert.deepEqual(lint.errors, []);
 });
 
 test("--dir moves the wiki, and everything written names the new place", () => {
@@ -428,6 +589,9 @@ test("lint warns about frontmatter a strict YAML parser reads differently, and i
     ["title:Billing", /no space after `title:`/],
     ["title:\tBilling", /holds a tab/],
     ["summary: first\n  second line", /is not `key: value` or `- item`/],
+    ["generated: { by: opus }", /is not `\{ by: <actor>, at: <datetime> \}`/],
+    ["generated: { by: opus, at: 2026-10-11T14:00:00Z }", /not an actor/],
+    ["verified: { by: human:daniel, at: 2026-10-11 }", /not an ISO 8601 time/],
   ];
   for (const [line, reason] of warns) {
     const found = yamlProblems(front(line));
@@ -444,6 +608,9 @@ test("lint warns about frontmatter a strict YAML parser reads differently, and i
     "title: -\"q\"",
     "title: https://example.com/x",
     "sources:\n  - src/billing/invoice.ts",
+    "generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T14:00:00Z }",
+    "verified: { by: human:daniel, at: 2026-10-11T16:30:00+02:00 }",
+    "verified: { by: process:nightly, at: 2026-10-11T02:00Z }",
   ])
     assert.deepEqual(yamlProblems(front(line)), [], line);
 
@@ -681,6 +848,85 @@ test("a checkpoint that is not a commit is shown in full, since its first charac
   assert.match(wikipoke(root, "check", "drift").out, new RegExp(`checkpoint points at ${invented}, which is not a commit here`));
 });
 
+test("a squash merge blinds drift and fails lint on a page that carries no content key", () => {
+  // The bug #3 reports, reproduced: nothing about the page is wrong, and the wiki reads as broken.
+  const { clone, gone } = squashMerged({ key: false });
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(
+    drift.skipped.map((s) => s.reason),
+    [`unknown sha: ${gone}`],
+    "drift cannot judge the page at all",
+  );
+  const check = wikipoke(clone, "check");
+  assert.equal(check.code, 1, "and a plain check fails, as if the wiki were broken");
+  assert.match(check.out, new RegExp(`error.*\`synced: ${gone}\` is not a commit`));
+});
+
+test("with a content key, a squashed page is judged by its sources and lint only warns", () => {
+  const { clone, gone } = squashMerged();
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(drift.skipped, [], "nothing is skipped any more");
+  assert.ok(drift.fresh.includes("components/billing"), "the sources did not move: the page is fresh");
+
+  const lint = json<LintJson>(clone, "check", "lint", "--json");
+  assert.deepEqual(lint.errors, [], "a lost commit is debt, not a broken wiki");
+  assert.match(
+    lint.warnings.find((w) => w.page === "components/billing")?.message ?? "",
+    new RegExp(`\`synced: ${gone}\`.*squash or rebase merge`),
+    "and the warning names the cause, so nobody goes looking for a typo",
+  );
+  assert.equal(wikipoke(clone, "check").code, 0);
+});
+
+test("a content key still reports the page stale once its sources really move", () => {
+  const { clone } = squashMerged({ thenEdit: "export const total = 3;\n" });
+  const drift = json<DriftJson>(clone, "check", "drift", "--json");
+  const stale = drift.stale.find((s) => s.id === "components/billing");
+  assert.equal(stale?.by, "sources_key", "judged by content, so it names no diff it cannot read");
+  assert.deepEqual(stale?.files, []);
+  assert.match(wikipoke(clone, "check", "drift").out, /stale.*components\/billing.*its sources changed/s);
+
+  // A change reverted hashes back to what it was: something a commit distance can never see.
+  put(clone, "src/billing/invoice.js", "export const total = 2;\n");
+  git(clone, "commit", "-qam", "revert");
+  assert.ok(json<DriftJson>(clone, "check", "drift", "--json").fresh.includes("components/billing"));
+});
+
+test("wikipoke key prints what a page's sources hash to, and only for pages that exist", () => {
+  const root = repo();
+  seed(root);
+  const printed = wikipoke(root, "key");
+  assert.equal(printed.code, 0);
+  assert.match(printed.out, /^[0-9a-f]{12} {2}architecture$/m);
+  assert.match(printed.out, /^[0-9a-f]{12} {2}components\/billing$/m);
+
+  // The key follows the contents, not the commits: an uncommitted edit moves it, as drift's page
+  // axis does, and naming the page with or without .md is the same page.
+  const before = keyOf(root, "components/billing");
+  assert.equal(keyOf(root, "components/billing.md"), before);
+  put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
+  assert.notEqual(keyOf(root, "components/billing"), before);
+  assert.equal(keyOf(root, "architecture"), keyOf(root, "architecture"), "and a page it does not touch is unchanged");
+
+  const missing = wikipoke(root, "key", "components/nope");
+  assert.equal(missing.code, 2);
+  assert.match(missing.out, /no such page: components\/nope/);
+});
+
+test("a sources_key that is not a key is warned about, and never softens the broken-commit error", () => {
+  const root = repo();
+  seed(root);
+  const head = git(root, "rev-parse", "HEAD");
+  page(root, "components/billing.md", {
+    synced: head.slice(0, 7) + "0".repeat(33),
+    key: "not-a-key",
+    body: "Back to [the map](../architecture.md).",
+  });
+  const lint = json<LintJson>(root, "check", "lint", "--json");
+  assert.match(lint.warnings.find((w) => w.message.includes("sources_key"))?.message ?? "", /is not a content key/);
+  assert.ok(lint.errors.some((e) => e.message.includes("is not a commit in this repository")), "the error stands");
+});
+
 test("a link with a line anchor is a citation too, for lint and for drift", () => {
   const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
   const root = repo({ "src/billing/invoice.js": lines(10) });
@@ -750,6 +996,38 @@ test("a --json larger than a pipe's buffer reaches the reader whole", () => {
   const out = wikipoke(root, "check", "coverage", "--json").out;
   assert.ok(out.length > 65536, `${out.length} bytes`);
   assert.ok(json<CoverageJson>(root, "check", "coverage", "--json").unclaimed.length >= 400);
+
+  // `wikipoke key --json` is read by the ingest skill over a pipe too, a page at a line.
+  for (let i = 0; i < 400; i++) page(root, `components/${"x".repeat(150)}-${i}.md`, { sources: ["src/cli.js"] });
+  const keys = wikipoke(root, "key", "--json").out;
+  assert.ok(keys.length > 65536, `${keys.length} bytes`);
+  assert.equal((JSON.parse(keys) as unknown[]).length, 402);
+});
+
+test("a sources_key that cannot answer leaves the page unjudged rather than stale for ever", () => {
+  const { clone, gone } = squashMerged();
+  // A typo in the key would never match anything the sources hash to: trusting it would pin the
+  // page to "stale" however often it was re-read, which is the one thing this must not do.
+  const body = read(clone, "wiki/components/billing.md");
+  put(clone, "wiki/components/billing.md", body.replace(/sources_key: .*/, "sources_key: ffff"));
+  const typo = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(typo.stale, []);
+  assert.match(typo.skipped[0]?.reason ?? "", new RegExp(`unknown sha: ${gone}, and \`sources_key: ffff\` is not a content key`));
+
+  // Nor is a page git cannot hash — a submodule under its sources — evidence that the code moved.
+  put(clone, "wiki/components/billing.md", body);
+  const dep = mkdtempSync(join(tmpdir(), "wikipoke-dep-"));
+  git(dep, "init", "-q");
+  git(dep, "config", "user.email", "test@example.com");
+  git(dep, "config", "user.name", "test");
+  put(dep, "index.js", "export const dep = 1;\n");
+  git(dep, "add", "-A");
+  git(dep, "commit", "-qm", "dep");
+  git(clone, "-c", "protocol.file.allow=always", "submodule", "add", "-q", dep, "src/billing/dep");
+  const withSub = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.deepEqual(withSub.stale, [], "a submodule under the sources is not a change to them");
+  assert.ok(withSub.fresh.includes("components/billing") || withSub.skipped.length === 1);
+  assert.doesNotMatch(wikipoke(clone, "key", "components/billing").out, /could not be hashed/);
 });
 
 test("a citation is moved from the commit that wrote it, not from synced:", () => {
@@ -883,6 +1161,24 @@ test("--against leaves the checkout out: uncommitted and untracked files are sta
   assert.deepEqual(there.stale, []);
   assert.equal(there.repo.status, "current");
   assert.equal(wikipoke(root, "check", "drift", "--against", "HEAD").out, "", "silent when current, as the hooks expect");
+});
+
+test("--against judges a squashed page by its sources on the ref, and leaves the inbox out", () => {
+  const { clone } = squashMerged();
+  // Edited here, not committed: the working tree moved, the ref did not.
+  put(clone, "src/billing/invoice.js", "export const total = 3;\n");
+  put(clone, "wiki/.inbox/2026-10-13-a-choice.md", "---\ndecided_by: agent\n---\nA note.\n");
+  const here = json<DriftJson>(clone, "check", "drift", "--json");
+  assert.equal(here.stale.find((s) => s.id === "components/billing")?.by, "sources_key");
+  assert.equal(here.pending.length, 1);
+
+  const there = json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json");
+  assert.ok(there.fresh.includes("components/billing"), "the key is hashed from the ref's tree, not the checkout");
+  assert.deepEqual(there.pending, [], "the inbox lives in this working copy, not in the ref");
+
+  git(clone, "commit", "-qam", "invoices change again");
+  const moved = json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json");
+  assert.equal(moved.stale.find((s) => s.id === "components/billing")?.by, "sources_key", "and stale once the ref holds the change");
 });
 
 test("--against fails on a ref that is not a commit, and on a check that is not drift", () => {

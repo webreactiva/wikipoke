@@ -4,8 +4,11 @@ type: concept
 responsibility: Why most of wikipoke's behaviour lives in Markdown templates that no code ever reads.
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
+  - templates/CONVENTIONS.md
   - src/lib/install.ts
-synced: e3139d1
+  - src/lib/lint.ts
+synced: 7526c5e
+generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -21,7 +24,7 @@ That has a concrete consequence the project states as a rule in
 and read-only. A feature that needs judgement is a paragraph, not a function.
 
 It also explains a smaller rule that looks like style and is not: templates are plain files copied
-as they are, never strings built in code (`src/lib/install.ts:85` is the entire rendering engine — one
+as they are, never strings built in code (`src/lib/install.ts:104` is the entire rendering engine — one
 `replaceAll` of `{{WIKI}}`). A skill kept as a string is a skill nobody diffs, nobody reviews as
 prose, and nobody can open in the repository to see what their agent was told.
 
@@ -39,3 +42,32 @@ sees when it decides whether to reach for one. The query skill's first descripti
 does X work" and "where does Y live", and an agent with the wiki installed opened it in 3 of 9
 runs on one repository. Widened to any question about how the code behaves (`34f14a3`), it was
 opened in 9 of 9.
+
+The decision capture of `e52be54` is the rule applied end to end. Which decisions are worth a page
+is a judgement, so it is a section of `CONVENTIONS.md` that four pieces of prose point at — the
+`decisions` block in `AGENTS.md`, `wikipoke-implement`, the ingest's drain and, since `3e94960`,
+`wikipoke-decision` — and the only code it got is what a machine can decide: drift counts the
+notes, and `hooks add decisions` checks that the section's heading exists. The bar starts strict,
+and a project moves it by editing a sentence
+([the decision](../decisions/capture-decisions.md)).
+
+Issue #19 proved the rule again from the opposite side: where code had to change, it changed by one
+name in one array. `wikipoke-decision` is 133 lines of Markdown shipped in `3e94960`, and all it
+took in `src/` was joining the `SKILLS` list the installer copies (`src/lib/install.ts:25`).
+Everything else — the new skill, the decision-page keys added to the schema, the `planned:` lens in
+lint — is prose in files the project can diff;
+[the skills page](../components/skills.md) carries the detail.
+
+Issue #20 is the limit case: a behaviour change with no line of `src/` at all. How a page type says
+what goes in it — "Where each type comes from" in `CONVENTIONS.md`, read by the ingest to write and
+seed pages of a type the project added, by lint to ask for that type's missing page, and by query to
+pick the type of an answer offered to file — shipped in `ecc7b09` as prose pointing at prose: a
+section the project owns, three skills that read it, and no code beyond the checker that already read
+the types table.
+
+Issue #5 is the rule with a foot in each world. Telling a re-check apart from a rewrite — which of
+`generated:`/`verified:` a pass stamps — is judgement, so it is prose: the marking paragraph in the
+ingest skill (`templates/skills/wikipoke-ingest/SKILL.md:38`), one line in each of the other three
+skills, and the four-case table in CONVENTIONS.md (`templates/CONVENTIONS.md:192`). The only `src/`
+change, `6f2b5f6`, is the deterministic half: 25 lines of lint that check a `{ by, at }` trust
+map's shape (`src/lib/lint.ts:289`).
