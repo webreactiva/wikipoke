@@ -103,7 +103,7 @@ function seed(root: string, wiki = "wiki"): void {
 interface DriftJson {
   against?: string;
   pending: string[];
-  repo: { status: string; commits?: number; files?: number; last?: string };
+  repo: { status: string; commits?: number; files?: number; last?: string; fallback?: string };
   stale: { id: string; by: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
   skipped: { id: string; reason: string }[];
@@ -115,7 +115,7 @@ interface CoverageJson {
 }
 interface LintJson {
   errors: { page?: string; message: string }[];
-  warnings: { page?: string; message: string }[];
+  warnings: { page?: string; message: string; squash?: true }[];
   lastDeepLint: string | null;
 }
 
@@ -125,7 +125,7 @@ interface LintJson {
  * survives in the repository that wrote it, so only a fresh clone shows what the rest of the team
  * sees. Returns the clone and the sha the page still names.
  */
-function squashMerged(options: { key?: boolean; thenEdit?: string } = {}): { clone: string; gone: string } {
+function squashMerged(options: { key?: boolean; thenEdit?: string; checkpoint?: boolean } = {}): { clone: string; gone: string } {
   const root = repo();
   seed(root);
   const trunk = git(root, "rev-parse", "--abbrev-ref", "HEAD");
@@ -140,6 +140,9 @@ function squashMerged(options: { key?: boolean; thenEdit?: string } = {}): { clo
     ...(options.key === false ? {} : { key: keyOf(root, "components/billing") }),
     body: "Back to [the map](../architecture.md).",
   });
+  // A reconcile pass also advances the checkpoint, to the same branch commit (#31).
+  if (options.checkpoint)
+    put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
   git(root, "commit", "-qam", "wiki: reconcile billing");
 
   git(root, "checkout", "-q", trunk);
@@ -916,13 +919,47 @@ test("lint warns about a citation that lands on the end of a block", () => {
   assert.deepEqual(cites, ["`src/cli.js:3` lands on `}`, the end of a block: the code moved"]);
 });
 
-test("a checkpoint that is not a commit is shown in full, since its first characters may be right", () => {
+test("a checkpoint that is not a commit, which no commit ever wrote, is broken and shown in full", () => {
+  // Its first characters may be right: a hand-typed sha. Uncommitted, so nothing stands in for it.
   const root = repo();
-  seed(root);
+  wikipoke(root, "init");
   const head = git(root, "rev-parse", "HEAD");
   const invented = head.slice(0, 7) + "0".repeat(33);
   put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: invented }));
-  assert.match(wikipoke(root, "check", "drift").out, new RegExp(`checkpoint points at ${invented}, which is not a commit here`));
+  assert.match(wikipoke(root, "check", "drift").out, new RegExp(`broken.*checkpoint points at ${invented}, which is not a commit here`));
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").repo, { status: "unknown-checkpoint", last: invented });
+  assert.equal(wikipoke(root, "check", "drift", "--strict").code, 1);
+});
+
+test("a checkpoint a squash merge threw away is measured from the commit that wrote it, and --strict passes (#31)", () => {
+  // The bug #31 reports: a pass on a branch stamps page and checkpoint, the branch is squashed.
+  const { clone, gone } = squashMerged({ checkpoint: true });
+  const trunk = git(clone, "rev-parse", "--abbrev-ref", "HEAD");
+  const squash = git(clone, "rev-parse", "HEAD");
+  const last = (JSON.parse(read(clone, "wiki/.wikipoke-state.json")) as { last_indexed_commit: string }).last_indexed_commit;
+  assert.ok(last.startsWith(gone) && !json<DriftJson>(clone, "check", "drift", "--json").skipped.length);
+
+  for (const ref of [[], ["--against", `origin/${trunk}`]]) {
+    const drift = json<DriftJson>(clone, "check", "drift", ...ref, "--json");
+    assert.deepEqual(drift.repo, { status: "current", last, commits: 0, files: 0, fallback: squash }, "the squash commit wrote it");
+    const { code, out } = wikipoke(clone, "check", ...ref, "--strict");
+    assert.equal(code, 0, out);
+    assert.match(out, new RegExp(`checkpoint ${last} is not a commit here.*measuring since ${squash.slice(0, 7)}.*wikipoke-ingest`));
+    assert.doesNotMatch(out, /broken/);
+  }
+  // Still a warning, in --json and in the report: debt the next pass clears, never a failure.
+  const lint = json<LintJson>(clone, "check", "lint", "--json");
+  assert.match(lint.warnings.map((w) => w.message).join("\n"), /squash or rebase merge/);
+  assert.equal(lint.warnings.find((w) => /squash or rebase merge/.test(w.message))?.squash, true, "marked, so --strict can leave it out");
+  assert.match(wikipoke(clone, "check", "lint").out, /warn.*squash or rebase merge/);
+  assert.equal(wikipoke(clone, "check", "lint", "--strict").code, 0);
+
+  // Code lands after the squash: behind, counted from the fallback.
+  put(clone, "src/cli.js", "console.log('bye');\n");
+  git(clone, "commit", "-qam", "say bye");
+  const behind = json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json").repo;
+  assert.deepEqual(behind, { status: "behind", last, commits: 1, files: 1, fallback: squash });
+  assert.match(wikipoke(clone, "check", "drift").out, new RegExp(`behind.*1 commit\\(s\\).*since ${squash.slice(0, 7)}`));
 });
 
 test("a squash merge blinds drift and fails lint on a page that carries no content key", () => {

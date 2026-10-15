@@ -61,12 +61,14 @@ interface WikiRead {
 
 /**
  * The repository axis. The four states are exclusive, and only the last two know a commit count:
- * without a usable checkpoint there is nothing to count from.
+ * without a usable checkpoint there is nothing to count from. `fallback`, when present, is the
+ * commit counted from instead of `last`, which is not a commit here: the newest commit that wrote
+ * the checkpoint file, after a squash or rebase merge the merge itself.
  */
 export type RepoAxis =
   | { status: "no-checkpoint" }
   | { status: "unknown-checkpoint"; last: string }
-  | { status: "current" | "behind"; last: string; commits: number; files: number };
+  | { status: "current" | "behind"; last: string; commits: number; files: number; fallback?: string };
 
 /**
  * A citation whose line the code moved since it was written. `now` is where that line sits in the
@@ -312,13 +314,30 @@ function lineNow(hunks: Hunk[], line: number): number | null {
 function repoAxis(root: string, wikiDir: string, { state, ignore }: WikiRead, ref = "HEAD"): RepoAxis {
   const last = state?.last_indexed_commit;
   if (!last) return { status: "no-checkpoint" };
-  if (!commitExists(root, last)) return { status: "unknown-checkpoint", last };
+  let since = last;
+  if (!commitExists(root, last)) {
+    const file = `${relative(root, wikiDir).split(sep).join(posix.sep)}/${STATE_FILE}`;
+    since = gitOrNull(root, ["log", "-1", "--format=%H", ref, "--", file])?.trim() ?? "";
+    if (!since) return { status: "unknown-checkpoint", last };
+  }
+  const fallback = since === last ? {} : { fallback: since };
 
-  const commits = commitsSince(root, last, ref);
-  if (!commits) return { status: "current", last, commits: 0, files: 0 };
+  const commits = commitsSince(root, since, ref);
+  if (!commits) return { status: "current", last, commits: 0, files: 0, ...fallback };
 
-  const files = indexableChanges(root, wikiDir, `${last}..${ref}`, ignore).length;
-  return { status: files ? "behind" : "current", last, commits, files };
+  const files = indexableChanges(root, wikiDir, `${since}..${ref}`, ignore).length;
+  return { status: files ? "behind" : "current", last, commits, files, ...fallback };
+}
+
+/** Information, never a finding: the line saying which commit stood in for a lost checkpoint. */
+export function fallbackLine(res: DriftResult): string | null {
+  const { repo } = res;
+  if (repo.status !== "current" && repo.status !== "behind") return null;
+  if (!repo.fallback) return null;
+  return (
+    `${color.dim("repo")}      checkpoint ${repo.last} is not a commit here (squash or rebase merge?): ` +
+    `measuring since ${shortSha(repo.fallback)}, the last commit that wrote it ${color.dim("-> the next wikipoke-ingest re-stamps it")}`
+  );
 }
 
 /** Human report. Silent when everything is current: the hooks depend on it. */
@@ -331,7 +350,7 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     found++;
     console.log(
       `${color.yellow("behind")}    repo — ${res.repo.commits} commit(s) not indexed ` +
-        `(${res.repo.files} code file(s)) ${upTo(shortSha(res.repo.last))} ` +
+        `(${res.repo.files} code file(s)) ${upTo(shortSha(res.repo.fallback ?? res.repo.last))} ` +
         color.dim("-> wikipoke-ingest"),
     );
   } else if (res.repo.status === "unknown-checkpoint") {

@@ -372,7 +372,8 @@ wikipoke check lint         # is the wiki internally sound?
 wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
-Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI), `-v` (every file).
+Flags: `--json` (for the skills), `--strict` (exit 1 on any finding, for CI, but the squash
+warning below), `-v` (every file).
 `--against <ref>` measures drift on a commit instead of the working tree, so every branch gets the
 same answer: use it to ask "is the wiki true for main?", for example in CI on main. Everything is
 read from that commit, a page's `sources_key:` included, and the inbox, which no commit holds, is
@@ -380,7 +381,10 @@ left out.
 
 - **drift**: staleness on both axes, plus the decision notes waiting in `.inbox/` (`pending`),
   which never fail a plain run and are never seen by CI, since the inbox is not committed. Repository: commits since `last_indexed_commit`, minus
-  `.wikipokeignore`. Page: whether any of its sources changed since its own `synced`. It compares
+  `.wikipokeignore`. When that commit is gone, because a pass on a branch was squash- or
+  rebase-merged, it counts from the newest commit that wrote `.wikipoke-state.json` (the merge
+  itself) and says so in one line that fails nothing; only a checkpoint no commit ever wrote is
+  broken. Page: whether any of its sources changed since its own `synced`. It compares
   against the working tree, so uncommitted edits count. When `synced` names a commit this
   repository no longer has — what a squash or rebase merge leaves behind — it compares
   `sources_key:` against what those sources hash to now instead: it still says stale or fresh, but
@@ -401,7 +405,9 @@ left out.
   `index.md` first stops telling pages apart.
 
 A plain run fails only on lint errors, a broken wiki. Staleness and coverage are debt. The line on
-the last deep lint pass is information: it fails nothing, not even with `--strict`.
+the last deep lint pass is information: it fails nothing, not even with `--strict`. Neither does the
+warning about a `synced:` a squash or rebase merge threw away while `sources_key:` still answers:
+`--json` keeps it in `warnings`, marked `"squash": true`, and the next pass re-stamps it.
 
 ## The signal
 

@@ -222,6 +222,12 @@ index.md · log.md entry · advance .wikipoke-state.json to HEAD (after the chec
    checkpoint), `pending[]` (the inbox notes, drained above) and `stale[]` (the pages
    whose sources changed since their own `synced:`). Nothing stale and the repository
    current (the notes were drained above): **say so and stop**; do not invent work.
+   When `repo` carries `fallback`, the checkpoint names a commit a squash or rebase
+   merge threw away (a pass that ran on a branch), and drift counted from `fallback`
+   instead: the last commit that wrote `.wikipoke-state.json`, after a squash the
+   squash itself. Use it as the checkpoint for this pass and seal as usual: step 7
+   re-stamps `last_indexed_commit` to HEAD on main, and every page you re-read gets
+   `synced:` and `sources_key:` again. Never copy the missing sha anywhere.
 2. **Read the diff, not the repository.** For each stale page, read only its own
    diff: `git diff <its synced> HEAD -- <its sources>`. Anything in `skipped[]` has
    a broken contract; fix that first.

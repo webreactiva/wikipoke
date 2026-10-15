@@ -552,6 +552,10 @@ wikipoke key [<page>...]    # what each page's sources hash to now, for its `sou
 same from any branch: `wikipoke check --against origin/main --strict` in CI on main. Drift reads
 both the code and the wiki (pages, checkpoint, `.wikipokeignore`) from the ref; lint and coverage,
 which `check --against` also runs, still read the checkout.
+That recipe holds after a squash or rebase merge of a branch that ran a pass. The checkpoint then
+names a commit main does not have, so drift counts from the merge, the last commit that wrote
+`.wikipoke-state.json`, and says so in one line. The pages it re-stamped warn that their `synced:`
+is gone, and `--strict` does not fail on that warning: it is debt the next pass on main clears.
 A plain run exits 1 only on lint errors. Pending decision notes never fail it, and CI never
 sees them: the inbox is not committed.
 

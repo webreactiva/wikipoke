@@ -9,7 +9,8 @@
 //   wikipoke atlas [--port <n>] [--out <dir>]  the wiki in a browser, live or as a static site
 //   wikipoke uninstall                    skills and hooks out; the wiki stays
 //
-// `check` exits 1 on lint errors (a broken wiki), or on any finding at all with --strict.
+// `check` exits 1 on lint errors (a broken wiki), or on any finding with --strict but the squash
+// warnings a squash or rebase merge leaves.
 // Staleness and coverage are debt, not breakage: they do not fail a plain run. The days since the
 // last deep lint pass are information, and fail nothing.
 import { existsSync, readFileSync } from "node:fs";
@@ -66,7 +67,8 @@ const HELP = `wikipoke: a code wiki that agents maintain
                                from this commit, not the working tree: is the wiki true for main,
                                from any branch (CI on main). lint and coverage still read the checkout
       --json                   machine-readable, for the skills
-      --strict                 exit 1 on any finding (CI)
+      --strict                 exit 1 on any finding (CI), but the warning a squash or
+                               rebase merge leaves on re-stamped pages, which is debt
       -v, --verbose            list every file instead of a summary
   wikipoke key [<page>...]     the content key each page's sources: hash to right now, to copy
                                into its \`sources_key:\`. Every page when none is named. It is what
@@ -374,6 +376,9 @@ if (command === "key") {
       : ran.name === "coverage"
         ? ran.result.unclaimed.length
         : ran.result.errors.length + ran.result.warnings.length;
+  // What --strict fails on: every finding but the squash warnings, which only the merge style made.
+  const strictFindings = (ran: Ran): number =>
+    countFindings(ran) - (ran.name === "lint" ? ran.result.warnings.filter((w) => w.squash).length : 0);
 
   const reportOne = (ran: Ran, opts: ReportOptions): void => {
     if (ran.name === "drift") drift.report(ran.result, opts);
@@ -398,6 +403,10 @@ if (command === "key") {
   }
 
   // Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
+  // A checkpoint a squash threw away is said whenever drift runs, until the next pass re-stamps it.
+  const driftResult = results.find((ran) => ran.name === "drift")?.result as DriftResult | undefined;
+  const fallback = driftResult && drift.fallbackLine(driftResult);
+  if (!flags.json && fallback) console.log(fallback);
   // `check` and `check lint` say it; `check drift` never does: the notifier runs it, and a current
   // wiki keeps it silent.
   if (!flags.json && names.includes("lint")) {
@@ -408,6 +417,7 @@ if (command === "key") {
   const errors = lintResult?.errors.length ?? 0;
   // Not process.exit(): on a pipe stdout is written asynchronously, and exiting at once cuts a large
   // `--json` off at the pipe's buffer, 64 KB, which is exactly the output a skill parses.
-  process.exitCode = flags.strict ? (total ? 1 : 0) : errors ? 1 : 0;
+  const failing = results.reduce((sum, ran) => sum + strictFindings(ran), 0);
+  process.exitCode = flags.strict ? (failing ? 1 : 0) : errors ? 1 : 0;
 
 }
