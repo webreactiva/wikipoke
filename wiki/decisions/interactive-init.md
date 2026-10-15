@@ -7,6 +7,7 @@ sources:
   - src/lib/prompts.ts
   - scripts/build.ts
 synced: ee3921c
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
 related:
   - ../flows/install.md
   - ./typescript-two-ways.md
@@ -82,5 +83,6 @@ These become part of what users and scripts depend on once released:
 Three independent reviews ran before the merge: one against the issue, one exploratory test of the
 packed tarball in a pseudo-terminal, one of the code and the packaging. They caught the silent move
 of the wiki, the hints lost at narrow widths, the exit code 0 on a cancel, and the stack trace on a
-failed write, all fixed before merging. One finding was left out on purpose: `chooseWiki()` accepts
-`.git`, `node_modules/x` or `~/x`. That predates this change and `--dir` shares it.
+failed write, all fixed before merging. One finding was left out on purpose, because it predated this change and `--dir` shared it:
+`chooseWiki()` accepted `.git`, `node_modules/x` or `~/x`. It refuses all three since `450cac0` and
+`98bb026`, `node_modules/x` because git ignores it ([the shared machinery](../components/lib.md)).

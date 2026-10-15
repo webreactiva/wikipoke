@@ -7,14 +7,15 @@ sources:
   - src/bin/wikipoke.ts
 synced: d7a7356
 sources_key: 72cb02f8063e
-generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
   - ./notify-never-write.md
 ---
 
-**Decision.** The three skills write the wiki; `wikipoke check` only measures. No publish step, no
+**Decision.** The skills write the wiki — three when 0.2 drew this line; of the six now, four write
+pages, `wikipoke-implement` writes only inbox notes and `wikipoke-agents` nothing in the wiki; `wikipoke check` only measures. No publish step, no
 staging area, no writer lock, no completeness seal.
 
 **The discarded alternative was built and shipped.** Version 0.1, on this repository's `main`

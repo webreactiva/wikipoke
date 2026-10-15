@@ -7,7 +7,7 @@ sources:
   - templates/CONVENTIONS.md
 synced: d7a7356
 sources_key: cb5d3d1b9512
-generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -81,8 +81,9 @@ claiming it takes it off the list the next pass reads.
 Seeding also tailors `.wikipokeignore` in both directions, which is the step most easily done
 half-way. The starting list ignores `*.md`, and in a repository whose product is prose — prompts,
 skills, agent instructions, a spec — that hides exactly what should be documented; a `!` line
-brings it back. This wiki is the case in point: the three `SKILL.md` files and `CONVENTIONS.md`
-under `templates/` are most of what wikipoke is, and the generic rule had hidden all four.
+brings it back. This wiki is the case in point: the `SKILL.md` files and `CONVENTIONS.md` under
+`templates/` — three skills when it was seeded, six now — are most of what wikipoke is, and the
+generic rule had hidden all of them.
 
 Choosing `sources:` follows one more list since `072403d`: the "Never a source" files in
 `CONVENTIONS.md`, lock files by default, which change with most commits and would mark a page stale

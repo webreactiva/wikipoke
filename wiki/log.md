@@ -17,6 +17,7 @@
   - templates (not the wiki): the lint skill says "seven lenses" and lists eight.
   - wording: CONVENTIONS "the newest commit that wrote that same checkpoint" is what drift does
     whenever the state file is committed; an uncommitted edit stays broken on purpose.
+  - The three critical ones were fixed on a yes, `generated:` re-stamped, `synced:` left alone.
   - trivia: decisions/own-viewer.md has no final newline; its index line says "instead of" where
     the page says "rather than".
 
