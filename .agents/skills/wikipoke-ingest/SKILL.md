@@ -100,7 +100,8 @@ each note ──► clears the bar in CONVENTIONS.md "Decisions worth recording"
    uncommitted changes, ask the person to commit first, or leave the note for the next pass:
    `synced:` has to name a commit that holds the code the page describes.
 3. **Write the page** with the template: `sources:` the files the decision constrains, so drift
-   flags it when they change; `synced:` is `git rev-parse --short HEAD`; `related:` and inbound links
+   flags it when they change; `synced:` is `git rev-parse --short HEAD`, and `sources_key:` comes
+   from `wikipoke key` at the end of the pass; `related:` and inbound links
    to the components and flows it touches, found by reading the wiki; `reversible:` carried
    over from the note as `true` or `false`, and `decided_by:` too. The discarded alternative and why
    is the body's centre. Superseding a page follows "Decisions worth recording" in CONVENTIONS.md.

@@ -96,16 +96,19 @@ compare what the code does with what the person said.
   write it into `AGENTS.md`, and write the page, which keeps the why, once that file exists. A
   decision page always has `sources:`; without them drift cannot tell when it stops being true.
 
-If a file you will list has uncommitted changes, ask the person to commit first: `synced:` has to
-name a commit that holds the code the page describes.
+If `git status --porcelain -- <sources>` prints anything (changes or new untracked files), ask the
+person to commit first: `synced:` has to name a commit that holds the code the page describes, and
+`sources_key:` hashes untracked files too.
 
 ## 5. Show the draft
 
 Show the person, in one message:
 
 - the page as it will be written, frontmatter included: `type: decision`, `decided_by: person`,
-  `synced:` from `git rev-parse --short HEAD`, `generated:` as `{ by: <you>, at: <now> }` (you
-  wrote the page; `decided_by:` says who took the decision), `reversible:` `true` or `false` when it is clear
+  `synced:` from `git rev-parse --short HEAD`, `sources_key:` filled in §6 from
+  `wikipoke key <page>`, run once the page is written, never a placeholder (it is what keeps the
+  page checkable after a squash merge, and `CONVENTIONS.md` explains it), `generated:` as
+  `{ by: <you>, at: <now> }` (you wrote the page; `decided_by:` says who took the decision), `reversible:` `true` or `false` when it is clear
   from what the decision constrains (leave it out rather than ask), `planned: true` when §4 said
   so, `related:` the pages from §3;
 - the other changes, each in one line: the pages that gain a link to it, the old page that is
@@ -121,10 +124,11 @@ Write nothing until the person says yes. A change they ask for goes into a new d
 
 ## 6. Write, check, log
 
-On the yes: write the page and the other changes, add the page to `index.md` under `decision`,
-and add a `* **wikipoke-decision**: …` entry to `log.md` naming the page and whether it is new,
-extended or supersedes another, in the shape "State and log" gives. Run `wikipoke check lint`
-and fix what it reports on the pages you touched.
+On the yes: write the page, copy what `wikipoke key <page>` prints into its `sources_key:` (leave
+the field out if it prints no key: "its sources could not be hashed"), write the other changes,
+add the page to `index.md` under `decision`, and add a `* **wikipoke-decision**: …` entry to
+`log.md` naming the page and whether it is new, extended or supersedes another, in the shape
+"State and log" gives. Run `wikipoke check lint` and fix what it reports on the pages you touched.
 
 Do not touch `.wikipoke-state.json`: the checkpoint means every commit is reflected, and one
 decision page says nothing about that. Do not touch `wiki/.inbox/` either: its notes are the

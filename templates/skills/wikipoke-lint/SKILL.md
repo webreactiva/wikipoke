@@ -90,7 +90,7 @@ Also read the wiki **as a body of text**: the pages, not the code. Scope it with
 5. **Fix nothing without a yes**, except trivia (a broken link, a missing `index.md`
    line, an obviously wrong `type:`), and only with `--fix-trivial`. A fix to a claim
    writes `generated:` (`{ by: <you>, at: <now> }`, see "The one template" in
-   `CONVENTIONS.md`) and leaves `synced:` alone; a link or a typo writes neither. List those
+   `CONVENTIONS.md`) and leaves `synced:` and `sources_key:` alone; a link or a typo writes neither. List those
    apart from the proposals.
 6. **Log a `--deep` pass** at the top of today's heading in `{{WIKI}}/log.md`
    (newest first, one `## YYYY-MM-DD` per day; if the log still has the old
