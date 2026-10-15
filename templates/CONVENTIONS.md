@@ -199,9 +199,9 @@ tabs. wikipoke reads a quoted value the same, and `wikipoke check lint` warns ab
 
   | What the pass did | What changes |
   | --- | --- |
-  | Wrote the page, or rewrote claims after reading the code | `generated:` and `synced:` |
-  | Read the code again, and the page was still true (citations re-pointed included) | `verified:` and `synced:`; `generated:` stays |
-  | Fixed a claim without reading the code again (a lint fix) | `generated:`; `synced:` stays, since nothing was re-read |
+  | Wrote the page, or rewrote claims after reading the code | `generated:`, `synced:` and `sources_key:` |
+  | Read the code again, and the page was still true (citations re-pointed included) | `verified:`, `synced:` and `sources_key:`; `generated:` stays |
+  | Fixed a claim without reading the code again (a lint fix) | `generated:`; `synced:` and `sources_key:` stay, since nothing was re-read |
   | Fixed a link, a typo or the wording | nothing |
 
   A page without them is still valid: they start with the next pass that touches it.
