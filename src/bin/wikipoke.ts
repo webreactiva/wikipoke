@@ -403,10 +403,6 @@ if (command === "key") {
   }
 
   // Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
-  // A checkpoint a squash threw away is said whenever drift runs, until the next pass re-stamps it.
-  const driftResult = results.find((ran) => ran.name === "drift")?.result as DriftResult | undefined;
-  const fallback = driftResult && drift.fallbackLine(driftResult);
-  if (!flags.json && fallback) console.log(fallback);
   // `check` and `check lint` say it; `check drift` never does: the notifier runs it, and a current
   // wiki keeps it silent.
   if (!flags.json && names.includes("lint")) {

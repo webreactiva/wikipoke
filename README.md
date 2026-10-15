@@ -547,15 +547,18 @@ wikipoke check lint         # fields, types, links, citations, dead and over-bro
 wikipoke key [<page>...]    # what each page's sources hash to now, for its `sources_key:`
 ```
 
-`--json` for the skills, `--strict` to exit 1 on any finding (CI), `-v` to list every file.
+`--json` for the skills, `--strict` to exit 1 on any finding but the squash warning below (CI),
+`-v` to list every file.
 `--against <ref>` measures drift on that commit instead of your working tree, so the answer is the
 same from any branch: `wikipoke check --against origin/main --strict` in CI on main. Drift reads
 both the code and the wiki (pages, checkpoint, `.wikipokeignore`) from the ref; lint and coverage,
 which `check --against` also runs, still read the checkout.
 That recipe holds after a squash or rebase merge of a branch that ran a pass. The checkpoint then
-names a commit main does not have, so drift counts from the merge, the last commit that wrote
-`.wikipoke-state.json`, and says so in one line. The pages it re-stamped warn that their `synced:`
-is gone, and `--strict` does not fail on that warning: it is debt the next pass on main clears.
+names a commit main does not have, so drift counts from the merge, the last commit that wrote that
+checkpoint, and says so once main moves past it. CI needs the full history for that
+(`fetch-depth: 0`): a shallow clone reports the checkpoint as broken. The pages the pass re-stamped
+warn that their `synced:` is gone, and `--strict` does not fail on that warning: it is debt the
+next reconcile pass clears by re-reading those pages against the code.
 A plain run exits 1 only on lint errors. Pending decision notes never fail it, and CI never
 sees them: the inbox is not committed.
 

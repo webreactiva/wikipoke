@@ -139,7 +139,7 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
           level: "warn",
           message:
             `\`synced: ${meta.synced}\` is not a commit in this repository, which is what a squash or rebase merge leaves behind: ` +
-            "`sources_key:` answers instead, so drift still judges this page. The next pass re-stamps both.",
+            "`sources_key:` answers instead, so drift still judges this page. The next reconcile pass re-reads it and re-stamps both.",
           page: page.id,
           squash: true,
         });

@@ -103,7 +103,7 @@ function seed(root: string, wiki = "wiki"): void {
 interface DriftJson {
   against?: string;
   pending: string[];
-  repo: { status: string; commits?: number; files?: number; last?: string; fallback?: string };
+  repo: { status: string; commits?: number; files?: number; last?: string; fallback?: string; shallow?: true };
   stale: { id: string; by: string; files: string[]; citations: { raw: string; now: number | null }[] }[];
   moved: { id: string; citations: { raw: string; now: number | null }[] }[];
   skipped: { id: string; reason: string }[];
@@ -919,10 +919,11 @@ test("lint warns about a citation that lands on the end of a block", () => {
   assert.deepEqual(cites, ["`src/cli.js:3` lands on `}`, the end of a block: the code moved"]);
 });
 
-test("a checkpoint that is not a commit, which no commit ever wrote, is broken and shown in full", () => {
-  // Its first characters may be right: a hand-typed sha. Uncommitted, so nothing stands in for it.
+test("a checkpoint that is not a commit is broken and shown in full, since its first characters may be right", () => {
+  // Typed by hand over a committed one: the commit that wrote the file names another sha, so it
+  // cannot stand in for this one.
   const root = repo();
-  wikipoke(root, "init");
+  seed(root);
   const head = git(root, "rev-parse", "HEAD");
   const invented = head.slice(0, 7) + "0".repeat(33);
   put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: invented }));
@@ -942,9 +943,9 @@ test("a checkpoint a squash merge threw away is measured from the commit that wr
   for (const ref of [[], ["--against", `origin/${trunk}`]]) {
     const drift = json<DriftJson>(clone, "check", "drift", ...ref, "--json");
     assert.deepEqual(drift.repo, { status: "current", last, commits: 0, files: 0, fallback: squash }, "the squash commit wrote it");
+    assert.equal(wikipoke(clone, "check", "drift", ...ref).out, "", "current: the notifier stays silent");
     const { code, out } = wikipoke(clone, "check", ...ref, "--strict");
     assert.equal(code, 0, out);
-    assert.match(out, new RegExp(`checkpoint ${last} is not a commit here.*measuring since ${squash.slice(0, 7)}.*wikipoke-ingest`));
     assert.doesNotMatch(out, /broken/);
   }
   // Still a warning, in --json and in the report: debt the next pass clears, never a failure.
@@ -954,12 +955,29 @@ test("a checkpoint a squash merge threw away is measured from the commit that wr
   assert.match(wikipoke(clone, "check", "lint").out, /warn.*squash or rebase merge/);
   assert.equal(wikipoke(clone, "check", "lint", "--strict").code, 0);
 
-  // Code lands after the squash: behind, counted from the fallback.
+  // Code lands after the squash: behind, counted from the fallback, and the line says why.
   put(clone, "src/cli.js", "console.log('bye');\n");
   git(clone, "commit", "-qam", "say bye");
   const behind = json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json").repo;
   assert.deepEqual(behind, { status: "behind", last, commits: 1, files: 1, fallback: squash });
-  assert.match(wikipoke(clone, "check", "drift").out, new RegExp(`behind.*1 commit\\(s\\).*since ${squash.slice(0, 7)}`));
+  const short = squash.slice(0, 7);
+  assert.match(
+    wikipoke(clone, "check", "drift").out,
+    new RegExp(`behind.*1 commit\\(s\\).*since ${short}.*\\n.*checkpoint ${last.slice(0, 7)} is not a commit here.*counted since ${short}, the last commit that wrote it`),
+  );
+  assert.match(wikipoke(clone, "check", "drift", "--against", "HEAD").out, new RegExp(`counted ${short}\\.\\.HEAD`));
+});
+
+test("a shallow clone never stands a commit in for a lost checkpoint, and says to fetch the history", () => {
+  // Its grafted root wrote every file it holds, the checkpoint included: it would read as current.
+  const { clone } = squashMerged({ checkpoint: true });
+  const shallow = mkdtempSync(join(tmpdir(), "wikipoke-shallow-"));
+  execFileSync("git", ["clone", "-q", "--depth", "1", `file://${clone}`, shallow], { stdio: "pipe" });
+  const last = (JSON.parse(read(shallow, "wiki/.wikipoke-state.json")) as { last_indexed_commit: string }).last_indexed_commit;
+  assert.deepEqual(json<DriftJson>(shallow, "check", "drift", "--json").repo, { status: "unknown-checkpoint", last, shallow: true });
+  const { code, out } = wikipoke(shallow, "check", "drift", "--strict");
+  assert.equal(code, 1);
+  assert.match(out, /broken.*shallow clone: fetch the full history \(fetch-depth: 0\)/);
 });
 
 test("a squash merge blinds drift and fails lint on a page that carries no content key", () => {
