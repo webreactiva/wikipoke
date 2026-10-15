@@ -245,11 +245,13 @@ export function trackedFiles(root: string): string[] {
 /**
  * Every file in the working tree git would index: tracked, plus untracked ones nothing ignores.
  * The same universe `changedSince` reports over, so a page's content key moves exactly when its
- * page axis would have.
+ * page axis would have. A tracked symlink (mode 120000) is left out by its mode, not by `lstat`:
+ * with `core.symlinks=false` git checks one out as a plain file, and `treeBlobs` drops it either way.
  */
 export function workingFiles(root: string): string[] {
+  const tracked = (gitOrNull(root, ["ls-files", "-s", "-z"]) ?? "").split("\0").filter((e) => e && !e.startsWith("120000 "));
   const untracked = gitOrNull(root, ["ls-files", "--others", "--exclude-standard"]);
-  return [...new Set([...trackedFiles(root), ...lines(untracked)])].sort();
+  return [...new Set([...tracked.map((e) => e.slice(e.indexOf("\t") + 1)), ...lines(untracked)])].sort();
 }
 
 /**

@@ -1262,8 +1262,16 @@ test("a committed symlink under a page's sources keys the same in the checkout a
   // A synced commit nobody has, so drift judges the page by its key alone.
   page(root, "components/linked.md", { sources: ["src"], synced: "0000000" });
   page(root, "components/linked.md", { sources: ["src"], synced: "0000000", key: keyOf(root, "components/linked") });
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "page");
   const there = json<DriftJson>(root, "check", "drift", "--against", "HEAD", "--json");
   assert.ok(there.fresh.includes("components/linked"), "the tree drops the symlink, so the working tree must too");
+
+  // Where git cannot make links (Windows, core.symlinks=false) it checks one out as a plain file.
+  const clone = mkdtempSync(join(tmpdir(), "wikipoke-"));
+  git(tmpdir(), "clone", "-q", "-c", "core.symlinks=false", root, clone);
+  assert.equal(keyOf(clone, "components/linked"), keyOf(root, "components/linked"), "dropped by its git mode, not by lstat");
+  assert.ok(json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json").fresh.includes("components/linked"));
 });
 
 test("--against fails on a ref that is not a commit, and on a check that is not drift", () => {
