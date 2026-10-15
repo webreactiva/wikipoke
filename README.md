@@ -562,9 +562,9 @@ lint      last deep pass: never -> wikipoke-lint --deep
 ```
 
 This line is information: it fails nothing, not even with `--strict`. `--json` gives the day as
-`lint.lastDeepLint` (`null` for never). `check drift`, and so the notifier, prints the line only
-when the pass is more than 30 days old. With no pass at all, the 30 days count from the first day
-in the log, so a freshly seeded wiki is not due.
+`lint.lastDeepLint` (`null` for never). It turns yellow when the pass is more than 30 days old; with
+no pass at all, the 30 days count from the first day in the log, so a freshly seeded wiki is not
+due. `check drift` never prints it, so the notifier stays silent on a current wiki.
 
 ## `wikipoke atlas`
 

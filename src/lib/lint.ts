@@ -236,7 +236,7 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
   };
 }
 
-/** Past this many days without a deep pass, `check drift`, and so the notifier, says so. */
+/** Past this many days without a deep pass, `check` shows the line in yellow. `check drift` never prints it. */
 export const DEEP_PASS_DAYS = 30;
 
 /** How long since the wikipoke-lint skill last read the pages, as `log.md` records it. */

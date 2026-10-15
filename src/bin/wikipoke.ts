@@ -61,7 +61,7 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke hooks remove <name>...
   wikipoke check [lint|drift|coverage]...
                                lint also says how long since the last wikipoke-lint --deep pass
-                               in log.md, and drift says it past ${lint.DEEP_PASS_DAYS} days. That line fails nothing
+                               in log.md, yellow past ${lint.DEEP_PASS_DAYS} days. That line fails nothing
       --against <ref>          drift compares with this commit, not the working tree: is the
                                wiki true for main, from any branch (CI on main)
       --json                   machine-readable, for the skills
@@ -395,12 +395,11 @@ if (command === "key") {
   }
 
   // Information, never a finding: it is not in `total`, so it moves no exit code, not even --strict.
-  // `check` and `check lint` always say it; `check drift`, which the notifier runs, only once the pass
-  // is overdue, so a current wiki stays silent there.
-  if (!flags.json && (names.includes("lint") || names.includes("drift"))) {
+  // `check` and `check lint` say it; `check drift` never does: the notifier runs it, and a current
+  // wiki keeps it silent.
+  if (!flags.json && names.includes("lint")) {
     const logPath = join(wikiPath, "log.md");
-    const pass = lint.deepPass(existsSync(logPath) ? readFileSync(logPath, "utf8") : "");
-    if (names.includes("lint") || pass.due) console.log(lint.deepPassLine(pass));
+    console.log(lint.deepPassLine(lint.deepPass(existsSync(logPath) ? readFileSync(logPath, "utf8") : "")));
   }
 
   const errors = lintResult?.errors.length ?? 0;
