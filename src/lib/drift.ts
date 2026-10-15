@@ -15,33 +15,49 @@
 //
 // All three compare with the working tree, uncommitted work included: the question of the person
 // making a change. `--against <ref>` compares with a commit instead, the question a team asks of
-// the branch it shares, and gets the same answer from any checkout.
+// the branch it shares, and gets the same answer from any checkout: the wiki is read from the ref
+// too, pages, checkpoint and `.wikipokeignore`, so a branch's re-stamped pages do not answer for it.
 import { join, posix, relative, sep } from "node:path";
 
-import type { CheckContext, LoadedPage, ReportOptions } from "./lib.ts";
+import type { CheckContext, IgnoreRules, LoadedPage, ReportOptions, State } from "./lib.ts";
 import {
   asList,
+  blobTexts,
   changedSince,
   color,
   commitExists,
   KEY_SHAPE,
   commitsSince,
   gitOrNull,
+  ignoreLines,
+  ignoreRules,
+  IGNORE_FILE,
   inboxNotes,
   INBOX_DIR,
   indexableChanges,
   listPages,
   matchesAny,
+  NON_PAGES,
   pageCitations,
+  parseFrontmatter,
+  parseState,
   readPage,
   readState,
   shortSha,
   sourcePatterns,
   sourcesKey,
   sourcesKeyAt,
+  STATE_FILE,
   treeBlobs,
   workingFiles,
 } from "./lib.ts";
+
+/** What drift reads of the wiki: from the working tree, or all of it from the `--against` ref. */
+interface WikiRead {
+  pages: LoadedPage[];
+  state: State | null;
+  ignore: IgnoreRules;
+}
 
 /**
  * The repository axis. The four states are exclusive, and only the last two know a commit count:
@@ -112,11 +128,16 @@ export interface DriftOptions {
 }
 
 export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions = {}): DriftResult {
-  const repo = repoAxis(root, wikiDir, against);
+  // One `git ls-tree` for the whole run: the ref's wiki, its content keys and its directories.
+  let tree: Map<string, string> | undefined;
+  const treeAt = (ref: string): Map<string, string> => (tree ??= treeBlobs(root, ref));
+  // Never the checkout's wiki for a question about a ref, not even when the ref has none.
+  const wiki = against ? wikiAt(root, wikiDir, treeAt(against)) : wikiHere(wikiDir);
+  const { pages } = wiki;
+  const repo = repoAxis(root, wikiDir, wiki, against);
   // The inbox lives in this working copy only: a question about a commit has no notes in it.
   const inbox = relative(root, join(wikiDir, INBOX_DIR)).split(sep).join(posix.sep);
   const pending = against ? [] : inboxNotes(wikiDir).map((note) => `${inbox}/${note}`);
-  const pages = listPages(wikiDir).map(readPage);
 
   // One `git diff` per distinct sha, not one per page; one per sha and cited file for the lines.
   const cache = new Map<string, string[]>();
@@ -134,8 +155,6 @@ export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions =
   // Two `git ls-files` for the whole run, and only in a wiki that has a page to judge by content.
   let files: string[] | undefined;
   const working = (): string[] => (files ??= workingFiles(root));
-  let tree: Map<string, string> | undefined;
-  const treeAt = (ref: string): Map<string, string> => (tree ??= treeBlobs(root, ref));
 
   const stale: StalePage[] = [];
   const moved: MovedPage[] = [];
@@ -171,9 +190,9 @@ export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions =
       else fresh.push(page.id);
       continue;
     }
-    const patterns = sourcePatterns(meta, root);
+    const patterns = sourcePatterns(meta, root, against ? treeAt(against) : undefined);
     const files = changesFor(synced).filter((f) => matchesAny(f, patterns));
-    const citations = movedCitations(root, wikiDir, page, changesFor, hunksFor);
+    const citations = movedCitations(root, wikiDir, page, changesFor, hunksFor, against);
     if (files.length) stale.push({ id: page.id, synced, by: "synced", files, citations });
     else {
       fresh.push(page.id);
@@ -182,6 +201,33 @@ export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions =
   }
 
   return { ...(against ? { against } : {}), repo, pending, stale, moved, skipped, fresh, pages: pages.length };
+}
+
+function wikiHere(wikiDir: string): WikiRead {
+  return { pages: listPages(wikiDir).map(readPage), state: readState(wikiDir), ignore: ignoreRules(wikiDir) };
+}
+
+/**
+ * The wiki as commit `ref` holds it, out of its tree and one `git cat-file --batch`. The pages are
+ * the ones `listPages` would find there: `.md`, no dot-named folder or file, none of the non-pages.
+ */
+function wikiAt(root: string, wikiDir: string, tree: Map<string, string>): WikiRead {
+  const prefix = `${relative(root, wikiDir).split(sep).join(posix.sep)}/`;
+  const ids = new Map<string, string>();
+  for (const [path, id] of tree) if (path.startsWith(prefix)) ids.set(path.slice(prefix.length), id);
+  const texts = blobTexts(root, [...new Set(ids.values())]);
+  const text = (rel: string): string | undefined => texts.get(ids.get(rel) ?? "");
+
+  const pages = [...ids.keys()]
+    .filter((rel) => rel.endsWith(".md") && !NON_PAGES.has(rel) && !rel.split("/").some((part) => part.startsWith(".")))
+    .map((rel) => {
+      const raw = text(rel) ?? "";
+      const { data, body } = parseFrontmatter(raw);
+      return { id: rel.replace(/\.md$/, ""), rel, path: join(wikiDir, rel), meta: data, body, raw };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const state = text(STATE_FILE);
+  return { pages, state: state === undefined ? null : parseState(state), ignore: ignoreRules(wikiDir, ignoreLines(text(IGNORE_FILE) ?? "")) };
 }
 
 /**
@@ -197,11 +243,12 @@ function movedCitations(
   page: LoadedPage,
   changesFor: (sha: string) => string[],
   hunksFor: (sha: string, path: string) => Hunk[],
+  ref?: string,
 ): MovedCitation[] {
   const citations = pageCitations(page.body, page.rel, wikiDir, root);
   if (!citations.length) return [];
   const lines = page.raw.split("\n");
-  const origins = blame(root, relative(root, page.path));
+  const origins = blame(root, relative(root, page.path), ref);
   const moved: MovedCitation[] = [];
   for (const cite of citations) {
     // ponytail: dates the line, not the number — an edit elsewhere on the line re-dates the
@@ -214,9 +261,9 @@ function movedCitations(
   return moved;
 }
 
-/** The commit that last wrote each line of a file, or null for a line not committed yet. */
-function blame(root: string, path: string): (string | null)[] {
-  const out = gitOrNull(root, ["blame", "--porcelain", "--", path]) ?? "";
+/** The commit that last wrote each line of a file, or null for a line not committed yet. As of `ref`, with one. */
+function blame(root: string, path: string, ref?: string): (string | null)[] {
+  const out = gitOrNull(root, ["blame", "--porcelain", ...(ref ? [ref] : []), "--", path]) ?? "";
   const origins: (string | null)[] = [];
   for (const m of out.matchAll(/^([0-9a-f]{40}) \d+ (\d+)/gm))
     origins[Number(m[2]) - 1] = /^0+$/.test(m[1] as string) ? null : (m[1] as string);
@@ -254,15 +301,15 @@ function lineNow(hunks: Hunk[], line: number): number | null {
   return line + shift;
 }
 
-function repoAxis(root: string, wikiDir: string, ref = "HEAD"): RepoAxis {
-  const last = readState(wikiDir)?.last_indexed_commit;
+function repoAxis(root: string, wikiDir: string, { state, ignore }: WikiRead, ref = "HEAD"): RepoAxis {
+  const last = state?.last_indexed_commit;
   if (!last) return { status: "no-checkpoint" };
   if (!commitExists(root, last)) return { status: "unknown-checkpoint", last };
 
   const commits = commitsSince(root, last, ref);
   if (!commits) return { status: "current", last, commits: 0, files: 0 };
 
-  const files = indexableChanges(root, wikiDir, `${last}..${ref}`).length;
+  const files = indexableChanges(root, wikiDir, `${last}..${ref}`, ignore).length;
   return { status: files ? "behind" : "current", last, commits, files };
 }
 
@@ -285,7 +332,9 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     console.log(`${color.red("broken")}    repo — the checkpoint points at ${res.repo.last}, which is not a commit here`);
   } else if (res.repo.status === "no-checkpoint") {
     found++;
-    console.log(`${color.red("broken")}    repo — no checkpoint yet ${color.dim("-> wikipoke-ingest")}`);
+    // On a ref, ingest here cannot fix it: name the commit that holds no checkpoint, or no wiki.
+    if (res.against) console.log(`${color.red("broken")}    repo — ${res.against} holds no checkpoint`);
+    else console.log(`${color.red("broken")}    repo — no checkpoint yet ${color.dim("-> wikipoke-ingest")}`);
   }
 
   if (res.pending.length) {

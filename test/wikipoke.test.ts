@@ -1279,6 +1279,46 @@ test("a committed symlink under a page's sources keys the same in the checkout a
   assert.ok(json<DriftJson>(clone, "check", "drift", "--against", "HEAD", "--json").fresh.includes("components/linked"));
 });
 
+test("--against reads the wiki from the ref too: a branch's re-stamped pages and checkpoint do not answer for main (#32)", () => {
+  const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+  const root = repo({ "src/billing/invoice.js": lines(10) });
+  seed(root);
+  const main = git(root, "rev-parse", "--abbrev-ref", "HEAD");
+  page(root, "components/billing.md", { body: "Total: `src/billing/invoice.js:5`. [map](../architecture.md)" });
+  git(root, "commit", "-qam", "cite");
+  // Main moves on: the billing page is stale there, its citation moved.
+  put(root, "src/billing/invoice.js", "a\nb\nc\n" + lines(10));
+  git(root, "commit", "-qam", "three lines on top");
+  const onMain = json<DriftJson>(root, "check", "drift", "--json");
+  assert.deepEqual(onMain.stale.map((s) => s.id), ["components/billing"]);
+
+  // A pass on a branch re-reads it, re-points the citation and re-stamps page and checkpoint.
+  git(root, "switch", "-qc", "feature");
+  page(root, "components/billing.md", { body: "Total: `src/billing/invoice.js:8`. [map](../architecture.md)" });
+  put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
+  git(root, "commit", "-qam", "wiki pass");
+  assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").stale, [], "current on the branch");
+
+  const { against, ...fromBranch } = json<DriftJson>(root, "check", "drift", "--against", main, "--json");
+  assert.equal(against, main);
+  assert.deepEqual(fromBranch, onMain, "the same answer as on main itself");
+});
+
+test("--against on a ref with no checkpoint says so and never reads the checkout's", () => {
+  const root = repo();
+  seed(root);
+  git(root, "switch", "-qc", "bare");
+  git(root, "rm", "-q", "wiki/.wikipoke-state.json");
+  git(root, "commit", "-qm", "no checkpoint");
+  git(root, "switch", "-q", "-");
+
+  assert.equal(json<DriftJson>(root, "check", "drift", "--json").repo.status, "current", "the checkout has one");
+  assert.equal(json<DriftJson>(root, "check", "drift", "--against", "bare", "--json").repo.status, "no-checkpoint");
+  const { code, out } = wikipoke(root, "check", "drift", "--against", "bare", "--strict");
+  assert.equal(code, 1);
+  assert.match(out, /repo — bare holds no checkpoint/);
+});
+
 test("--against fails on a ref that is not a commit, and on a check that is not drift", () => {
   const root = repo();
   seed(root);

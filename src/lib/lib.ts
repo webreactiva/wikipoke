@@ -309,7 +309,7 @@ export function sourcesKey(root: string, meta: Frontmatter | null, universe?: st
  */
 export function sourcesKeyAt(root: string, meta: Frontmatter | null, tree: Map<string, string>): string | null {
   if (!asList(meta?.sources).length) return null;
-  const patterns = sourcePatterns(meta, root);
+  const patterns = sourcePatterns(meta, root, tree);
   const files = [...tree.keys()].filter((f) => matchesAny(f, patterns)).sort();
   return keyOf(files, files.map((f) => tree.get(f) as string));
 }
@@ -322,6 +322,36 @@ export function treeBlobs(root: string, ref: string): Map<string, string> {
     if (m) blobs.set(m[2] as string, m[1] as string);
   }
   return blobs;
+}
+
+/**
+ * The text of each blob, by id, in one `git cat-file --batch`. The sizes it prints are bytes, so
+ * the output is cut as a Buffer and decoded record by record: one accented page cut as a string
+ * would shift every record after it.
+ */
+export function blobTexts(root: string, ids: string[]): Map<string, string> {
+  const texts = new Map<string, string>();
+  if (!ids.length) return texts;
+  const out = execFileSync("git", ["cat-file", "--batch"], {
+    cwd: root,
+    input: `${ids.join("\n")}\n`,
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  for (let at = 0; at < out.length; ) {
+    const eol = out.indexOf(10, at);
+    if (eol === -1) break;
+    const [id, kind, size] = out.toString("utf8", at, eol).split(" ");
+    // `<id> missing` has no body to skip.
+    if (kind === "missing" || size === undefined) {
+      at = eol + 1;
+      continue;
+    }
+    const end = eol + 1 + Number(size);
+    texts.set(id as string, out.toString("utf8", eol + 1, end));
+    at = end + 1;
+  }
+  return texts;
 }
 
 function keyOf(files: string[], ids: string[]): string {
@@ -352,10 +382,10 @@ function blobIds(root: string, files: string[]): string[] | null {
  * order-independent — every `!` line wins over every plain one — because these are git pathspecs
  * applied in two passes, not gitignore rules read top to bottom.
  */
-export function ignoreRules(wikiDir: string): IgnoreRules {
+export function ignoreRules(wikiDir: string, lines: string[] = readIgnore(wikiDir)): IgnoreRules {
   const excludes: string[] = [];
   const includes: string[] = [];
-  for (const line of readIgnore(wikiDir)) {
+  for (const line of lines) {
     if (!line.startsWith("!")) excludes.push(line);
     else if (line.slice(1).trim()) includes.push(line.slice(1).trim());
   }
@@ -372,8 +402,7 @@ export function ignoreSpecs(wikiDir: string): string[] {
  * lines bring back. Git does the matching in both passes, so one pathspec dialect decides
  * everything: a plain `*` crosses directories, exactly as the ignore file says it does.
  */
-function indexablePaths(root: string, wikiDir: string, args: string[]): string[] {
-  const { excludes, includes } = ignoreRules(wikiDir);
+function indexablePaths(root: string, args: string[], { excludes, includes }: IgnoreRules): string[] {
   const kept = lines(gitOrNull(root, [...args, "--", ".", ...excludes.map((p) => `:(exclude)${p}`)]));
   if (!includes.length) return kept;
   const back = lines(gitOrNull(root, [...args, "--", ...includes]));
@@ -382,12 +411,12 @@ function indexablePaths(root: string, wikiDir: string, args: string[]): string[]
 
 /** Tracked files minus wiki/.wikipokeignore: what coverage and the repo axis are measured against. */
 export function indexableFiles(root: string, wikiDir: string): string[] {
-  return indexablePaths(root, wikiDir, ["ls-files"]);
+  return indexablePaths(root, ["ls-files"], ignoreRules(wikiDir));
 }
 
-/** Files changed in a git range, filtered the same way: the repo axis of drift. */
-export function indexableChanges(root: string, wikiDir: string, range: string): string[] {
-  return indexablePaths(root, wikiDir, ["diff", "--name-only", range]);
+/** Files changed in a git range, filtered the same way: the repo axis of drift. `rules` from a ref, under `--against`. */
+export function indexableChanges(root: string, wikiDir: string, range: string, rules: IgnoreRules = ignoreRules(wikiDir)): string[] {
+  return indexablePaths(root, ["diff", "--name-only", range], rules);
 }
 
 /**
@@ -404,15 +433,25 @@ export function ignoredFiles(root: string, wikiDir: string): string[] {
 export function readIgnore(wikiDir: string): string[] {
   const file = join(wikiDir, IGNORE_FILE);
   if (!existsSync(file)) return [];
-  return readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  return ignoreLines(readFileSync(file, "utf8"));
+}
+
+/** `.wikipokeignore`'s text as its rules, comments and blank lines dropped. */
+export function ignoreLines(text: string): string[] {
+  return text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
 }
 
 /** The repository checkpoint: { version, last_indexed_commit }. */
 export function readState(wikiDir: string): State | null {
   const file = join(wikiDir, STATE_FILE);
   if (!existsSync(file)) return null;
+  return parseState(readFileSync(file, "utf8"));
+}
+
+/** A checkpoint's text, or null when it does not parse: a broken one is no checkpoint. */
+export function parseState(text: string): State | null {
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as State;
+    return JSON.parse(text) as State;
   } catch {
     return null;
   }
@@ -527,7 +566,10 @@ export function inboxNotes(wikiDir: string): string[] {
     .sort();
 }
 
-/** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */
+/**
+ * Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. Regular
+ * files only, as a ref's tree gives them to `check drift --against`: a symlinked page is no page.
+ */
 export function listPages(wikiDir: string): Page[] {
   const out: Page[] = [];
   const walk = (dir: string): void => {
@@ -536,7 +578,7 @@ export function listPages(wikiDir: string): Page[] {
       if (entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith(".md")) {
+      else if (entry.isFile() && entry.name.endsWith(".md")) {
         const rel = relative(wikiDir, full).split(sep).join(posix.sep);
         if (NON_PAGES.has(rel)) continue;
         out.push({ id: rel.replace(/\.md$/, ""), rel, path: full });
@@ -610,11 +652,17 @@ export function asList(value: FrontmatterValue | undefined): string[] {
   return Array.isArray(value) ? value : [value];
 }
 
-/** A wildcard-free source pointing at a directory means `dir/**`. */
-export function normalizeSource(source: string, root: string): string {
+/**
+ * A wildcard-free source pointing at a directory means `dir/**`. With `tree` (`treeBlobs` of a
+ * ref), a directory of that commit, not of the checkout.
+ */
+export function normalizeSource(source: string, root: string, tree?: Map<string, string>): string {
   if (/[*?]/.test(source)) return source;
+  const dir = `${source.replace(/\/$/, "")}/`;
+  // shortcut: scans the whole tree per source, fine for thousands of files; a set of directories if a monorepo is slow.
+  if (tree) return [...tree.keys()].some((f) => f.startsWith(dir)) ? `${dir}**` : source;
   const full = join(root, source);
-  if (existsSync(full) && statSync(full).isDirectory()) return `${source.replace(/\/$/, "")}/**`;
+  if (existsSync(full) && statSync(full).isDirectory()) return `${dir}**`;
   return source;
 }
 
@@ -661,8 +709,8 @@ export function matchesAny(file: string, patterns: RegExp[]): boolean {
 }
 
 /** Compiled matchers for one page's `sources:`. */
-export function sourcePatterns(meta: Frontmatter | null, root: string): RegExp[] {
-  return asList(meta?.sources).map((s) => globToRegExp(normalizeSource(s, root)));
+export function sourcePatterns(meta: Frontmatter | null, root: string, tree?: Map<string, string>): RegExp[] {
+  return asList(meta?.sources).map((s) => globToRegExp(normalizeSource(s, root, tree)));
 }
 
 /**
