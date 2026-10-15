@@ -355,9 +355,10 @@ each skill from its heading into its entry, without changing what they say.
 
 `wikipoke check` reads the log for one more thing: the day of the newest `wikipoke-lint --deep`
 entry, in either shape. A plain `wikipoke-lint` entry does not count, because it reads no page. It
-prints `last deep pass: 41 days ago`, or `never`, and fails nothing. Past 30 days, `check drift`
-prints it too. With no deep pass, the 30 days count from the oldest day in the log, so a wiki
-seeded this month is not due.
+prints `last deep pass: 41 days ago`, or `never`, and fails nothing. Past 30 days it is due and
+shows in yellow. With no deep pass, the 30 days count from the oldest day in the log, so a wiki
+seeded this month is not due. `check drift` never prints it: the notifier runs drift, and stays
+silent on a current wiki.
 
 ## Health checks
 
@@ -405,7 +406,7 @@ the last deep lint pass is information: it fails nothing, not even with `--stric
 ## The signal
 
 `{{WIKI}}/.wikipoke-hook.sh` runs `drift`, prints nothing when the wiki is current, and never
-fails. It also says when the last deep lint pass is more than 30 days old (see "State and log"). It leaves coverage out on purpose: that backlog is meant to outlive every pass, and a
+fails. It leaves the last deep lint pass to `check` (see "State and log"), and coverage out on purpose: that backlog is meant to outlive every pass, and a
 notifier that repeats it on every commit and every session start is never silent, so it gets
 muted before it has anything new to say. Hooks that run it are optional, installed only on
 request with `wikipoke hooks add <name>` (`wikipoke hooks` lists them):
