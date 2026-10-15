@@ -128,11 +128,8 @@ export interface DriftOptions {
 }
 
 export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions = {}): DriftResult {
-  // One `git ls-tree` for the whole run: the ref's wiki, its content keys and its directories.
-  let tree: Map<string, string> | undefined;
-  const treeAt = (ref: string): Map<string, string> => (tree ??= treeBlobs(root, ref));
   // Never the checkout's wiki for a question about a ref, not even when the ref has none.
-  const wiki = against ? wikiAt(root, wikiDir, treeAt(against)) : wikiHere(wikiDir);
+  const wiki = against ? wikiAt(root, wikiDir, against) : wikiHere(wikiDir);
   const { pages } = wiki;
   const repo = repoAxis(root, wikiDir, wiki, against);
   // The inbox lives in this working copy only: a question about a commit has no notes in it.
@@ -155,6 +152,9 @@ export function run({ root, wikiDir }: CheckContext, { against }: DriftOptions =
   // Two `git ls-files` for the whole run, and only in a wiki that has a page to judge by content.
   let files: string[] | undefined;
   const working = (): string[] => (files ??= workingFiles(root));
+  // The whole ref's tree, once, and only for a page's sources: the wiki is read on its own.
+  let tree: Map<string, string> | undefined;
+  const treeAt = (ref: string): Map<string, string> => (tree ??= treeBlobs(root, ref));
 
   const stale: StalePage[] = [];
   const moved: MovedPage[] = [];
@@ -208,26 +208,34 @@ function wikiHere(wikiDir: string): WikiRead {
 }
 
 /**
- * The wiki as commit `ref` holds it, out of its tree and one `git cat-file --batch`. The pages are
- * the ones `listPages` would find there: `.md`, no dot-named folder or file, none of the non-pages.
+ * The wiki as commit `ref` holds it, out of one `git ls-tree` of the wiki and one
+ * `git cat-file --batch`. The pages are the ones `listPages` would find there: `.md`, no
+ * dot-named folder or file, none of the non-pages.
  */
-function wikiAt(root: string, wikiDir: string, tree: Map<string, string>): WikiRead {
+function wikiAt(root: string, wikiDir: string, ref: string): WikiRead {
   const prefix = `${relative(root, wikiDir).split(sep).join(posix.sep)}/`;
   const ids = new Map<string, string>();
-  for (const [path, id] of tree) if (path.startsWith(prefix)) ids.set(path.slice(prefix.length), id);
-  const texts = blobTexts(root, [...new Set(ids.values())]);
+  // shortcut: treeBlobs drops symlinks (mode 120000), so a symlinked page is skipped under --against
+  // only; read its target if anyone keeps symlinked pages.
+  for (const [path, id] of treeBlobs(root, ref, prefix)) ids.set(path.slice(prefix.length), id);
+  const rels = [...ids.keys()].filter(
+    (rel) => rel.endsWith(".md") && !NON_PAGES.has(rel) && !rel.split("/").some((part) => part.startsWith(".")),
+  );
+  const wanted = [...rels, STATE_FILE, IGNORE_FILE].map((rel) => ids.get(rel)).filter((id) => id !== undefined);
+  const texts = blobTexts(root, [...new Set(wanted)]);
   const text = (rel: string): string | undefined => texts.get(ids.get(rel) ?? "");
 
-  const pages = [...ids.keys()]
-    .filter((rel) => rel.endsWith(".md") && !NON_PAGES.has(rel) && !rel.split("/").some((part) => part.startsWith(".")))
+  const pages = rels
     .map((rel) => {
       const raw = text(rel) ?? "";
       const { data, body } = parseFrontmatter(raw);
       return { id: rel.replace(/\.md$/, ""), rel, path: join(wikiDir, rel), meta: data, body, raw };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
-  const state = text(STATE_FILE);
-  return { pages, state: state === undefined ? null : parseState(state), ignore: ignoreRules(wikiDir, ignoreLines(text(IGNORE_FILE) ?? "")) };
+  const stateText = text(STATE_FILE);
+  const state = stateText === undefined ? null : parseState(stateText);
+  const ignore = ignoreRules(wikiDir, ignoreLines(text(IGNORE_FILE) ?? ""));
+  return { pages, state, ignore };
 }
 
 /**

@@ -314,10 +314,16 @@ export function sourcesKeyAt(root: string, meta: Frontmatter | null, tree: Map<s
   return keyOf(files, files.map((f) => tree.get(f) as string));
 }
 
-/** Every regular file in commit `ref`, with its blob id: no submodules and no symlinks, as `isFile`. */
-export function treeBlobs(root: string, ref: string): Map<string, string> {
+/**
+ * Every regular file in commit `ref`, or under `path` in it, with its blob id: no submodules and no
+ * symlinks, as `isFile`. `ref` is a commit the caller checked, so a failing `ls-tree` (a tree too big
+ * for the buffer) is an error: read as an empty tree it would say the ref holds no wiki.
+ */
+export function treeBlobs(root: string, ref: string, path?: string): Map<string, string> {
+  const out = gitOrNull(root, ["ls-tree", "-r", "-z", ref, ...(path ? ["--", path] : [])]);
+  if (out === null) throw new Error(`git ls-tree -r ${ref}${path ? ` -- ${path}` : ""} failed`);
   const blobs = new Map<string, string>();
-  for (const entry of (gitOrNull(root, ["ls-tree", "-r", "-z", ref]) ?? "").split("\0")) {
+  for (const entry of out.split("\0")) {
     const m = /^100(?:644|755) blob ([0-9a-f]+)\t([^]*)$/.exec(entry);
     if (m) blobs.set(m[2] as string, m[1] as string);
   }
@@ -566,10 +572,7 @@ export function inboxNotes(wikiDir: string): string[] {
     .sort();
 }
 
-/**
- * Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. Regular
- * files only, as a ref's tree gives them to `check drift --against`: a symlinked page is no page.
- */
+/** Every page under wiki/, excluding the non-page files. `id` is the path without `.md`. */
 export function listPages(wikiDir: string): Page[] {
   const out: Page[] = [];
   const walk = (dir: string): void => {
@@ -578,7 +581,7 @@ export function listPages(wikiDir: string): Page[] {
       if (entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith(".md")) {
+      else if (entry.name.endsWith(".md")) {
         const rel = relative(wikiDir, full).split(sep).join(posix.sep);
         if (NON_PAGES.has(rel)) continue;
         out.push({ id: rel.replace(/\.md$/, ""), rel, path: full });

@@ -1292,9 +1292,10 @@ test("--against reads the wiki from the ref too: a branch's re-stamped pages and
   const onMain = json<DriftJson>(root, "check", "drift", "--json");
   assert.deepEqual(onMain.stale.map((s) => s.id), ["components/billing"]);
 
-  // A pass on a branch re-reads it, re-points the citation and re-stamps page and checkpoint.
+  // A pass on a branch re-reads it, re-points the citation and re-stamps page and checkpoint. The
+  // accents are bytes `cat-file --batch` counts: read as characters, every page after this one shifts.
   git(root, "switch", "-qc", "feature");
-  page(root, "components/billing.md", { body: "Total: `src/billing/invoice.js:8`. [map](../architecture.md)" });
+  page(root, "components/billing.md", { body: "Facturación, ñ y €: `src/billing/invoice.js:8`. [map](../architecture.md)" });
   put(root, "wiki/.wikipoke-state.json", JSON.stringify({ version: 1, last_indexed_commit: git(root, "rev-parse", "HEAD") }));
   git(root, "commit", "-qam", "wiki pass");
   assert.deepEqual(json<DriftJson>(root, "check", "drift", "--json").stale, [], "current on the branch");
@@ -1317,6 +1318,25 @@ test("--against on a ref with no checkpoint says so and never reads the checkout
   const { code, out } = wikipoke(root, "check", "drift", "--against", "bare", "--strict");
   assert.equal(code, 1);
   assert.match(out, /repo — bare holds no checkpoint/);
+});
+
+test("--against from a checkout with no wiki, or an unseeded one, still reads the ref's", () => {
+  const root = repo();
+  const bare = git(root, "rev-parse", "HEAD");
+  seed(root);
+  const main = git(root, "rev-parse", "--abbrev-ref", "HEAD");
+  put(root, "src/billing/tax.js", "export const rate = 0.21;\n");
+  git(root, "commit", "-qam", "tax moves on main");
+
+  git(root, "switch", "-q", "--detach", bare);
+  const drift = json<DriftJson>(root, "check", "drift", "--against", main, "--json");
+  assert.deepEqual(drift.stale.map((s) => s.id), ["components/billing"], "no wiki here at all");
+
+  wikipoke(root, "init");
+  const all = json<{ seeded?: boolean; drift: DriftJson }>(root, "check", "--against", main, "--json");
+  assert.equal(all.seeded, undefined, "not \"unseeded\": the question is about the ref");
+  assert.deepEqual(all.drift.stale.map((s) => s.id), ["components/billing"]);
+  assert.match(wikipoke(root, "check").out, /unseeded/, "without the flag, still the checkout's");
 });
 
 test("--against fails on a ref that is not a commit, and on a check that is not drift", () => {
