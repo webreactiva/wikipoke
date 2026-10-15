@@ -38,11 +38,16 @@ import {
 /** An error breaks the wiki; a warning is debt. Only errors fail a plain `check`. */
 export type Level = "error" | "warn";
 
-/** One thing lint found. `page` is a page id, or undefined for a finding about the wiki itself. */
+/**
+ * One thing lint found. `page` is a page id, or undefined for a finding about the wiki itself.
+ * `squash`: the warning a squash or rebase merge leaves on every re-stamped page. It is reported
+ * like any warning but fails nothing, not even `--strict`: the merge style, not the wiki, made it.
+ */
 export interface Finding {
   level: Level;
   message: string;
   page: string | undefined;
+  squash?: true;
 }
 
 export interface LintResult {
@@ -128,14 +133,16 @@ export function run({ root, wikiDir, wiki }: CheckContext): LintResult {
     if (typeof meta.synced === "string" && meta.synced && !commitExists(root, meta.synced)) {
       // Squash and rebase merges throw away the commit a wiki pass stamped. With a content key the
       // page is still checkable — drift compares the sources themselves — so it is debt, not a
-      // broken wiki, and `check` must not fail the branch that merged.
+      // broken wiki, and `check` must not fail the branch that merged, not even with --strict.
       if (key && KEY_SHAPE.test(key))
-        add(
-          "warn",
-          `\`synced: ${meta.synced}\` is not a commit in this repository, which is what a squash or rebase merge leaves behind: ` +
-            "`sources_key:` answers instead, so drift still judges this page. The next pass re-stamps both.",
-          page.id,
-        );
+        findings.push({
+          level: "warn",
+          message:
+            `\`synced: ${meta.synced}\` is not a commit in this repository, which is what a squash or rebase merge leaves behind: ` +
+            "`sources_key:` answers instead, so drift still judges this page. The next reconcile pass re-reads it and re-stamps both.",
+          page: page.id,
+          squash: true,
+        });
       else add("error", `\`synced: ${meta.synced}\` is not a commit in this repository`, page.id);
     }
 

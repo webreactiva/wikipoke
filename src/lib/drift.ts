@@ -61,12 +61,15 @@ interface WikiRead {
 
 /**
  * The repository axis. The four states are exclusive, and only the last two know a commit count:
- * without a usable checkpoint there is nothing to count from.
+ * without a usable checkpoint there is nothing to count from. `fallback`, when present, is the
+ * commit counted from instead of `last`, which is not a commit here: the newest commit that wrote
+ * this same checkpoint, after a squash or rebase merge the merge itself. `shallow`: a shallow clone,
+ * where no commit can stand in for it.
  */
 export type RepoAxis =
   | { status: "no-checkpoint" }
-  | { status: "unknown-checkpoint"; last: string }
-  | { status: "current" | "behind"; last: string; commits: number; files: number };
+  | { status: "unknown-checkpoint"; last: string; shallow?: true }
+  | { status: "current" | "behind"; last: string; commits: number; files: number; fallback?: string };
 
 /**
  * A citation whose line the code moved since it was written. `now` is where that line sits in the
@@ -312,13 +315,24 @@ function lineNow(hunks: Hunk[], line: number): number | null {
 function repoAxis(root: string, wikiDir: string, { state, ignore }: WikiRead, ref = "HEAD"): RepoAxis {
   const last = state?.last_indexed_commit;
   if (!last) return { status: "no-checkpoint" };
-  if (!commitExists(root, last)) return { status: "unknown-checkpoint", last };
+  let since = last;
+  if (!commitExists(root, last)) {
+    // A shallow clone's grafted root wrote every file it holds, so it would stand in for anything.
+    if (gitOrNull(root, ["rev-parse", "--is-shallow-repository"])?.trim() === "true")
+      return { status: "unknown-checkpoint", last, shallow: true };
+    const file = `${relative(root, wikiDir).split(sep).join(posix.sep)}/${STATE_FILE}`;
+    since = gitOrNull(root, ["log", "-1", "--format=%H", ref, "--", file])?.trim() ?? "";
+    // Only a commit that wrote this very checkpoint stands in for it: an uncommitted typo stays broken.
+    const wrote = since ? parseState(gitOrNull(root, ["show", `${since}:${file}`]) ?? "")?.last_indexed_commit : undefined;
+    if (wrote !== last) return { status: "unknown-checkpoint", last };
+  }
+  const fallback = since === last ? {} : { fallback: since };
 
-  const commits = commitsSince(root, last, ref);
-  if (!commits) return { status: "current", last, commits: 0, files: 0 };
+  const commits = commitsSince(root, since, ref);
+  if (!commits) return { status: "current", last, commits: 0, files: 0, ...fallback };
 
-  const files = indexableChanges(root, wikiDir, `${last}..${ref}`, ignore).length;
-  return { status: files ? "behind" : "current", last, commits, files };
+  const files = indexableChanges(root, wikiDir, `${since}..${ref}`, ignore).length;
+  return { status: files ? "behind" : "current", last, commits, files, ...fallback };
 }
 
 /** Human report. Silent when everything is current: the hooks depend on it. */
@@ -331,13 +345,22 @@ export function report(res: DriftResult, { verbose }: ReportOptions = {}): numbe
     found++;
     console.log(
       `${color.yellow("behind")}    repo — ${res.repo.commits} commit(s) not indexed ` +
-        `(${res.repo.files} code file(s)) ${upTo(shortSha(res.repo.last))} ` +
+        `(${res.repo.files} code file(s)) ${upTo(shortSha(res.repo.fallback ?? res.repo.last))} ` +
         color.dim("-> wikipoke-ingest"),
     );
+    // Only beside a finding: a current wiki keeps the notifier silent, even on a fallback.
+    if (res.repo.fallback)
+      console.log(
+        color.dim(
+          `    checkpoint ${shortSha(res.repo.last)} is not a commit here (squash or rebase merge?): ` +
+            `counted ${upTo(shortSha(res.repo.fallback))}, the last commit that wrote it`,
+        ),
+      );
   } else if (res.repo.status === "unknown-checkpoint") {
     found++;
     // In full: the usual cause is a hand-typed sha whose first seven characters are right.
-    console.log(`${color.red("broken")}    repo — the checkpoint points at ${res.repo.last}, which is not a commit here`);
+    const hint = res.repo.shallow ? ` — a shallow clone: fetch the full history (fetch-depth: 0)` : "";
+    console.log(`${color.red("broken")}    repo — the checkpoint points at ${res.repo.last}, which is not a commit here${hint}`);
   } else if (res.repo.status === "no-checkpoint") {
     found++;
     // On a ref, ingest here cannot fix it: name the commit that holds no checkpoint, or no wiki.
