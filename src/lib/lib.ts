@@ -5,7 +5,7 @@
 // two disagree, CONVENTIONS.md wins and this file gets fixed.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
 /** Where the wiki lives when the repository does not say otherwise. */
@@ -265,10 +265,14 @@ export function sourceFiles(root: string, meta: Frontmatter | null, universe?: s
   return (universe ?? workingFiles(root)).filter((f) => matchesAny(f, patterns) && isFile(join(root, f)));
 }
 
-/** A regular file that is really there: false for a directory, a submodule or a broken symlink. */
+/**
+ * A regular file that is really there: false for a directory, a submodule or any symlink. Not
+ * followed, so a link drops out here exactly as mode 120000 drops out of `treeBlobs`, and the key
+ * of the checkout matches the key of the commit it came from (#33).
+ */
 function isFile(path: string): boolean {
   try {
-    return statSync(path).isFile();
+    return lstatSync(path).isFile();
   } catch {
     return false;
   }
@@ -308,7 +312,7 @@ export function sourcesKeyAt(root: string, meta: Frontmatter | null, tree: Map<s
   return keyOf(files, files.map((f) => tree.get(f) as string));
 }
 
-/** Every regular file in commit `ref`, with its blob id: no submodules and no symlinks, as above. */
+/** Every regular file in commit `ref`, with its blob id: no submodules and no symlinks, as `isFile`. */
 export function treeBlobs(root: string, ref: string): Map<string, string> {
   const blobs = new Map<string, string>();
   for (const entry of (gitOrNull(root, ["ls-tree", "-r", "-z", ref]) ?? "").split("\0")) {
