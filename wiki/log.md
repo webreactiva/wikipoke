@@ -2,6 +2,24 @@
 
 ## 2026-10-15
 
+* **wikipoke-lint --deep**: 10 findings (3 critical) · current and sound after the reconcile; three
+  expired counts and dates outlived 0.4.0, and the content key and the squash fallback, the two
+  biggest design choices since 0.3, still live only inside entity pages.
+  - critical: decisions/interactive-init.md says `chooseWiki()` accepts `.git`, `node_modules/x`
+    and `~/x`; it refuses all three since `450cac0` and `98bb026`, as components/lib.md says.
+  - critical: decisions/cli-read-only.md opens with "the three skills write the wiki"; there are six.
+  - critical: flows/ingest-pass.md says "the three `SKILL.md` files" under `templates/`; there are six.
+  - missing kind: no decision page for the content key over commit distance (#3), nor for the
+    squash fallback checkpoint and its `--strict` exemption (#31).
+  - gap: `src/atlas/web/atlas.css` is claimed by no page; components/atlas.md is synced at `ee3921c`.
+  - density: components/skills.md (~200 lines) and components/checks.md read as changelogs, past
+    two screens each.
+  - templates (not the wiki): the lint skill says "seven lenses" and lists eight.
+  - wording: CONVENTIONS "the newest commit that wrote that same checkpoint" is what drift does
+    whenever the state file is committed; an uncommitted edit stays broken on purpose.
+  - trivia: decisions/own-viewer.md has no final newline; its index line says "instead of" where
+    the page says "rather than".
+
 * **wikipoke-ingest**: reconciled 41 commits since `7526c5e` — the content key (#3), `--against`
   (#7), the deep-pass line (#8) and the five fixes after 0.4.0 (#30–#34). All 17 stale pages
   re-read against their own diffs, re-stamped to `d7a7356` and keyed with `sources_key:` for the
