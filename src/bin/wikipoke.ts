@@ -62,8 +62,9 @@ const HELP = `wikipoke: a code wiki that agents maintain
   wikipoke check [lint|drift|coverage]...
                                lint also says how long since the last wikipoke-lint --deep pass
                                in log.md, yellow past ${lint.DEEP_PASS_DAYS} days. That line fails nothing
-      --against <ref>          drift compares with this commit, not the working tree: is the
-                               wiki true for main, from any branch (CI on main)
+      --against <ref>          drift reads the code and the wiki (pages, checkpoint, .wikipokeignore)
+                               from this commit, not the working tree: is the wiki true for main,
+                               from any branch (CI on main). lint and coverage still read the checkout
       --json                   machine-readable, for the skills
       --strict                 exit 1 on any finding (CI)
       -v, --verbose            list every file instead of a summary
@@ -318,12 +319,14 @@ if (command === "key") {
     process.exit(2);
   }
 
-  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+  const all = !rest.length;
+  // `check drift --against` reads the ref's wiki, so only lint and coverage need one in this checkout.
+  const onlyRef = flags.against !== undefined && !all && rest.every((name) => name === "drift");
+
+  if (!onlyRef && !existsSync(join(wikiPath, "CONVENTIONS.md"))) {
     console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
     process.exit(1);
   }
-
-  const all = !rest.length;
 
   // Before anything runs: a ref that is not there must never read as "nothing changed".
   if (flags.against !== undefined) {
@@ -338,8 +341,8 @@ if (command === "key") {
   }
 
   // Before the first ingest there is nothing to be stale or unsound yet. A check named on purpose
-  // still runs: seeding reads coverage to decide what to ignore.
-  if (all && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
+  // still runs: seeding reads coverage to decide what to ignore. A ref's wiki is not this checkout's.
+  if (all && flags.against === undefined && !existsSync(join(wikiPath, STATE_FILE)) && !listPages(wikiPath).length) {
     // Notes can come before the first page: an agent may implement with the decisions hook on and
     // seed afterwards. The seed drains them, so they are named here rather than lost.
     const pending = inboxNotes(wikiPath).length;
