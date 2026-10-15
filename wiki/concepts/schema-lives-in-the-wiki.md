@@ -5,8 +5,9 @@ responsibility: Why CONVENTIONS.md, a file the project owns and edits, is the au
 sources:
   - templates/CONVENTIONS.md
   - src/lib/lib.ts
-synced: 7526c5e
-generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+synced: d7a7356
+sources_key: 72d383f8961c
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:39:39Z }
 related:
   - ./file-ownership.md
   - ../components/checks.md
@@ -19,7 +20,7 @@ question of authority outright: when the skills or the checks disagree with it, 
 
 That is not only a documentation convention — one part of it is wired up. `pageTypes()` reads the
 valid `type:` values out of the first column of the page-types table in `CONVENTIONS.md`
-(`src/lib/lib.ts:304`), falling back to the defaults only when the file or the table is missing. A
+(`src/lib/lib.ts:471`), falling back to the defaults only when the file or the table is missing. A
 project adds a page type by adding a table row to a file it owns; nothing is recompiled and nothing
 is configured. Retiring a type is deleting the row, after which lint reports every page still
 carrying it.
@@ -33,7 +34,7 @@ entry names, lint asks for such a type's missing page, and query picks the type 
 to file.
 
 Two more sections are read the same way. Since `072403d` lint takes the files it warns about as
-sources from the "Never a source" list (`src/lib/lib.ts:352`): lock files by default, plus whatever
+sources from the "Never a source" list (`src/lib/lib.ts:519`): lock files by default, plus whatever
 the project adds, and an empty list switches the warning off. And since `e52be54` the
 "Decisions worth recording" section is the bar for which decisions agents capture while they
 implement and ingest turns into pages; no code reads it, the `decisions` hook, `wikipoke-implement`
@@ -54,11 +55,19 @@ what an older copy should carry over.
 
 The trust keys joined them in `7526c5e`. `generated:` and `verified:` — who last wrote a page's
 claims and who last confirmed them — are defined under "The one template" in this file
-(`templates/CONVENTIONS.md:181`): one `{ by, at }` map per key, the actor's form, the ISO time with
+(`templates/CONVENTIONS.md:191`): one `{ by, at }` map per key, the actor's form, the ISO time with
 its offset, and the four cases that decide which of the two a pass writes. The skills repeat the
 rule instead of re-deriving it (`templates/skills/wikipoke-ingest/SKILL.md:38`), and the only code
-it got is lint checking the map's shape (`src/lib/lint.ts:283`) — a strict YAML reader must see a
+it got is lint checking the map's shape (`src/lib/lint.ts:331`) — a strict YAML reader must see a
 map there too, so prose owns the meaning and the code owns only the shape.
+
+The key `sources_key:` joined the template in `942d6a6`, with the drift change that judges a page
+once its commit is gone. Its meaning is prose, under "The one template" in this file: the hash its
+sources had at the pass, re-stamped with `synced:`, and taken from `wikipoke key`, never typed. The
+code owns only its shape. `KEY_SHAPE` (`src/lib/lib.ts:180`) is what lint checks it against
+(`src/lib/lint.ts:130`), and a key of any other shape is a warning. `REQUIRED_KEYS` leaves the key
+out on purpose (`src/lib/lib.ts:166`): a wiki written before it must keep passing, and a page without
+one is checked the old way.
 
 The rest of the schema — the five required keys, the two `confidence:` values — is still constants
 in `src/lib/lib.ts`. The direction is clear from the types table, and where the file cannot be read

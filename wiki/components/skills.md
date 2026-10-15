@@ -9,8 +9,9 @@ sources:
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
   - templates/skills/wikipoke-decision/SKILL.md
-synced: 7526c5e
-generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+synced: d7a7356
+sources_key: 8e47fba25bad
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -35,6 +36,14 @@ fresh ones it lists under `moved[]` — before it re-stamps a page.
 `3eb714c` extended the first to `sources:` — a file only named is left for coverage to report, not
 claimed — after a seed listed two files it never opened and hid them from the backlog.
 [The full pass is a flow](../flows/ingest-pass.md).
+
+Since `287f3c4` and `5054844` a reconcile also copes with a checkpoint that a squash merge threw
+away. Drift counts from `fallback`, the last commit that wrote `.wikipoke-state.json`, and the pass
+does not stop as current on that path: it re-reads each page lint flags with `"squash": true`,
+re-stamps it, and seals the checkpoint at HEAD. Before `5054844` a fallback pass with nothing stale
+could still say so and stop. A page whose `synced:` commit is gone has no diff to read, so the pass
+reads its `sources:` as they are now (`ebc7813`). Since `942d6a6` every pass that writes a page ends
+by copying `wikipoke key` into its `sources_key:`.
 
 Since `e52be54` every mode but a seed starts by draining `wiki/.inbox/`: each decision note is
 checked against the project's "Decisions worth recording" bar a second time — a note that bundles
@@ -62,7 +71,7 @@ Since `7526c5e` the pass also says, on each page it touches, what it did: a page
 wrote or rewrote gets `generated:`, one it re-read and found still true gets `verified:` with
 `generated:` left as it is (`templates/skills/wikipoke-ingest/SKILL.md:38`) — the four cases and
 the actor they name are "The one template" in CONVENTIONS.md, and the reconcile re-stamp says which
-of the two it was (`templates/skills/wikipoke-ingest/SKILL.md:244`).
+of the two it was (`templates/skills/wikipoke-ingest/SKILL.md:265`).
 
 Three changes came from running it on a 1,480-file Laravel app through OpenCode. Every pass now
 closes with what it left, in numbers, and the next command to type (`3f36deb`): a seed that stops
@@ -75,7 +84,7 @@ that followed coverage wrote twenty-three module pages and not one decision. Tha
 the skill's own table, closed to the types wikipoke ships; `ecc7b09` made an added page type say what
 goes in it: what a type holds and where its evidence is now lives under "Where each type comes from"
 in `CONVENTIONS.md`, which the skill reads, and a type the project added is seeded from the evidence
-its entry names (`templates/skills/wikipoke-ingest/SKILL.md:164`) — the skill's built-in table stays
+its entry names (`templates/skills/wikipoke-ingest/SKILL.md:166`) — the skill's built-in table stays
 only as a fallback for a copy installed before the section existed. A part can be a topic
 as well as a path, so a flow a review proposed is ingested by name, and the close counts pages by
 type and speaks up when flows are fewer than one per three module pages or a dozen pages hold no
@@ -91,8 +100,8 @@ ask*, which is a better prior than where the index looks thin. It writes only on
 moves the checkpoint. When the answer earns its own page, the type it gets — an added type included —
 is chosen by what "Where each type comes from" in `CONVENTIONS.md` says the type holds
 (`templates/skills/wikipoke-query/SKILL.md:71`), a section the skill reads since `ecc7b09` instead of
-carrying rules of its own. And a filed page is written with `generated:` since `7526c5e`
-(`templates/skills/wikipoke-query/SKILL.md:74`). Its sharpest line is the last one — for inventory questions ("every place we
+carrying rules of its own. And a filed page is written with `generated:` since `7526c5e` and with
+`sources_key:` from `wikipoke key` since `942d6a6` (`templates/skills/wikipoke-query/SKILL.md:76`). Its sharpest line is the last one — for inventory questions ("every place we
 do X"), never accept an answer that rests on the wiki's silence.
 
 How it reads is what makes the wiki cheaper than the code, and `34f14a3` changed it after measuring.
@@ -135,10 +144,13 @@ line exists, not that it still says what the sentence claims. It proposes and do
 reconciling is ingest's job — and
 `--fix-trivial` is the narrow exception for broken links and missing index lines, and since
 `7526c5e` the two fix kinds differ in what they stamp: a claim fix writes `generated:` and leaves
-`synced:`, a link or a typo writes neither (`templates/skills/wikipoke-lint/SKILL.md:92`). Two rules keep it
+`synced:` and `sources_key:` alone, a link or a typo writes neither (`templates/skills/wikipoke-lint/SKILL.md:93`). Two rules keep it
 from generating noise: a finding you cannot back with a page quote or a `path:line` is an opinion,
 and "no findings" is a real outcome. Pending decision notes are debt like staleness, and its fix is
 an ingest before the branch or worktree goes away, since the notes live only in that working copy.
+Since `287f3c4` a `synced:` that a squash merge removed is reported as a warning marked `"squash": true`,
+but only while `sources_key:` still answers. It fails nothing, not even `--strict`, and the next
+reconcile re-stamps the page.
 
 The ingest skill also says what to do when wikipoke itself was upgraded: `wikipoke init`, which
 refreshes the skills and lists the outdated hooks, then ask before updating a hook — never copy the
@@ -154,11 +166,16 @@ not yet (`planned: true`, its `sources:` the files the change will touch), or th
 otherwise — and that last one is the person's call, never the skill's. It writes
 `decided_by: person` at `confidence: high`, shows the whole draft before writing — the draft carries
 `generated:` since `7526c5e`, because the skill wrote the page, while `decided_by:` keeps saying who
-took the decision (`templates/skills/wikipoke-decision/SKILL.md:107`) — touches neither
+took the decision (`templates/skills/wikipoke-decision/SKILL.md:110`) — touches neither
 the checkpoint nor `.inbox/`, and is why the wiki holds
 [the viewer decision](../decisions/own-viewer.md) straight from Daniel. A choice smaller than the
 bar is still recorded when the person asks: the bar governs what agents note on their own, not what
 a person keeps.
+
+Since `66ee604` (#30) the decision skill also writes `sources_key:`, copied from `wikipoke key` after
+the yes and left out when the sources cannot be hashed. `4e96671` made it ask for a commit first
+when `git status` shows changes or untracked files under the sources, because the key hashes
+untracked files too. Before `66ee604` a decision page had no key, so a squash merge left it unjudgeable.
 
 **`wikipoke-implement`**, since `e52be54`, is the one skill that writes code. It implements what
 the person asked for, unchanged, and notes in `wiki/.inbox/` each decision that clears the
@@ -189,8 +206,8 @@ the four as steps of its own workflow — the schema read before anything, the c
 
 - **Never modify code.** The pass touches `wiki/**` and nothing else — running a generator counts.
   A bug found on the way is noted on the page and reported to the person.
-- **Never re-stamp `synced:` without re-reading the page against the code.** That field is the only
-  guarantee the wiki is not lying.
+- **Never re-stamp `synced:` or `sources_key:` without re-reading the page against the code.** Those
+  two fields are the only guarantee the wiki is not lying.
 - **Read `CONVENTIONS.md` first.** The schema lives in the wiki, not in the skill.
 - **Write as you go**, one page at a time. Reading you are not about to turn into a page is spent
   twice.

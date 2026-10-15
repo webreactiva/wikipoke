@@ -5,7 +5,9 @@ responsibility: "The map of wikipoke: who writes the wiki, who only measures it,
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: 6a9925f
+synced: d7a7356
+sources_key: a49aade4d195
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -48,14 +50,15 @@ and its ownership rule in [concepts/file-ownership.md](concepts/file-ownership.m
 **The three checks are read-only and deterministic.** `src/lib/drift.ts` answers "is the wiki
 behind the code?", `src/lib/coverage.ts` "is all the code in the wiki?", and `src/lib/lint.ts` "is
 the wiki internally sound?". They share `src/lib/lib.ts`, which is where git shells out,
-frontmatter is parsed and globs are compiled. Each check exports the same `run(ctx)` /
+frontmatter is parsed, globs are compiled and a page's content key (`sourcesKey`, the value its
+`sources_key:` holds) is hashed. Each check exports the same `run(ctx)` /
 `report(result, opts)` pair, and each returns a different shape.
 
 Until `df4db0e` the CLI kept the three in one object and indexed it by name, which worked because
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
-name (`src/bin/wikipoke.ts:39`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:302`). The uniform `run`/`report` contract is unchanged; what changed is that
+name (`src/bin/wikipoke.ts:42`) — and counting, printing and `--json` each narrow it back
+(`src/bin/wikipoke.ts:362`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
 
 **The atlas shows the wiki and writes only outside it.** `src/atlas/` gathers the pages, their
@@ -68,7 +71,8 @@ check or to atlas, and nowhere else. See [components/atlas.md](components/atlas.
 **`src/bin/wikipoke.ts` is argument parsing and exit codes.** It resolves the repository root and
 the wiki directory, dispatches, and decides what failure means: lint errors fail a plain run, while
 staleness and coverage — which are debt, not breakage — do not. `--strict` makes every finding
-fail, for CI. See [flows/check.md](flows/check.md).
+fail, for CI, except the squash warning a squash or rebase merge leaves: that one is debt too. See
+[flows/check.md](flows/check.md).
 
 ## Where the state lives
 
@@ -84,14 +88,16 @@ v0.2 bundle: `CONVENTIONS.md` carries a `type: schema` frontmatter, `index.md` m
 `okf_version`, and `log.md` is newest first with one heading per day. Nothing here reads the
 bundle as OKF; lint warns about what would stop another tool from doing so. Everything
 else a check needs it derives from git at the moment it runs, so there is no cache to invalidate
-and no lock to hold. [concepts/two-axes-of-staleness.md](concepts/two-axes-of-staleness.md)
+and no lock to hold. `check drift --against <ref>` is the one exception to "the checkout decides":
+the pages, the checkpoint and the ignore list are read from that commit, so a branch's edits do not
+answer for main. [concepts/two-axes-of-staleness.md](concepts/two-axes-of-staleness.md)
 explains the one piece of state that does matter: the checkpoint and each page's `synced:`.
 
 ## Entry points
 
 | Path | What it is |
 | --- | --- |
-| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `atlas`, `uninstall` |
+| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `key`, `atlas`, `uninstall` |
 | `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
 | `src/lib/setup.ts` | `init` when a person is at the terminal: the questions, then `install.ts` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |

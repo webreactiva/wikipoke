@@ -20,7 +20,7 @@ What this repository knows about itself. Start at
 
 ## Components
 
-- [components/cli.md](./components/cli.md) — how `src/bin/wikipoke.ts` dispatches the five commands and what each exit code means.
+- [components/cli.md](./components/cli.md) — how `src/bin/wikipoke.ts` dispatches the six commands and what each exit code means.
 - [components/checks.md](./components/checks.md) — what drift, coverage and lint each decide, and why all three are deterministic and read-only.
 - [components/lib.md](./components/lib.md) — the git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
 - [components/install.md](./components/install.md) — how init, hooks add/remove and uninstall write files without ever taking something the project owns.

@@ -10,7 +10,9 @@ sources:
   - templates/skills/wikipoke-decision/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: 7526c5e
+synced: d7a7356
+sources_key: d85d47234054
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:39:03Z }
 verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
 reversible: true
 related:
@@ -32,12 +34,12 @@ issue #19 (`3e94960`) added a third that skips the inbox, treated below.
 ## One bar, strict, in the project's CONVENTIONS.md
 
 Which decisions count is written once, in the section "Decisions worth recording"
-(`templates/CONVENTIONS.md:220`), and the hook, `wikipoke-implement` and the ingest's drain all
+(`templates/CONVENTIONS.md:230`), and the hook, `wikipoke-implement` and the ingest's drain all
 point at it instead of carrying their own wording. The default is the strict one: a runtime
 dependency, an architectural pattern, or a choice hard to reverse
-(`templates/CONVENTIONS.md:232`), never routine fixes, linter preferences or what the code already
+(`templates/CONVENTIONS.md:242`), never routine fixes, linter preferences or what the code already
 says. A project widens or narrows it by editing its copy, as it already does with the page types;
-a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:242`).
+a wider variant waits in an HTML comment marked "Not in force" (`templates/CONVENTIONS.md:252`).
 
 **Discarded: record every decision.** It was the first of two ways the course this came from asks
 for ADRs, and the one that fills a folder with notes on every small choice. More documentation
@@ -53,6 +55,11 @@ another decision reverses it and the code follows. That last key was the half of
 first capture left open; `d34957f` and `9c722ab` closed it: at reconcile the ingest reads every
 planned page, stale or not, drops the key where the code has caught up, and marks the decision it
 supersedes — whose opening line turns from "will reverse" into "reversed" — as deprecated.
+
+Decision pages also carry `sources_key:` next to `synced:`, which the skills write from
+`wikipoke key` (`66ee604`, `4e96671`). A squash merge throws away the commit `synced:` names, and
+then the key is what lets drift still judge the page (`942d6a6`). The bar section itself does not
+mention the key; the template and the skills do.
 
 A schema older than the section has no bar to read. `hooks add decisions` says so and names the
 template (`src/lib/install.ts:316`), and the hook and both skills tell the agent to record nothing
@@ -85,8 +92,9 @@ holds a `.gitignore` of `*` that ignores itself too (`src/lib/install.ts:76`), s
 touches its own ignore list, and in a fresh clone the agent that writes the first note recreates
 it; a bare `*` written that way counts as wikipoke's (`src/lib/install.ts:80`). Being a dot folder,
 it is never walked as pages, and the wiki stays an OKF bundle. `check drift` lists the notes as
-`pending` (`src/lib/drift.ts:92`): debt like a stale page, never a reason for a plain run to fail,
-and invisible to CI since the folder is never committed.
+`pending` (`src/lib/drift.ts:140`): debt like a stale page, never a reason for a plain run to fail,
+and invisible to CI since the folder is never committed. `--against <ref>` lists none, because no
+commit holds the inbox.
 
 **Discarded: committing the notes.** That would put scratch work in git and give decisions a second
 place to live; the only lasting place is a decision page written by `wikipoke-ingest`, which checks

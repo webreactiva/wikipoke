@@ -6,7 +6,9 @@ sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
   - src/lib/setup.ts
-synced: 1097b15
+synced: d7a7356
+sources_key: 24d4a7f898dc
+verified: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
 trigger: wikipoke init, hooks add|remove, uninstall
 related:
   - ../components/install.md
@@ -36,7 +38,7 @@ wikipoke init [--dir docs/wiki] [--yes]
 ```
 
 Both paths write through the same `init()` and `addHooks()` in `src/lib/install.ts`; they differ
-only in who decides. The split is `src/bin/wikipoke.ts:196`. Before `f5879b8` there was one path
+only in who decides. The split is `src/bin/wikipoke.ts:210`. Before `f5879b8` there was one path
 that asked, in a terminal, for hook names typed on one line, after the files were already written.
 Now a person at a terminal is asked before anything is written, and everyone else, agents and pipes
 included, gets output byte-identical to what it was. `--yes` sends a terminal to the plain run too,

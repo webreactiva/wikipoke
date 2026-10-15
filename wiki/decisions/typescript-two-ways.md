@@ -8,9 +8,11 @@ sources:
   - package.json
   - scripts/build.ts
   - src/atlas/web/tsconfig.json
-synced: 542edcd
+synced: d7a7356
+sources_key: c9b8ea747620
 related:
   - ./interactive-init.md
+verified: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
 ---
 
 Node 22.18 runs a `.ts` file by stripping the types out of it and executing what is left. That is

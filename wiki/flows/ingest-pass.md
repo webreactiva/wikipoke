@@ -5,8 +5,9 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: 7526c5e
-generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+synced: d7a7356
+sources_key: cb5d3d1b9512
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:
   - ../architecture.md
@@ -68,7 +69,7 @@ than the gap it closed, and coverage will list exactly what was left as
 `architecture.md` is written *from the survey*, before any source file is read, and corrected later
 as the other pages teach the agent more. Since `ecc7b09` the avenues include any type the project
 added: what such a page holds comes from its entry under "Where each type comes from" in
-`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:164`) — the skill's own table is only
+`CONVENTIONS.md` (`templates/skills/wikipoke-ingest/SKILL.md:166`) — the skill's own table is only
 the fallback for a copy installed before the section, and a type neither the section nor the table
 answers is written as no page at all, said in the report. Anything reconstructed rather than read is marked
 `confidence: inferred`, and since `aafa306` it carries no `path:line` either: a seed on a real
@@ -93,8 +94,12 @@ it has been forgotten.
 
 ## Reconciling reads diffs, not the repository
 
-Mode B never re-reads the code. `wikipoke check drift --json` names the stale pages, and each one
-is reconciled from `git diff <its synced> HEAD -- <its sources>` — its own diff, nothing else. Only
+Mode B reads diffs, not the repository. `wikipoke check drift --json` names the stale pages, and each
+one is reconciled from `git diff <its synced> HEAD -- <its sources>` — its own diff, nothing else.
+The one exception is a page whose `synced:` commit is gone, after a squash or rebase merge: drift
+marks it `"by": "sources_key"`, there is no diff to read, and the pass reads that page's `sources:`
+as they are now and checks the page against them. That rule came with `ebc7813`, on top of the key
+drift started judging by in `942d6a6`. Until then the flow promised a diff for every stale page. Only
 the stale sections are rewritten, so hand-written notes survive, and when a change *contradicts*
 what the page claimed, the page says what it used to be and what changed it, with the SHA. That
 sentence is the part git tells badly, and it is most of why the wiki is worth keeping.
@@ -107,7 +112,8 @@ way. Both are re-pointed before the re-stamp, though since `4943a76` the order i
 keeps them honest: each citation is dated by the commit that wrote it, so a re-stamp cannot hide a
 skipped one and a re-pointed one is never moved twice. Since `7526c5e` the re-stamp also names its
 kind: `generated:` on a page whose claims the diff forced to be rewritten, `verified:` on one that
-was still true (`templates/skills/wikipoke-ingest/SKILL.md:244`).
+was still true (`templates/skills/wikipoke-ingest/SKILL.md:265`). Since `942d6a6` the re-stamp
+also copies `wikipoke key` into `sources_key:`, so the pair moves together.
 
 Reconcile, since `9c722ab`, also reads every `planned: true` decision page against the commits
 since the checkpoint, stale or not, because the code that carries a plan out can land in a file
@@ -116,7 +122,12 @@ carries the plan out, the ingest drops the key, adds the files that now carry th
 `sources:`, and marks the page it supersedes `status: deprecated`, its opening line turned from
 "will reverse" into "reversed" (`d34957f`).
 
-Nothing stale and the repository current is a complete outcome: say so and stop.
+Nothing stale and the repository current is a complete outcome: say so and stop. That holds off the
+squash path. When a squash or rebase merge threw the checkpoint away, drift counts from `fallback`,
+the last commit that wrote `.wikipoke-state.json` (`287f3c4`), and the pass never stops as current:
+it re-reads each page lint flags with `"squash": true`, re-stamps it, and seals the checkpoint at
+HEAD. Until `5054844` a fallback pass with nothing stale could still say so and stop. The known limit
+stays: code committed on the branch after the last pass reads as indexed.
 
 Every pass writes its entry the Open Knowledge Format way since `52980e2`: `log.md` newest first,
 one `## YYYY-MM-DD` heading per day, each pass a `* **<skill>**: …` entry at the top of its day. A
@@ -143,6 +154,14 @@ began warning past fifty files it split one folder into eight subfolders under t
 gives every cluster one pass and one `log.md` entry, and ends when every cluster has its entry and
 the flows and decisions the loop cannot see are written. The entries are also how a run cut short
 resumes: the next `all` takes the clusters without one. What was not read stays in coverage.
+
+## Keys go in last
+
+A `synced:` names a commit, and a squash merge throws that commit away. So every pass that writes or
+re-reads a page also copies `wikipoke key` into its `sources_key:` (`942d6a6`). The key hashes the
+page's sources, not a commit, so it still answers after the merge. One run at the end covers every
+page, and nobody types a key by hand. The decision skill does the same for each decision page it
+writes (`66ee604`, `4e96671`).
 
 ## Why only two modes move the checkpoint
 
