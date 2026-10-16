@@ -34,7 +34,7 @@ checkpoint; the page axis compares each page's `sources:` against its own `synce
 `sources:` or no `synced:` lands in `skipped[]` rather than in either bucket: it has no contract, so
 it cannot be called fresh or stale (`src/lib/drift.ts:172`). It used to land there too when its
 `synced:` was no longer a commit here. Since `942d6a6` such a page is judged by its `sources_key:`
-instead: drift hashes what the sources are now and says stale or fresh. That comparison cannot name
+([why](../decisions/content-key.md)) instead: drift hashes what the sources are now and says stale or fresh. That comparison cannot name
 the files that moved, so the page has no `files[]` and no citations, and a page with neither a live
 commit nor a usable key is still skipped. Diffs are cached per sha (`src/lib/drift.ts:143`), so a
 wiki where most pages carry the same `synced:` runs one `git diff`, not one per page.
@@ -56,7 +56,7 @@ prints at most eight moved citations per page without `-v`, like the file list, 
 notifier puts it into an agent's prompt (`src/lib/drift.ts:408`).
 
 A squash or rebase merge can throw away the commit a checkpoint names, and then drift counts from
-a fallback instead (`src/lib/drift.ts:324`, `287f3c4`). The fallback is the newest commit that
+a fallback instead (`src/lib/drift.ts:324`, `287f3c4`; [why](../decisions/checkpoint-fallback.md)). The fallback is the newest commit that
 touched `.wikipoke-state.json`, and it stands in only when that commit wrote this same checkpoint.
 In a shallow clone no commit stands in, and the report says to fetch the full history (`5054844`).
 With `--against <ref>` (`0da6c99`, `b8ce2d1`) the diffs, the blame and the page are read from the

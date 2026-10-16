@@ -40,7 +40,9 @@ What this repository knows about itself. Start at
 ## Decisions
 
 - [decisions/capture-decisions.md](./decisions/capture-decisions.md) — why agents note decisions in an uncommitted inbox as they implement, why one strict, editable section of CONVENTIONS.md decides which ones count, and why the hook that asks for them is not a notifier.
+- [decisions/checkpoint-fallback.md](./decisions/checkpoint-fallback.md) — why, after a squash or rebase merge, drift counts from the commit that wrote the lost checkpoint instead of calling the wiki broken, when it refuses to, and why `--strict` lets the squash warnings pass.
 - [decisions/cli-read-only.md](./decisions/cli-read-only.md) — why version 0.2 moved the writing out of the CLI and into the skills, and what was given up.
+- [decisions/content-key.md](./decisions/content-key.md) — why every page also carries what its sources hashed to, beside the commit rather than instead of it, and why the CLI prints the key instead of writing it.
 - [decisions/interactive-init.md](./decisions/interactive-init.md) — why `wikipoke init` asks a person step by step with a bundled @clack/prompts, why agents never see it, and which of its choices are hard to undo.
 - [decisions/notify-never-write.md](./decisions/notify-never-write.md) — why no hook updates the wiki automatically, and why the notifier can never fail.
 - [decisions/own-viewer.md](./decisions/own-viewer.md) — why the wiki is shown in wikipoke's own HTML viewer instead of a third-party one like Obsidian, and what that choice leaves open.

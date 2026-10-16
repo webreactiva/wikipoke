@@ -1,5 +1,13 @@
 # Log
 
+## 2026-10-16
+
+* **wikipoke-decision**: two new pages from the deep pass's "missing kind" finding, with the
+  reasons taken from #3, #31 and their PRs (#22, #39):
+  [decisions/content-key.md](./decisions/content-key.md) and
+  [decisions/checkpoint-fallback.md](./decisions/checkpoint-fallback.md). Linked from
+  components/checks.md and the index.
+
 ## 2026-10-15
 
 * **wikipoke-lint --deep**: 10 findings (3 critical) · current and sound after the reconcile; three
