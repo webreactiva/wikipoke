@@ -24,7 +24,7 @@ Every page keeps two answers to "is this page still true?". `synced:` names the 
 was checked against; `sources_key:` holds what the page's sources hashed to at that moment: the
 first twelve hex characters of a hash over each matched path and its git blob id
 (`src/lib/lib.ts:297`, `KEY_LENGTH` at `src/lib/lib.ts:177`). Drift reads the key only when
-`synced:` is not a commit here (`src/lib/drift.ts:178`), which is what a squash or rebase merge
+`synced:` is not a commit here (`src/lib/drift.ts:179`), which is what a squash or rebase merge
 leaves behind. Decided in #3 and carried out in `942d6a6` (PR #22).
 
 ## Why
@@ -55,7 +55,7 @@ no history: the same files give the same key on any clone and any branch.
 - `synced:` and `sources_key:` move together, and only after the page is re-read against the code.
   A lint fix that does not re-read touches neither (`templates/CONVENTIONS.md:178`).
 - Only a key of the exact shape answers (`KEY_SHAPE`, `src/lib/lib.ts:180`). A typo would never
-  match, pinning the page as stale for good, so drift skips it (`src/lib/drift.ts:183`) and lint
+  match, pinning the page as stale for good, so drift skips it (`src/lib/drift.ts:184`) and lint
   names it.
 - Lint softens "`synced` is not a commit" from an error to a warning marked `squash` only while a
   well-formed key answers (`src/lib/lint.ts:137`).
