@@ -1,5 +1,59 @@
 # Log
 
+## 2026-10-15
+
+* **wikipoke-lint --deep**: 10 findings (3 critical) · current and sound after the reconcile; three
+  expired counts and dates outlived 0.4.0, and the content key and the squash fallback, the two
+  biggest design choices since 0.3, still live only inside entity pages.
+  - critical: decisions/interactive-init.md says `chooseWiki()` accepts `.git`, `node_modules/x`
+    and `~/x`; it refuses all three since `450cac0` and `98bb026`, as components/lib.md says.
+  - critical: decisions/cli-read-only.md opens with "the three skills write the wiki"; there are six.
+  - critical: flows/ingest-pass.md says "the three `SKILL.md` files" under `templates/`; there are six.
+  - missing kind: no decision page for the content key over commit distance (#3), nor for the
+    squash fallback checkpoint and its `--strict` exemption (#31).
+  - gap: `src/atlas/web/atlas.css` is claimed by no page; components/atlas.md is synced at `ee3921c`.
+  - density: components/skills.md (~200 lines) and components/checks.md read as changelogs, past
+    two screens each.
+  - templates (not the wiki): the lint skill says "seven lenses" and lists eight.
+  - wording: CONVENTIONS "the newest commit that wrote that same checkpoint" is what drift does
+    whenever the state file is committed; an uncommitted edit stays broken on purpose.
+  - The three critical ones were fixed on a yes, `generated:` re-stamped, `synced:` left alone.
+  - trivia: decisions/own-viewer.md has no final newline; its index line says "instead of" where
+    the page says "rather than".
+
+* **wikipoke-ingest**: reconciled 41 commits since `7526c5e` — the content key (#3), `--against`
+  (#7), the deep-pass line (#8) and the five fixes after 0.4.0 (#30–#34). All 17 stale pages
+  re-read against their own diffs, re-stamped to `d7a7356` and keyed with `sources_key:` for the
+  first time. No inbox notes; no `planned: true` pages to sweep.
+  - components/checks.md: a page whose `synced:` is gone is judged by `sources_key:`, no longer
+    skipped (942d6a6); `RepoAxis` gains `fallback` and `shallow` (287f3c4, 5054844); `--against`
+    reads the ref (0da6c99, b8ce2d1); the squash warning fails nothing under `--strict`; the
+    deep-pass line is lint's, never drift's (7c0a39c, d3356f0). 19 citations re-pointed.
+  - flows/check.md: the diagram gains the `--against` guard, the key branch, `wikipoke key` and the
+    exit line without squash warnings (287f3c4).
+  - concepts/two-axes-of-staleness.md: both axes' squash fallbacks, and `--against` measuring a
+    commit; `src/lib/lib.ts` added to `sources:`.
+  - decisions/capture-decisions.md: decision pages carry `sources_key:` (66ee604, 4e96671); no
+    pending notes under `--against`.
+  - components/cli.md: six commands, with `key` (942d6a6); the exit codes and bad-usage cases;
+    `--against` skips the unseeded shortcut. 16 citations re-pointed.
+  - architecture.md, decisions/cli-read-only.md: `wikipoke key` and `--against` are read-only like
+    the rest; lib.ts hashes the content key.
+  - components/lib.md: `changedSince` against a ref (0da6c99), the content key, `treeBlobs`
+    failing loudly (a632b60), symlinks left out by git mode (6c179f7).
+  - concepts/schema-lives-in-the-wiki.md: `sources_key:` is template prose; the code checks only
+    its shape.
+  - decisions/plain-markdown-links.md: the templating-collision reason re-cited where it lives,
+    the `markdownLinks` comment.
+  - components/skills.md, flows/ingest-pass.md: reconcile reads a page's sources when its commit is
+    gone (ebc7813), never stops on a squash fallback (5054844), and keys every page last (942d6a6).
+  - concepts/skills-as-product.md: #3 and #30 as the same split, the hash in code and when to
+    re-stamp in prose; `src/lib/lib.ts` added to `sources:`.
+  - concepts/coverage-as-debt.md, concepts/over-broad-sources.md, flows/install.md,
+    decisions/typescript-two-ways.md: still true, citations re-pointed, verified.
+  - Deferred: a decision page on the content key over commit distance (#3), and one on the squash
+    fallback checkpoint and its `--strict` exemption (#31). `src/atlas/web` is uncovered (1 file).
+
 ## 2026-10-11
 
 * **wikipoke-ingest**: reconciled 3 commits since `ecc7b09` — the trust-keys release (#5).

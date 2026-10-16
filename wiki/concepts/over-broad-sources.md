@@ -5,8 +5,9 @@ responsibility: How a too-wide `sources:` entry makes coverage lie, and what the
 sources:
   - src/lib/lib.ts
   - src/lib/lint.ts
-synced: 7526c5e
-verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+synced: d7a7356
+sources_key: dfa9dc4e6bd1
+verified: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:39:39Z }
 related:
   - ./coverage-as-debt.md
   - ../components/checks.md
@@ -18,7 +19,7 @@ directions break the same way — a page that claims `src/` covers every file un
 reports green for code nobody wrote up, and every change anywhere under `src/` marks that one page
 stale, which trains everyone to ignore staleness.
 
-`isOverBroad()` catches the shape (`src/lib/lib.ts:503`): a wildcard-free source pointing at a
+`isOverBroad()` catches the shape (`src/lib/lib.ts:676`): a wildcard-free source pointing at a
 directory that carries one of the known package manifests (`package.json`, `Cargo.toml`,
 `go.mod`, …), or a source that resolves to the repository root. Claiming a whole *package* is the
 line, not claiming a directory — `src/billing/` is a legitimate module page's source, while a
@@ -28,7 +29,7 @@ Until `3eb714c` that left the example in the first paragraph uncaught. In a sing
 repository the manifest sits at the root and the code in `src/`, so `src/` carries no manifest and
 passed — and a real seed claimed it on its architecture page, which turned coverage green over a
 file nobody had opened. `lint` now also warns about any source that matches more than half of the
-indexable files, once that is at least ten (`src/lib/lint.ts:153`): the share is what makes a claim
+indexable files, once that is at least ten (`src/lib/lint.ts:180`): the share is what makes a claim
 a package in all but name, and the floor keeps a five-file repository quiet.
 
 A share stops working on a large repository. On a 1,480-file Laravel app a seed claimed
@@ -36,11 +37,11 @@ A share stops working on a large repository. On a 1,480-file Laravel app a seed 
 Since `dc452c1` a source past fifty indexable files is over-broad whatever its share, fifty being
 more than any one page reads. The next run dodged that too, by splitting one module into eight
 subfolders under fifty each, so since `d63f692` a page's folder and wildcard sources are also
-counted together, and more than fifty between them gets one warning (`src/lib/lint.ts:170`). A
+counted together, and more than fifty between them gets one warning (`src/lib/lint.ts:197`). A
 list of files is never summed: naming a file is a claim to have read it, which is the point.
 
 It is a **warning**, not an error, and it says how many indexable files the claim swallows
-(`src/lib/lint.ts:158`). A wiki can be sound and still be lazily indexed; the number is there so the
+(`src/lib/lint.ts:185`). A wiki can be sound and still be lazily indexed; the number is there so the
 reader can judge.
 
 The trap this leaves is one no script can close, and the `wikipoke-lint` skill is told to watch for
@@ -54,5 +55,5 @@ The opposite failure is a source that is narrow but noisy: a lock file, a route 
 version catalog, a file that changes with most commits whatever they are about. It does not make
 coverage lie, but it marks its page stale on every commit, which teaches the same thing an
 over-broad source does: ignore the flag. Since `072403d` lint warns about a source named on the
-"Never a source" list `CONVENTIONS.md` owns (`src/lib/lint.ts:128`). It is a separate rule
+"Never a source" list `CONVENTIONS.md` owns (`src/lib/lint.ts:155`). It is a separate rule
 from this one on purpose: only a single file counts as a hit, and a folder or a glob is judged here.

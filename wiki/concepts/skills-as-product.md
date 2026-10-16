@@ -7,8 +7,10 @@ sources:
   - templates/CONVENTIONS.md
   - src/lib/install.ts
   - src/lib/lint.ts
-synced: 7526c5e
-generated: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+  - src/lib/lib.ts
+synced: d7a7356
+sources_key: 42c42a4fbd7f
+generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
 related:
   - ../components/skills.md
   - ../decisions/cli-read-only.md
@@ -68,6 +70,15 @@ the types table.
 Issue #5 is the rule with a foot in each world. Telling a re-check apart from a rewrite — which of
 `generated:`/`verified:` a pass stamps — is judgement, so it is prose: the marking paragraph in the
 ingest skill (`templates/skills/wikipoke-ingest/SKILL.md:38`), one line in each of the other three
-skills, and the four-case table in CONVENTIONS.md (`templates/CONVENTIONS.md:192`). The only `src/`
-change, `6f2b5f6`, is the deterministic half: 25 lines of lint that check a `{ by, at }` trust
-map's shape (`src/lib/lint.ts:289`).
+skills, and the four-case table in CONVENTIONS.md (`templates/CONVENTIONS.md:202`). The only `src/`
+change for that issue, `6f2b5f6`, is the deterministic half: 25 lines of lint that check a `{ by, at }`
+trust map's shape (`src/lib/lint.ts:363`).
+
+Issues #3 and #30 are the same split with a hash in the middle. `sources_key:` is a content hash.
+`sourcesKey` computes it (`src/lib/lib.ts:297`), and lint refuses a value of the wrong shape with a
+warning (`KEY_SHAPE`, `src/lib/lib.ts:180`; `src/lib/lint.ts:130`). Hashing is code, because a machine
+decides it and no skill can. When a pass copies the key, that it moves only with `synced:`, and what
+a squash-merged page is checked against, is prose: the "Stamp the pages" step of the ingest skill
+(`templates/skills/wikipoke-ingest/SKILL.md:367`) and the `sources_key:` rows of the table in
+CONVENTIONS.md. Drift falls back to the key only when `synced:` names a commit the repository no
+longer has. The key came with `942d6a6` (#3); decision pages took it in `66ee604` (#30).

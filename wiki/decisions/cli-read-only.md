@@ -5,14 +5,17 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - AGENTS.md
   - src/bin/wikipoke.ts
-synced: 6a9925f
+synced: d7a7356
+sources_key: 72cb02f8063e
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
   - ./notify-never-write.md
 ---
 
-**Decision.** The three skills write the wiki; `wikipoke check` only measures. No publish step, no
+**Decision.** The skills write the wiki — three when 0.2 drew this line; of the six now, four write
+pages, `wikipoke-implement` writes only inbox notes and `wikipoke-agents` nothing in the wiki; `wikipoke check` only measures. No publish step, no
 staging area, no writer lock, no completeness seal.
 
 **The discarded alternative was built and shipped.** Version 0.1, on this repository's `main`
@@ -56,6 +59,11 @@ decisions`, places the inbox's one-line `.gitignore` — setup next to the schem
 which `init` and `hooks` already wrote under the wiki directory, never a page and never a note
 ([the decision](./capture-decisions.md)). Turning a note into a page is `wikipoke-ingest`'s, with a
 person there.
+
+The content key (`942d6a6`, `wikipoke key`, `src/bin/wikipoke.ts:283`) follows the same line. It
+hashes each page's sources and prints the value, and the skill copies that value into
+`sources_key:`, the way it writes the checkpoint: the CLI prints, the skill writes. `check drift
+--against <ref>` reads a commit and writes nothing either. Neither command adds a write.
 
 `init` asking questions since `f5879b8` does not move the line either. The interactive path in
 `src/lib/setup.ts` writes through the same `init()` and `addHooks()` as the plain run, so it writes
