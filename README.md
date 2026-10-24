@@ -684,7 +684,8 @@ npm run unlink   # take it off the PATH again
 **Releasing.** A version tag is the whole release. `npm version` bumps `package.json`, commits it
 and tags the commit; pushing the tag runs `.github/workflows/release.yml`, which runs the same
 checks as a pull request, publishes that commit to npm with provenance, and creates the GitHub
-release with notes generated from the merged pull requests:
+release with notes generated from the merged pull requests. Before tagging, run the end-to-end
+check with an agent described in [`validation/`](validation/README.md) and commit its log entry:
 
 ```sh
 npm version patch        # or minor: bumps, commits "0.3.2", tags v0.3.2
