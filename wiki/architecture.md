@@ -5,9 +5,9 @@ responsibility: "The map of wikipoke: who writes the wiki, who only measures it,
 sources:
   - src/bin/wikipoke.ts
   - src/lib/lib.ts
-synced: d7a7356
-sources_key: a49aade4d195
-generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
+synced: 9305eff
+sources_key: 2fc37191cd9c
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 ---
 
 Wikipoke is two products in one repository that never touch each other's job. The **skills** are
@@ -41,7 +41,7 @@ verbatim with `{{WIKI}}` substituted, never strings built in code — a rule the
 most of wikipoke's behaviour is not in `src/lib/`: it is in prose an agent reads. See
 [the skill contract](concepts/skills-as-product.md).
 
-**`src/lib/install.ts` is the only writer.** `init`, `hooks add|remove` and `uninstall` copy
+**`src/lib/install.ts` is the only writer.** `init`, `update`, `hooks add|remove` and `uninstall` copy
 templates into place, add and remove wikipoke's own entries inside files the project shares
 (`.claude/settings.json`, `AGENTS.md`), and refuse to overwrite anything without the
 `managed by wikipoke` marker. It is documented in [components/install.md](components/install.md)
@@ -57,8 +57,8 @@ frontmatter is parsed, globs are compiled and a page's content key (`sourcesKey`
 Until `df4db0e` the CLI kept the three in one object and indexed it by name, which worked because
 nothing had to know which shape came back. Under TypeScript that erases every result to the same
 type, so the pair is now carried by a tagged union — one variant per check, discriminated by its
-name (`src/bin/wikipoke.ts:42`) — and counting, printing and `--json` each narrow it back
-(`src/bin/wikipoke.ts:362`). The uniform `run`/`report` contract is unchanged; what changed is that
+name (`src/bin/wikipoke.ts:43`) — and counting, printing and `--json` each narrow it back
+(`src/bin/wikipoke.ts:376`). The uniform `run`/`report` contract is unchanged; what changed is that
 the uniformity is no longer allowed to lose the result's shape.
 
 **The atlas shows the wiki and writes only outside it.** `src/atlas/` gathers the pages, their
@@ -97,7 +97,7 @@ explains the one piece of state that does matter: the checkpoint and each page's
 
 | Path | What it is |
 | --- | --- |
-| `src/bin/wikipoke.ts` | the CLI: `init`, `hooks`, `check`, `key`, `atlas`, `uninstall` |
+| `src/bin/wikipoke.ts` | the CLI: `init`, `update`, `hooks`, `check`, `key`, `atlas`, `uninstall` |
 | `src/lib/install.ts` | the installer: everything that writes outside `wiki/` |
 | `src/lib/setup.ts` | `init` when a person is at the terminal: the questions, then `install.ts` |
 | `src/lib/{drift,coverage,lint}.ts` | the three checks |

@@ -4,7 +4,9 @@ type: concept
 responsibility: The `managed by wikipoke` marker, and the three ownership rules every write goes through.
 sources:
   - src/lib/install.ts
-synced: 1097b15
+synced: 9305eff
+sources_key: 80ca57b47900
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 related:
   - ../components/install.md
   - ../flows/install.md
@@ -68,7 +70,8 @@ skill does nothing until someone names it; a hook it only reports. `hookStatus()
 installed hook, and the notifier they share, with what `hooks add` would write now
 (`src/lib/install.ts:248`), and `init` and `wikipoke hooks` list the ones that differ as
 `installed, outdated` with the command that updates them. Someone asked for the change, so they
-know it is coming. Before `87d9fd0` there was nothing to say it at all, and an agent upgrading a
+know it is coming. Since `9305eff` that asking is one command, `wikipoke update`: it rewrites the skills and every
+hook marked outdated (`src/lib/install.ts:393`), and installs none that is not there. Before `87d9fd0` there was nothing to say it at all, and an agent upgrading a
 repository copied the templates over by hand with `sed`.
 
 And the wiki itself belongs to nobody but the project: `wikipoke uninstall` removes the skills and

@@ -9,9 +9,9 @@ sources:
   - templates/skills/wikipoke-agents/SKILL.md
   - templates/skills/wikipoke-implement/SKILL.md
   - templates/skills/wikipoke-decision/SKILL.md
-synced: d7a7356
-sources_key: 8e47fba25bad
-generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
+synced: 9305eff
+sources_key: fb4dc2483424
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 related:
   - ../concepts/skills-as-product.md
   - ../flows/ingest-pass.md
@@ -152,9 +152,10 @@ Since `287f3c4` a `synced:` that a squash merge removed is reported as a warning
 but only while `sources_key:` still answers. It fails nothing, not even `--strict`, and the next
 reconcile re-stamps the page.
 
-The ingest skill also says what to do when wikipoke itself was upgraded: `wikipoke init`, which
-refreshes the skills and lists the outdated hooks, then ask before updating a hook — never copy the
-templates by hand.
+The ingest skill also says what to do when wikipoke itself was upgraded: `wikipoke update`, which
+refreshes the skills and the hooks already installed, after asking the person, since a hook changes
+what their terminal or agent does — never copy the templates by hand. Until `9305eff` it said
+`wikipoke init`, which only lists the outdated hooks.
 
 **`wikipoke-decision`**, since `3e94960`, is how a decision a person took becomes a page without
 passing through the inbox. The person's words are the source — what was chosen, what was set aside

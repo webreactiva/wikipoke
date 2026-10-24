@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-24
+
+* **wikipoke-ingest**: reconciled 9 commits since `d7a7356`; two touched code: the 0.4.1 version
+  bump and `9305eff`, the new `wikipoke update` (#42).
+  - flows/install.md: a `wikipoke update` section, and the command in its trigger and responsibility
+  - components/install.md, components/cli.md: `update()` and its CLI branch
+  - components/skills.md, concepts/file-ownership.md, decisions/cli-read-only.md: the upgrade
+    advice now names `update`, and the `refresh` ask it answers
+  - architecture.md, index.md: the command added to the lists
+  - 8 more pages re-read and still true, their moved citations re-pointed
+
 ## 2026-10-16
 
 * **wikipoke-decision**: two new pages from the deep pass's "missing kind" finding, with the

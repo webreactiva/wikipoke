@@ -1,15 +1,16 @@
 ---
 title: Installing into a repository
 type: flow
-responsibility: What `wikipoke init` and `wikipoke hooks add` actually write, in what order, and what they refuse to touch.
+responsibility: What `wikipoke init`, `wikipoke update` and `wikipoke hooks add` actually write, in what order, and what they refuse to touch.
 sources:
   - src/lib/install.ts
   - src/bin/wikipoke.ts
   - src/lib/setup.ts
-synced: d7a7356
-sources_key: 24d4a7f898dc
+synced: 9305eff
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
+sources_key: eb93eaa5990e
 verified: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
-trigger: wikipoke init, hooks add|remove, uninstall
+trigger: wikipoke init, update, hooks add|remove, uninstall
 related:
   - ../components/install.md
   - ../components/hooks.md
@@ -38,7 +39,7 @@ wikipoke init [--dir docs/wiki] [--yes]
 ```
 
 Both paths write through the same `init()` and `addHooks()` in `src/lib/install.ts`; they differ
-only in who decides. The split is `src/bin/wikipoke.ts:210`. Before `f5879b8` there was one path
+only in who decides. The split is `src/bin/wikipoke.ts:214`. Before `f5879b8` there was one path
 that asked, in a terminal, for hook names typed on one line, after the files were already written.
 Now a person at a terminal is asked before anything is written, and everyone else, agents and pipes
 included, gets output byte-identical to what it was. `--yes` sends a terminal to the plain run too,
@@ -71,6 +72,20 @@ type error.
 safe to re-run — files that already match are skipped, so an upgrade refreshes the skills and
 reports only the difference — and it never overwrites the two files the project owns from the
 moment they exist.
+
+## `wikipoke update`
+
+```
+wikipoke update
+   ├─ no wiki/CONVENTIONS.md?  → "run wikipoke init first", exit 1
+   ├─ init()                     the plain run's files and reports, no hook listing
+   └─ addHooks(outdated ones)    nothing when all are current; never a hook not installed
+```
+
+After an upgrade, in place of `init` and then `hooks add` by hand (`9305eff`, #42). `update()`
+(`src/lib/install.ts:391`) merges the two reports, and the CLI prints them with the version
+(`src/bin/wikipoke.ts:249`). It has no interactive path: it decides nothing a person has not
+already chosen, since every hook it touches was installed on request.
 
 Hook detection is a hint, not a decision (`src/lib/install.ts:272`): a `.cursor/` directory marks
 the `cursor` hook as `used here` in the listing, or pre-ticks it in the checklist, and nothing more. The hooks change what a terminal

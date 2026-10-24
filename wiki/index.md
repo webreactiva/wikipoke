@@ -16,14 +16,14 @@ What this repository knows about itself. Start at
 
 - [flows/check.md](./flows/check.md) — what happens between typing `wikipoke check` and the exit code, across the CLI and the three checks.
 - [flows/ingest-pass.md](./flows/ingest-pass.md) — the loop a person and an agent run to seed, reconcile or extend the wiki, and where the checkpoint moves.
-- [flows/install.md](./flows/install.md) — what `wikipoke init` and `wikipoke hooks add` actually write, in what order, and what they refuse to touch.
+- [flows/install.md](./flows/install.md) — what `wikipoke init`, `wikipoke update` and `wikipoke hooks add` actually write, in what order, and what they refuse to touch.
 
 ## Components
 
 - [components/cli.md](./components/cli.md) — how `src/bin/wikipoke.ts` dispatches the six commands and what each exit code means.
 - [components/checks.md](./components/checks.md) — what drift, coverage and lint each decide, and why all three are deterministic and read-only.
 - [components/lib.md](./components/lib.md) — the git, frontmatter, glob and page-listing helpers the three checks share, and the constraints each one encodes.
-- [components/install.md](./components/install.md) — how init, hooks add/remove and uninstall write files without ever taking something the project owns.
+- [components/install.md](./components/install.md) — how init, update, hooks add/remove and uninstall write files without ever taking something the project owns.
 - [components/hooks.md](./components/hooks.md) — the six optional hooks, the one notifier five of them run, and why none of them can write the wiki.
 - [components/atlas.md](./components/atlas.md) — how `wikipoke atlas` turns the wiki into one snapshot that a browser page renders, served live or exported as a static site, without ever writing in the wiki.
 - [components/skills.md](./components/skills.md) — what each skill template instructs the agent to do, and the boundaries the wiki skills share.

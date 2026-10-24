@@ -5,8 +5,9 @@ responsibility: The loop a person and an agent run to seed, reconcile or extend 
 sources:
   - templates/skills/wikipoke-ingest/SKILL.md
   - templates/CONVENTIONS.md
-synced: d7a7356
-sources_key: cb5d3d1b9512
+synced: 9305eff
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
+sources_key: 2162b5cb9104
 generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
 trigger: a person launching /wikipoke-ingest, often after the notifier said the wiki is behind
 related:

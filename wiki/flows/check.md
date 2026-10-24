@@ -7,10 +7,10 @@ sources:
   - src/lib/drift.ts
   - src/lib/coverage.ts
   - src/lib/lint.ts
-synced: d7a7356
-sources_key: df08ed89be93
+synced: 9305eff
+sources_key: da46634c4471
 generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:39:03Z }
-verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 trigger: a person, CI, or the notifier a hook runs
 related:
   - ../components/checks.md
@@ -97,6 +97,6 @@ before anything else; they count as one finding for `--strict` and never fail a 
 ([why](../decisions/capture-decisions.md)).
 
 Because the skills read it through a pipe, the run ends by setting the exit code and letting stdout
-drain (`src/bin/wikipoke.ts:417`). It used to call `process.exit`, which drops what a pipe has not
+drain (`src/bin/wikipoke.ts:431`). It used to call `process.exit`, which drops what a pipe has not
 taken yet: on a 1,480-file repository `check coverage --json` is about 75 KB, and every agent that
 piped it into `jq` or `python3` got the first 64 KB and a parse error (`c82a188`).
