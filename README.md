@@ -426,10 +426,16 @@ a `managed by wikipoke` line. A file in their place that lacks that line is left
 command says what to add by hand. In shared files (`.claude/settings.json`, `AGENTS.md`) wikipoke
 adds and removes only its own entry.
 
-**After upgrading wikipoke**, run `wikipoke init`. It refreshes the skills, which are inert until
-someone names one. It does not refresh the hooks, which act on their own: it lists the ones an
-older version installed as `outdated`, with the command that updates them, and leaves them as they
-are until someone runs it.
+**After upgrading wikipoke**, run `wikipoke update`, in one step with the upgrade:
+
+```sh
+npm install -D wikipoke@latest && npx wikipoke update
+```
+
+It refreshes the skills and updates the hooks an older version installed, and prints each file it
+changed. It installs no hook that was not there, and keeps `CONVENTIONS.md` and `.wikipokeignore`,
+which are the project's: it says when the shipped `CONVENTIONS.md` has changed, so you can carry
+over what you want. `wikipoke init` also refreshes the skills, but only lists the outdated hooks.
 
 ## The skills
 

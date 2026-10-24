@@ -384,6 +384,19 @@ export function addHooks(root: string, names: HookName[], wiki: string = wikiDir
   return out;
 }
 
+/**
+ * After an upgrade: what `init` refreshes, plus the hooks already installed that an older version
+ * wrote. Running it is the yes a hook update waits for; a hook that is not installed stays out.
+ */
+export function update(root: string): Report {
+  const out = init(root);
+  const stale = hookStatus(root).filter((hook) => hook.outdated).map((hook) => hook.name);
+  if (!stale.length) return out;
+  const hooks = addHooks(root, stale);
+  for (const label of Object.keys(out) as (keyof Report)[]) out[label].push(...hooks[label]);
+  return out;
+}
+
 /** Removes the named hooks, and the notifier once no hook is left to run it. */
 export function removeHooks(root: string, names: HookName[], wiki: string = wikiDir(root)): Report {
   const out = report();

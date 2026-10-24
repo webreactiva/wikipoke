@@ -3,6 +3,7 @@
 // it and shows it, and never writes a page.
 //
 //   wikipoke init [--dir <path>] [--yes]  the schema, the ignore list and the skills; re-run to refresh
+//   wikipoke update                       after an upgrade: the skills, and the hooks already installed
 //   wikipoke hooks [add|remove <name>...] optional hooks: git, claude, opencode, cursor, agents, decisions
 //   wikipoke check [lint|drift|coverage]... [--against <ref>] [--json] [--strict] [-v]
 //   wikipoke key [<page>...] [--json]     the content key each page's sources: hash to right now
@@ -24,7 +25,7 @@ import * as coverage from "../lib/coverage.ts";
 import type { DriftResult } from "../lib/drift.ts";
 import * as drift from "../lib/drift.ts";
 import type { HookName, Report } from "../lib/install.ts";
-import { HOOKS, NOTIFIES, addHooks, hookStatus, init, removeHooks, uninstall } from "../lib/install.ts";
+import { HOOKS, NOTIFIES, addHooks, hookStatus, init, removeHooks, uninstall, update } from "../lib/install.ts";
 import type { CheckContext, ReportOptions } from "../lib/lib.ts";
 import { IGNORE_FILE, INBOX_DIR, KEY_LENGTH, STATE_FILE, asList, chooseWiki, color, commitExists, inboxNotes, listPages, readPage, repoRoot, sourcesKey, wikiDir, workingFiles } from "../lib/lib.ts";
 import type { LintResult } from "../lib/lint.ts";
@@ -57,6 +58,9 @@ const HELP = `wikipoke: a code wiki that agents maintain
                                refreshes the skills, and says which hooks are outdated
       -y, --yes                no questions: write at once and install no hook, as when an
                                agent or a pipe runs it
+  wikipoke update              after upgrading wikipoke: refresh the skills and update the hooks
+                               an older version installed. Installs no new hook, and keeps
+                               CONVENTIONS.md and ${IGNORE_FILE}, which are the project's
   wikipoke hooks               list the optional hooks, which are installed, which are outdated
   wikipoke hooks add <name>... install hooks, or update installed ones: ${HOOK_NAMES.join(", ")}
   wikipoke hooks remove <name>...
@@ -239,6 +243,16 @@ if (command === "hooks") {
     console.error(`unknown hooks action: ${action} (expected: add, remove)`);
     process.exit(2);
   }
+  process.exit(0);
+}
+
+if (command === "update") {
+  if (!existsSync(join(wikiPath, "CONVENTIONS.md"))) {
+    console.error(`No ${wiki}/CONVENTIONS.md here: run \`wikipoke init\` first.`);
+    process.exit(1);
+  }
+  print(update(root));
+  console.log(color.dim(`\nwikipoke ${version()}`));
   process.exit(0);
 }
 
