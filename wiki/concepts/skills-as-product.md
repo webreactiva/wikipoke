@@ -8,8 +8,9 @@ sources:
   - src/lib/install.ts
   - src/lib/lint.ts
   - src/lib/lib.ts
-synced: d7a7356
-sources_key: 42c42a4fbd7f
+synced: 9305eff
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
+sources_key: c5b34aae6b7b
 generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:37:06Z }
 related:
   - ../components/skills.md

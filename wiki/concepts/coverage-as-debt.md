@@ -6,16 +6,16 @@ sources:
   - src/lib/coverage.ts
   - templates/wikipokeignore
   - src/bin/wikipoke.ts
-synced: d7a7356
-sources_key: df2ad7462622
-verified: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:38:58Z }
+synced: 9305eff
+sources_key: a27d1bf1c315
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 related:
   - ./over-broad-sources.md
   - ../flows/ingest-pass.md
 ---
 
 `wikipoke check coverage` lists tracked files no page's `sources:` claims, and a plain run exits 0
-no matter how long that list is (`src/bin/wikipoke.ts:417`). Only lint errors — a malformed page, a
+no matter how long that list is (`src/bin/wikipoke.ts:431`). Only lint errors — a malformed page, a
 dead source, a broken link — fail. The list is a backlog, and a long backlog on a large repository
 is the normal state of a wiki that was seeded honestly.
 

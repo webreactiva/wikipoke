@@ -8,8 +8,9 @@ sources:
   - src/lib/lint.ts
   - src/bin/wikipoke.ts
   - templates/CONVENTIONS.md
-synced: 593c16f
-sources_key: 189e33e1414d
+synced: 9305eff
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
+sources_key: 21c941f56fb9
 reversible: false
 generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T07:28:36Z }
 related:
@@ -47,7 +48,7 @@ no history: the same files give the same key on any clone and any branch.
 - **One key per source.** It would tell which source moved, but drift already lists the files when
   `synced:` answers, and per page costs one frontmatter line.
 - **The agent computing the key.** An agent must never type a hash. The skills copy it from
-  `wikipoke key <page>` (`src/bin/wikipoke.ts:283`), which prints it and writes nothing, so the
+  `wikipoke key <page>` (`src/bin/wikipoke.ts:297`), which prints it and writes nothing, so the
   CLI stays [read-only](./cli-read-only.md).
 
 ## What it constrains

@@ -7,8 +7,9 @@ sources:
   - src/lib/lint.ts
   - src/bin/wikipoke.ts
   - templates/skills/wikipoke-ingest/SKILL.md
-synced: 593c16f
-sources_key: 16ac71442243
+synced: 9305eff
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
+sources_key: 8064f6c2974f
 reversible: false
 generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T07:28:36Z }
 related:
@@ -50,7 +51,7 @@ on main itself. Nothing was broken: the code had moved past a point the merge ha
 - A shallow clone never takes it (`src/lib/drift.ts:320`): its grafted root "wrote" every file. It
   stays broken, with a hint to fetch the full history (`fetch-depth: 0`).
 - `--strict` fails on every finding except lint's `squash: true` warnings
-  (`src/bin/wikipoke.ts:379`, `src/lib/lint.ts:43`), which only the merge style made. `behind`
+  (`src/bin/wikipoke.ts:393`, `src/lib/lint.ts:43`), which only the merge style made. `behind`
   still fails it.
 - The line about the fallback prints only next to a `behind` line, so a current wiki keeps the
   notifier silent.

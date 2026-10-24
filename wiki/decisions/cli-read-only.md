@@ -5,9 +5,9 @@ responsibility: Why version 0.2 moved the writing out of the CLI and into the sk
 sources:
   - AGENTS.md
   - src/bin/wikipoke.ts
-synced: d7a7356
-sources_key: 72cb02f8063e
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T12:34:22Z }
+synced: 9305eff
+sources_key: 5713cca49e5b
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 confidence: inferred
 related:
   - ../concepts/skills-as-product.md
@@ -51,7 +51,9 @@ asked for a `wikipoke seal`, a command that would write it. The fix stayed on th
 takes the typing away from the agent without giving the CLI its first write. A command that writes
 one file is how 0.1 started. The next ask was a `wikipoke refresh`; `init` already refreshed the
 skills, and what was missing was saying so, and listing the outdated hooks instead of rewriting
-them.
+them. The ask came back as #42, and `wikipoke update` (`9305eff`) answered it on the install
+side of the line: it rewrites the managed files `init` and `hooks add` already wrote, outside the
+wiki, and still writes no page (`src/bin/wikipoke.ts:249`).
 
 Decision capture (`35f9c8a`) came close to the line and stayed on this side of it. Notes go into
 `wiki/.inbox/`, but agents write them; the CLI only counts them in drift and, through `hooks add
@@ -60,7 +62,7 @@ which `init` and `hooks` already wrote under the wiki directory, never a page an
 ([the decision](./capture-decisions.md)). Turning a note into a page is `wikipoke-ingest`'s, with a
 person there.
 
-The content key (`942d6a6`, `wikipoke key`, `src/bin/wikipoke.ts:283`) follows the same line. It
+The content key (`942d6a6`, `wikipoke key`, `src/bin/wikipoke.ts:297`) follows the same line. It
 hashes each page's sources and prints the value, and the skill copies that value into
 `sources_key:`, the way it writes the checkpoint: the CLI prints, the skill writes. `check drift
 --against <ref>` reads a commit and writes nothing either. Neither command adds a write.

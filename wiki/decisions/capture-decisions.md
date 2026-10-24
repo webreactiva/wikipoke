@@ -10,10 +10,10 @@ sources:
   - templates/skills/wikipoke-decision/SKILL.md
   - src/lib/install.ts
   - src/lib/drift.ts
-synced: d7a7356
-sources_key: d85d47234054
+synced: 9305eff
+sources_key: 90fcae7c870e
 generated: { by: claude-code/claude-haiku-5-5, at: 2026-10-15T11:39:03Z }
-verified: { by: opencode/glm-5.3-flash, at: 2026-10-11T01:13:36Z }
+verified: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 reversible: true
 related:
   - ./notify-never-write.md
@@ -108,6 +108,6 @@ goes away.
 [notifier](./notify-never-write.md): it asks agents to write notes and says nothing itself.
 `NOTIFIES` (`src/lib/install.ts:89`) keeps it from installing `.wikipoke-hook.sh`
 (`src/lib/install.ts:382`) and from counting as the hook that keeps the notifier alive
-(`src/lib/install.ts:391`). Alone, it tells nobody the wiki is behind, so it is meant to be paired
+(`src/lib/install.ts:404`). Alone, it tells nobody the wiki is behind, so it is meant to be paired
 with one that does. Removing it keeps the inbox's ignore file while anything else is still in the
 folder, so waiting notes never reach git (`src/lib/install.ts:338`).

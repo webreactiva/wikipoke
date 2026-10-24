@@ -1229,6 +1229,28 @@ test("an outdated hook is reported by init and hooks, and only hooks add changes
   assert.doesNotMatch(wikipoke(root, "hooks").out, /outdated/);
 });
 
+test("update refreshes the skills and the outdated hooks, and installs no other", () => {
+  const root = repo({ "AGENTS.md": "# Rules\n" });
+  assert.equal(wikipoke(root, "update").code, 1, "nothing to update before init");
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "opencode");
+  const plugin = ".opencode/plugin/wikipoke.js";
+  const fresh = read(root, plugin);
+  writeFileSync(join(root, plugin), "// managed by wikipoke: an older plugin\n");
+  writeFileSync(join(root, ".agents/skills/wikipoke-query/SKILL.md"), "<!-- managed by wikipoke -->\nold\n");
+  writeFileSync(join(root, "wiki/CONVENTIONS.md"), "# our own schema\n");
+
+  const { code, out } = wikipoke(root, "update");
+  assert.equal(code, 0);
+  assert.match(out, /updated\s+\.opencode\/plugin\/wikipoke\.js/);
+  assert.match(out, /updated\s+\.agents\/skills\/wikipoke-query\/SKILL\.md/);
+  assert.equal(read(root, plugin), fresh);
+  assert.equal(read(root, "wiki/CONVENTIONS.md"), "# our own schema\n");
+  assert.match(out, /differs from the template this version ships/);
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /outdated/);
+  assert.ok(!existsSync(join(root, ".git/hooks/post-commit")), "a hook nobody installed stays out");
+});
+
 test("init says when the project's CONVENTIONS.md differs from the template, and keeps it", () => {
   const root = repo();
   wikipoke(root, "init");

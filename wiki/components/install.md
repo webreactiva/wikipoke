@@ -1,10 +1,12 @@
 ---
 title: The installer
 type: entity
-responsibility: How init, hooks add/remove and uninstall write files without ever taking something the project owns.
+responsibility: How init, update, hooks add/remove and uninstall write files without ever taking something the project owns.
 sources:
   - src/lib/install.ts
-synced: 1097b15
+synced: 9305eff
+sources_key: 80ca57b47900
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-24T18:03:31Z }
 related:
   - ../concepts/file-ownership.md
   - ./hooks.md
@@ -46,7 +48,7 @@ shared files, edited       .claude/settings.json · AGENTS.md
 The shared-file cases are where the care shows. `wireClaude()` parses `.claude/settings.json`,
 appends one `SessionStart` entry and writes the JSON back; `unwireClaude()` removes that entry,
 then the now-empty `hooks.SessionStart`, then `hooks`, then the file itself, pruning empty
-directories on the way up (`src/lib/install.ts:440`). Unparseable JSON is never overwritten — it
+directories on the way up (`src/lib/install.ts:453`). Unparseable JSON is never overwritten — it
 returns `"manual"` and the person is told what to add. `AGENTS.md` gets the same treatment through
 HTML-comment delimited blocks — two since `35f9c8a`, the `agents` notifier block and the
 `decisions` block, each with its own markers — and is deleted only if removing a block leaves
@@ -84,6 +86,9 @@ the same for a schema with no "Decisions worth recording" section. Both follow [
 
 `init` is idempotent by construction: `place()` returns early when the content already matches, so
 re-running it after an upgrade refreshes the skills and reports only what actually changed.
+`update()` (`src/lib/install.ts:391`, since `9305eff`) is `init()` followed by `addHooks()` on the
+hooks `hookStatus()` marks outdated, the two reports merged into one. Running it is the yes a hook
+update waits for, so a hook that is not installed stays out.
 `uninstall` is `removeHooks(every hook)` plus the skills in both homes, and deliberately keeps
 `wiki/`: the pages are the project's knowledge, not wikipoke's.
 
