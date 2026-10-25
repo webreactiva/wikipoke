@@ -2,6 +2,8 @@
 
 # Wikipoke
 
+English · [Español](README.es.md)
+
 <p align="center"><b>A code wiki your agent writes, keeps true to the code,<br>
 and grows from the questions you ask it.</b></p>
 
@@ -29,6 +31,8 @@ https://github.com/user-attachments/assets/d72063c0-20ba-4632-83ca-31e9e391ba59
 
 A code wiki that agents maintain. Three skills write it; one small CLI sets it up, checks it and
 shows it, and never writes a page.
+
+<p align="center"><img src="assets/how-it-works.svg" width="420" alt="How wikipoke works in six steps: wikipoke init installs the skills and hooks; /wikipoke-ingest seeds the wiki with pages that cite path:line; a hook says when the code has moved past the wiki; /wikipoke-ingest reconciles only the pages whose code changed; /wikipoke-query answers from the wiki and offers to file what is missing; wikipoke atlas shows it in a browser. Steps three to five repeat on every change. The skills write; the CLI only measures."></p>
 
 ```mermaid
 flowchart LR
@@ -478,6 +482,8 @@ flowchart TD
 ```
 
 ## Does it save tokens?
+
+<p align="center"><img src="assets/tokens.svg" width="100%" alt="Tokens to answer can we give a user more AI tokens? in a Laravel app with 1,480 code files: 200k with no wiki, 254k the first time with a wiki whose page only points at the code, and 100k (−50%) once the answer is filed."></p>
 
 Sometimes. It saves tokens on questions a page already answers, and costs more on the ones it does
 not. Three repositories, one model (glm-5.3-flash through OpenCode), a fresh session per question.
