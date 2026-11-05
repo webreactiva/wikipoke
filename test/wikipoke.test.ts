@@ -237,7 +237,7 @@ test("hooks add wires every agent, keeps what the files already hold, and is ide
   assert.match(read(root, ".git/hooks/post-commit"), /wiki\/\.wikipoke-hook\.sh/);
   const settings = JSON.parse(read(root, ".claude/settings.json"));
   assert.deepEqual(settings.permissions, { allow: ["Bash(ls)"] });
-  assert.equal(settings.hooks.SessionStart[0].hooks[0].command, "sh wiki/.wikipoke-hook.sh");
+  assert.equal(settings.hooks.SessionStart[0].hooks[0].command, 'sh "$CLAUDE_PROJECT_DIR/wiki/.wikipoke-hook.sh"');
   assert.match(read(root, ".opencode/plugin/wikipoke.js"), /experimental\.chat\.system\.transform/);
   assert.match(read(root, ".cursor/rules/wikipoke.mdc"), /alwaysApply: true/);
   assert.match(read(root, "AGENTS.md"), /^# Rules\n\nBe kind\.\n\n<!-- wikipoke:start/);
@@ -248,6 +248,22 @@ test("hooks add wires every agent, keeps what the files already hold, and is ide
   assert.doesNotMatch(wikipoke(root, "hooks", "add", ...ALL_HOOKS).out, /created|updated/);
   assert.equal(JSON.parse(read(root, ".claude/settings.json")).hooks.SessionStart.length, 1);
   assert.equal(read(root, "AGENTS.md").match(/wikipoke:start/g)?.length, 1);
+});
+
+test("a Claude hook written by 0.4 shows as outdated, and hooks add replaces it instead of adding a second", () => {
+  const root = repo();
+  wikipoke(root, "init");
+  wikipoke(root, "hooks", "add", "claude");
+  const old = { hooks: { SessionStart: [{ matcher: "startup|resume", hooks: [{ type: "command", command: "sh wiki/.wikipoke-hook.sh", timeout: 15 }] }] } };
+  put(root, ".claude/settings.json", JSON.stringify(old, null, 2));
+  assert.match(wikipoke(root, "hooks").out, /claude.*installed, outdated/);
+  wikipoke(root, "hooks", "add", "claude");
+  const start = JSON.parse(read(root, ".claude/settings.json")).hooks.SessionStart;
+  assert.equal(start.length, 1);
+  assert.equal(start[0].hooks[0].command, 'sh "$CLAUDE_PROJECT_DIR/wiki/.wikipoke-hook.sh"');
+  assert.doesNotMatch(wikipoke(root, "hooks").out, /claude.*outdated/);
+  wikipoke(root, "hooks", "remove", "claude");
+  assert.ok(!existsSync(join(root, ".claude/settings.json")));
 });
 
 test("hooks remove takes out one hook at a time, and the notifier goes with the last one", () => {
@@ -389,7 +405,7 @@ test("--dir moves the wiki, and everything written names the new place", () => {
 
   wikipoke(root, "hooks", "add", ...ALL_HOOKS);
   assert.match(read(root, ".git/hooks/post-commit"), /docs\/wiki\/\.wikipoke-hook\.sh/);
-  assert.equal(JSON.parse(read(root, ".claude/settings.json")).hooks.SessionStart[0].hooks[0].command, "sh docs/wiki/.wikipoke-hook.sh");
+  assert.equal(JSON.parse(read(root, ".claude/settings.json")).hooks.SessionStart[0].hooks[0].command, 'sh "$CLAUDE_PROJECT_DIR/docs/wiki/.wikipoke-hook.sh"');
   assert.match(read(root, ".opencode/plugin/wikipoke.js"), /docs\/wiki\/\.wikipoke-hook\.sh/);
   assert.match(read(root, "AGENTS.md"), /docs\/wiki/);
 
@@ -397,6 +413,10 @@ test("--dir moves the wiki, and everything written names the new place", () => {
   const { code, out } = wikipoke(root, "check");
   assert.equal(code, 0, out);
   assert.match(out, /current, covered and sound/);
+  // With no CLI to run, it says so: silence would read as a current wiki.
+  assert.match(execFileSync("sh", ["docs/wiki/.wikipoke-hook.sh"], { cwd: root, encoding: "utf8", env: { PATH: "/usr/bin:/bin" } }), /CLI is not installed/);
+  mkdirSync(join(root, "node_modules/.bin"), { recursive: true });
+  symlinkSync(cli, join(root, "node_modules/.bin/wikipoke"));
   assert.equal(execFileSync("sh", ["docs/wiki/.wikipoke-hook.sh"], { cwd: root, encoding: "utf8" }), "");
 
   wikipoke(root, "uninstall");
