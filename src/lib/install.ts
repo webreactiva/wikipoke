@@ -71,7 +71,11 @@ export interface InitOptions {
 type HookAction = (root: string, wiki: string, out: Report) => void;
 
 const notifier = (wiki: string): string => `${wiki}/${HOOK_FILE}`;
-const notify = (wiki: string): string => `sh ${notifier(wiki)}`;
+// Claude Code runs it from wherever the session started: anchor it to the project, quoted for spaces.
+const notify = (wiki: string): string => `sh "$CLAUDE_PROJECT_DIR/${notifier(wiki)}"`;
+/** Whether settings text runs this wiki's notifier, as written now or as 0.4 wrote it (`sh wiki/…`). */
+const runsNotifier = (text: string, wiki: string): boolean =>
+  text.includes(`$CLAUDE_PROJECT_DIR/${notifier(wiki)}`) || text.includes(`sh ${notifier(wiki)}`);
 const inboxIgnore = (root: string, wiki: string): string => join(root, wiki, INBOX_DIR, ".gitignore");
 const INBOX_IGNORE = `# ${MARKER}: decision notes are scratch work, never committed\n*\n`;
 const DECISIONS_SECTION = /^##\s+decisions worth recording\s*$/im;
@@ -247,6 +251,7 @@ const HOOK_FILES: Record<HookName, (root: string, wiki: string) => { path: strin
  */
 function outdated(root: string, wiki: string, name: HookName): boolean {
   if (NOTIFIES(name) && read(join(root, notifier(wiki))) !== template("wikipoke-hook.sh", wiki)) return true;
+  if (name === "claude") return !(read(join(root, SETTINGS)) ?? "").includes(JSON.stringify(notify(wiki)));
   const file = HOOK_FILES[name](root, wiki);
   if (!file) return false;
   const current = read(file.path) ?? "";
@@ -261,7 +266,7 @@ const INSTALLED: Record<HookName, (root: string, wiki: string) => boolean> = {
   // By the notifier it runs, not the marker: a post-commit the project owns gets that line added by
   // hand, and never the marker, which would hand the whole file to wikipoke.
   git: (root, wiki) => read(postCommitPath(root))?.includes(notifier(wiki)) ?? false,
-  claude: (root, wiki) => read(join(root, SETTINGS))?.includes(notify(wiki)) ?? false,
+  claude: (root, wiki) => runsNotifier(read(join(root, SETTINGS)) ?? "", wiki),
   opencode: (root) => read(join(root, HOOKS.opencode.where))?.includes(MARKER) ?? false,
   cursor: (root) => read(join(root, HOOKS.cursor.where))?.includes(MARKER) ?? false,
   agents: (root) => BLOCK.test(read(join(root, AGENTS)) ?? ""),
@@ -444,7 +449,9 @@ function wireClaude(root: string, wiki: string): Placed | "manual" {
   const config = settings as ClaudeSettings;
   config.hooks ??= {};
   config.hooks.SessionStart ??= [];
-  if (JSON.stringify(config.hooks.SessionStart).includes(notify(wiki))) return "kept";
+  if (JSON.stringify(config.hooks.SessionStart).includes(JSON.stringify(notify(wiki)))) return "kept";
+  // An older command for the same notifier is replaced, not kept beside the new one.
+  config.hooks.SessionStart = config.hooks.SessionStart.filter((entry) => !runsNotifier(JSON.stringify(entry), wiki));
   config.hooks.SessionStart.push({ matcher: "startup|resume", hooks: [{ type: "command", command: notify(wiki), timeout: 15 }] });
   write(path, `${JSON.stringify(config, null, 2)}\n`);
   return raw === null ? "created" : "updated";
@@ -453,14 +460,14 @@ function wireClaude(root: string, wiki: string): Placed | "manual" {
 function unwireClaude(root: string, wiki: string): "removed" | "manual" | null {
   const path = join(root, SETTINGS);
   const raw = read(path);
-  if (raw === null || !raw.includes(notify(wiki))) return null;
+  if (raw === null || !runsNotifier(raw, wiki)) return null;
   let config: ClaudeSettings;
   try {
     config = JSON.parse(raw) as ClaudeSettings;
   } catch {
     return "manual";
   }
-  const start = (config.hooks?.SessionStart ?? []).filter((entry) => !JSON.stringify(entry).includes(notify(wiki)));
+  const start = (config.hooks?.SessionStart ?? []).filter((entry) => !runsNotifier(JSON.stringify(entry), wiki));
   if (config.hooks) {
     if (start.length) config.hooks.SessionStart = start;
     else delete config.hooks.SessionStart;
